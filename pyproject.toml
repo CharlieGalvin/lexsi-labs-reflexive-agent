@@ -17,6 +17,12 @@ dependencies = [
 # AgentTune is installed from source (see README / Makefile), it pins torch + transformers.
 train = ["datasets", "peft", "wandb"]
 dev = ["pytest>=8", "ruff>=0.6"]
+# τ²-bench, pinned to the v2.0.0 release (SEL-31). Gym extra = train/test splits + RL interface.
+# audioop-lts: Python 3.13 removed `audioop`, which τ²-bench imports; harmless on 3.12.
+bench = [
+  "tau2[gym] @ git+https://github.com/sierra-research/tau2-bench.git@v2.0.0",
+  "audioop-lts; python_version >= '3.13'",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
