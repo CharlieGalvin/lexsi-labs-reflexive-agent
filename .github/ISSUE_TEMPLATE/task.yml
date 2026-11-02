@@ -1,0 +1,22 @@
+name: Task
+description: A unit of work from the work plan
+labels: ["type:task"]
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Workstream
+      options: [data, rewards, training, eval, demo]
+    validations: {required: true}
+  - type: textarea
+    id: what
+    attributes:
+      label: What and why
+      placeholder: One or two sentences.
+    validations: {required: true}
+  - type: textarea
+    id: done
+    attributes:
+      label: Done when
+      placeholder: "- [ ] concrete, checkable outcome"
+    validations: {required: true}

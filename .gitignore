@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Secrets
+.env
+
+# Large / generated — models, adapters and datasets live on the Hugging Face Hub
+runs/
+wandb/
+trackio/
+third_party/
+data/*
+!data/.gitkeep
+results/*.jsonl
+results/*.auditkit.json
+!results/.gitkeep
+# results/*.metrics.json is small and IS committed: it's the evidence for the demo
+*.safetensors
+*.bin
+*.db

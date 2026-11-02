@@ -1,0 +1,20 @@
+name: Experiment
+description: A training or evaluation run with a hypothesis
+labels: ["type:experiment"]
+body:
+  - type: textarea
+    id: hypothesis
+    attributes:
+      label: Hypothesis
+      placeholder: "Adding dup_penalty=0.5 cuts redundant calls without hurting task success."
+    validations: {required: true}
+  - type: input
+    id: config
+    attributes:
+      label: Config file
+      placeholder: configs/exp_cg_dup05.yaml
+  - type: textarea
+    id: result
+    attributes:
+      label: Result (fill in after the run)
+      placeholder: "Paste the scripts/compare.py table, W&B link, HF adapter link."

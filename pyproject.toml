@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "leanagent"
+version = "0.1.0"
+description = "Lexsi Labs hackathon, Track 3: RL on tool-calling trajectories for efficient, grounded agents"
+requires-python = ">=3.12"   # AgentTune requires 3.12+
+dependencies = [
+  "pyyaml>=6",
+  "tqdm",
+  "auditkit",                 # zero required deps; core agent_eval runs on stdlib
+]
+
+[project.optional-dependencies]
+# AgentTune is installed from source (see README / Makefile), it pins torch + transformers.
+train = ["datasets", "peft", "wandb"]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
