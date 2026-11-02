@@ -5,5 +5,4 @@ Never overwrite a row; add a new one. Negative results are results.
 
 | Date | Run | Owner | Config | Change vs. previous | task_success | calls/success | halluc. rate | Notes / links |
 |---|---|---|---|---|---:|---:|---:|---|
-| 2026-11-0? | base | | grpo_efficiency.yaml | untuned baseline | | | | results/base.metrics.json |
-| | grpo-eff-v0 | | grpo_efficiency.yaml | first GRPO run | | | | |
+| 2026-11-0? | base | | | untuned baseline (Arm A) | | | | |

@@ -27,11 +27,11 @@ The live, day-by-day plan (with sub-issues SEL-31…SEL-55) is the *Delivery pla
 - [ ] Build the "hard hallucination" subset: tasks that trigger Tool / Arg / Loop failures in Arm A
 - [ ] Teacher setup: serve Aya Expanse 32B (HF endpoint / vLLM) and generate golden trajectories for failed tasks
 - [ ] Verify every golden trajectory by executing it in the sandbox; drop the ones that fail (CuratorKIT quality gate)
-- [ ] AuditKIT verification suite: outcome oracles per task + agent scorers; wire into `scripts/evaluate.py`
+- [ ] AuditKIT verification suite: outcome oracles per task + agent scorers; wire into the evaluation script
 - [ ] Final ROI and success-per-token charts across the 4 arms
 
 ## Role 2 — Systems & Logic, "the Architect" (`area:systems`)
-- [ ] Extend `healing.classify_hallucination` to the new task suite; add tests for each failure type
+- [ ] Implement `classify_hallucination` (Tool / Arg / Loop) for τ²-bench and BFCL; add tests for each failure type
 - [ ] Measure classifier agreement with AgentTune's LLM `FailureClassifier` on 50 failures
 - [ ] Build the `ReflexiveAgent` class (rollout → classify → queue failure → swap adapter when the gate passes)
 - [ ] DECIDE YAML workflow orchestrating Detect → Synthesise → Retrain → Verify (reuse `agenttune.decide.closed_loop`)
@@ -40,8 +40,8 @@ The live, day-by-day plan (with sub-issues SEL-31…SEL-55) is the *Delivery pla
 - [ ] (Stretch) Online mode: heal cycles triggered during serving, with `DeploymentGate`
 
 ## Role 3 — Model & Training, "the Trainer" (`area:training`)
-- [ ] GPU access sorted; `just smoke` passes with `CohereLabs/tiny-aya-global` (gated licence accepted by all)
-- [ ] Baseline GRPO run on the starter task (`configs/grpo_efficiency.yaml`)
+- [ ] GPU access sorted; a 10-step smoke training run passes with `CohereLabs/tiny-aya-global` (gated licence accepted by all)
+- [ ] Baseline GRPO run (first config in `configs/`)
 - [ ] HEAL training step: retrain the student on the Curator's golden trajectories (GRPO with rewards, and BCO)
 - [ ] Adapter lifecycle: version every adapter on the Hub with model card + `lexsi_provenance.json`
 - [ ] Multiple heal cycles: success / hallucination vs. cycle number (does it keep improving or overfit?)
