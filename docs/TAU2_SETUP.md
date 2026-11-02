@@ -1,8 +1,14 @@
 # τ²-bench setup and decisions (SEL-31)
 
-**Decision: pin τ²-bench v2.0.0, use the retail and airline domains, drop telecom.** Telecom's
-prompt alone fills ~91% of Tiny Aya's 8,192-token context window. Everything below is
-reproducible with `python scripts/tau2_inspect.py` (no API calls).
+**Decision: pin τ²-bench v2.0.0 and keep all three domains (retail, airline, telecom) for now.**
+Telecom is **at risk**: its prompt alone fills ~91% of Tiny Aya's 8,192-token context window.
+Rather than drop it on a measurement alone, we let the first baseline runs decide, using the
+drop rule below. Everything here is reproducible with `python scripts/tau2_inspect.py` (no API calls).
+
+**Telecom drop rule (checked after SEL-20 / SEL-55, by Thu 5 – Sat 7):** drop telecom if, in
+Arm A rollouts on its train tasks, **more than 25% hit the context limit**, or its pass rate is
+near zero with context overflow as the main cause. The overflow rate becomes the evidence in
+the write-up. If dropped, we fall back to retail + airline (104 train / 60 test).
 
 ## Install
 
@@ -24,12 +30,12 @@ pip install -e ".[bench]"        # τ²-bench v2.0.0 + gym extra (train/test spl
 | --- | ---: | ---: | --- |
 | retail | 74 | 40 | 16 agent tools |
 | airline | 30 | 20 | 14 agent tools |
-| telecom | 74 | 40 | Dropped (context); also a 2,285-task generated pool |
-| **Used** | **104** | **60** | retail + airline |
+| telecom | 74 | 40 | At risk (context); also a 2,285-task generated pool for extra training |
+| **Total** | **178** | **100** | all three; 104 / 60 if telecom is dropped |
 
 Healing (hard subset, teacher fixes, GRPO) and the DSPy prompt (Arm D) use **train only**. All
-reported numbers come from the 60 test tasks, run with 3–4 trials each (τ²-bench's pass^k)
-so the confidence intervals stay usable on a small test set.
+reported numbers come from the test tasks (100, or 60 without telecom), run with 3–4 trials
+each (τ²-bench's pass^k) so the confidence intervals stay usable on a small test set.
 
 ## Context fit for Tiny Aya (8,192 tokens)
 
@@ -57,7 +63,7 @@ so real rollouts (extra lookups, retries, chat) will be longer: treat these as l
 - Optional for cheap development runs only: `gpt-4.1-mini`. Never mix simulators between arms.
 - **Cost per task:** τ²-bench records `agent_cost` and `user_cost` for every run.
   `bash scripts/tau2_first_run.sh` runs 2 retail train tasks and prints both. Post the numbers
-  in SEL-31 / SEL-37 and multiply: (104 train + 60 test × 4 trials × 4 arms) × user cost per task.
+  in SEL-31 / SEL-37 and multiply: (178 train + 100 test × 3 trials × 4 arms) × user cost per task.
 
 ## Version note
 

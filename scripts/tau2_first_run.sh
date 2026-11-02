@@ -5,22 +5,23 @@
 #   set -a; source .env; set +a
 #   bash scripts/tau2_first_run.sh
 #
-# Costs a few cents: 2 retail train tasks, 1 trial, gpt-4.1 as both agent and simulated customer.
+# Costs a few cents: 2 train tasks (retail by default; DOMAIN=telecom bash ... to try telecom), 1 trial, gpt-4.1 as both agent and simulated customer.
 set -euo pipefail
 
 AGENT_LLM=${AGENT_LLM:-gpt-4.1-2025-04-14}
 USER_LLM=${USER_LLM:-gpt-4.1-2025-04-14}   # τ²-bench's default user simulator
-OUT=${OUT:-tau2-first-run}
+DOMAIN=${DOMAIN:-retail}                  # retail | airline | telecom
+OUT=${OUT:-tau2-first-run-$DOMAIN}
 
 python -c "import tau2" 2>/dev/null || pip install -e ".[bench]"
 : "${OPENAI_API_KEY:?Set OPENAI_API_KEY (see .env.example)}"
 
 echo "== 1. Plan only (no API calls)"
-tau2 run --domain retail --task-split-name train --num-tasks 2 --num-trials 1 \
+tau2 run --domain "$DOMAIN" --task-split-name train --num-tasks 2 --num-trials 1 \
   --agent-llm "$AGENT_LLM" --user-llm "$USER_LLM" --save-to "$OUT" --dry-run
 
-echo "== 2. Real run: 2 retail train tasks"
-tau2 run --domain retail --task-split-name train --num-tasks 2 --num-trials 1 \
+echo "== 2. Real run: 2 $DOMAIN train tasks"
+tau2 run --domain "$DOMAIN" --task-split-name train --num-tasks 2 --num-trials 1 \
   --agent-llm "$AGENT_LLM" --user-llm "$USER_LLM" --save-to "$OUT"
 
 echo "== 3. Official scores + cost per task"
