@@ -17,4 +17,4 @@ body:
     id: result
     attributes:
       label: Result (fill in after the run)
-      placeholder: "Paste the scripts/compare.py table, W&B link, HF adapter link."
+      placeholder: "Paste the before/after table, W&B link, HF adapter link."

@@ -76,15 +76,15 @@ successful rollouts), to isolate the teacher's contribution.
 
 **Key metrics** (all on the held-out test split, with bootstrap confidence intervals):
 
-| Metric | Definition | Where it's computed |
+| Metric | Definition | Owner |
 |---|---|---|
-| Success Rate (SR) | verified outcome correct | `metrics.task_success` + AuditKIT outcome oracle |
-| Hallucination Rate | episodes with a Tool or Arg failure, or an ungrounded final claim | `healing.classify_hallucination`, `metrics.hallucination_rate` |
-| Loop Rate | episodes classified Loop | `healing.classify_hallucination`, AuditKIT `agent_loop_detection` |
-| Steps / redundant calls | tool calls per task, repeated identical calls | `metrics.avg_tool_calls`, `redundant_call_rate`, AuditKIT `redundant_tool_calls` |
-| TTC | tokens and wall-clock time per completed task | rollout logs |
-| Healing Accuracy | share of failures that the healed model gets right on re-run | heal loop logs |
-| Success per token / ROI | SR ÷ tokens per task | `compare.py` charts |
+| Success Rate (SR) | verified outcome correct (τ²-bench evaluator / AuditKIT outcome oracle) | Curator |
+| Hallucination Rate | episodes with a Tool or Arg failure, or an ungrounded final claim | Architect (classifier) |
+| Loop Rate | episodes classified Loop | Architect, cross-checked with AuditKIT `agent_loop_detection` |
+| Steps / redundant calls | tool calls per task, repeated identical calls | Curator (AuditKIT `redundant_tool_calls`) |
+| TTC | tokens and wall-clock time per completed task | Trainer (rollout logs) |
+| Healing Accuracy | share of failures that the healed model gets right on re-run | Trainer (heal loop logs) |
+| Success per token / ROI | SR ÷ tokens per task | Curator (final charts) |
 
 ## 3. Technical roadmap and roles
 
@@ -99,8 +99,7 @@ successful rollouts), to isolate the teacher's contribution.
 ### Role 2 — Systems & Logic ("the Architect")
 **Tooling:** AgentTune, DECIDE
 - Build the `ReflexiveAgent` class.
-- Implement `classify_hallucination` (Tool vs. Arg vs. Loop) — **a tested first version is in
-  [`src/reflexive/healing.py`](src/reflexive/healing.py)**.
+- Implement `classify_hallucination` (Tool vs. Arg vs. Loop).
 - Integrate the DECIDE YAML workflow to orchestrate Detect → Heal, and build the public demo
   (live UI or interactive notebook).
 
@@ -116,16 +115,16 @@ Task breakdown, milestones and owners: [`docs/WORKPLAN.md`](docs/WORKPLAN.md).
 ## Mapping the proposal onto the stack
 
 AgentTune already ships most of the closed loop under `agenttune.decide.closed_loop`, so the
-work is mainly wiring and our own classifier, rewards and evaluation:
+work is mainly wiring plus our own classifier, rewards and evaluation. Who builds each part:
 
-| Proposal step | AgentTune / AuditKIT component | This repo |
+| Proposal step | AgentTune / AuditKIT component | Owner |
 |---|---|---|
-| Monitor EventLog | `agenttune.agentic.EventLog`, `FailureDetector` (scans DECIDE audit log) | `rollout.py`, `trajectory.py` |
-| Detect & Classify | `FailureClassifier` (LLM, 5 root causes) | **`healing.classify_hallucination`** (deterministic Tool/Arg/Loop, maps to AgentTune's taxonomy via `TO_AGENTTUNE`) |
-| Synthesise | `TrainingExampleGenerator` (chosen/rejected pairs), `create_distill_trainer` | teacher config (Role 1) |
-| Retrain | `RetrainingTrigger`, `create_agentic_trainer(algorithm="grpo"/"bco")` | `scripts/train.py`, `rewards.py` |
-| Gate | `DeploymentGate`, `ReplayValidator` | AuditKIT scorers in `scripts/evaluate.py`, `compare.py` |
-| Orchestrate | DECIDE YAML → `langgraph` (`GraphRunner`), `FullClosedLoop` | Role 2 |
+| Monitor EventLog | `agenttune.agentic.EventLog`, `FailureDetector` (scans DECIDE audit log) | Architect |
+| Detect & Classify | `FailureClassifier` (LLM, 5 root causes) | Architect: our `classify_hallucination` (Tool / Arg / Loop) |
+| Synthesise | `TrainingExampleGenerator` (chosen/rejected pairs), `create_distill_trainer` | Curator |
+| Retrain | `RetrainingTrigger`, `create_agentic_trainer(algorithm="grpo"/"bco")` | Trainer |
+| Gate | `DeploymentGate`, `ReplayValidator` | Curator (AuditKIT scorers) |
+| Orchestrate | DECIDE YAML → `langgraph` (`GraphRunner`), `FullClosedLoop` | Architect |
 
 ## Stack
 
@@ -151,54 +150,29 @@ git clone https://github.com/CharlieGalvin/lexsi-labs-reflexive-agent && cd lexs
 just setup-dev                  # .venv (Python 3.12) + τ²-bench with its data + test tools; creates .env
 #   → open .env and add OPENAI_API_KEY (needed to score retail/airline) and/or OPENROUTER_API_KEY
 just check                      # lint + tests
-just tau2-first-run             # 2 τ²-bench retail tasks: official score + cost (a few cents)
+just tau2-first-run telecom     # 2 τ²-bench tasks: official score + cost (a few cents; retail/airline need OPENAI_API_KEY)
 source .venv/bin/activate && hf auth login   # then accept the Tiny Aya licence on its model page
 
 # GPU box
 just setup                      # also installs the training libraries and AgentTune
-just smoke                      # 10 training steps, checks the plumbing
-just baseline                   # Arm A rollouts on the held-out split
-just train                      # GRPO with the reward stack
-just after && just evaluate && just compare   # tuned rollouts → metrics → before/after table
 ```
 
 Run `just` on its own to list every command. Python must be **3.12 or 3.13** (τ²-bench rejects
 3.14); `just setup-dev` creates a 3.12 environment for you.
 
-The starter task is BioGRID SQL QA (AgentTune's own example) so the whole pipeline runs on
-day one; Role 1 replaces it with τ²-bench (main) and BFCL v3 multi-turn (generalisation).
-
 ## Repo layout
 
 ```
 configs/                 one YAML per experiment / arm (copy, don't edit in place)
-src/reflexive/
-  healing.py             Detect & Classify: Tool / Arg / Loop groundedness classifier
-  trajectory.py          parses trajectories (OpenAI tool_calls AND Cohere/AgentTune JSON fallback)
-  rewards.py             correctness · efficiency · groundedness · tool validity
-  data.py                starter task + unanswerable probes
-  tools.py               the agent's tools (read-only SQL to start)
-  rollout.py             eval-time harness, identical for every arm
-  metrics.py             headline metrics
-scripts/                 train · collect · evaluate · compare · setup_github_project.sh
+src/reflexive/           Python package: each role adds its modules here
+scripts/tau2_*           τ²-bench: first run, cost report, context-fit check, OpenRouter pricing
+third_party/             τ²-bench v2.0.0 (with data) and AgentTune, cloned by `just setup-dev` / `just setup`
 tests/                   offline tests (no GPU) — run in CI on every PR
+docs/TAU2_SETUP.md       τ²-bench setup decisions (splits, judges, context fit, costs)
 docs/WORKPLAN.md         milestones + tasks per role → GitHub issues
 docs/EXPERIMENTS.md      one row per run
 results/*.metrics.json   committed evidence for the demo
 ```
-
-## Reward design (and reward-hacking defences)
-
-| Reward | Pays for | Defence |
-|---|---|---|
-| `correctness` | right final answer, or abstaining when the task is unanswerable | — |
-| `efficiency` | few calls, no repeats, no failed calls, within step budget | **paid only if the answer is correct *and* backed by ≥1 successful tool result** — otherwise "answer without calling anything" is optimal |
-| `groundedness` | answers backed by tool evidence | numbers absent from every tool result are penalised; abstaining on answerable tasks costs −0.25 so the model doesn't learn to refuse |
-| `tool_validity` | real tool names, well-formed JSON arguments | — |
-
-AgentTune's built-in `search_grounding_reward` and `exploration_reward` pay *more* for *more*
-calls — the opposite of our goal — so we don't use them. AgentTune folds weighted rewards into
-one, so log the terms separately when calibrating.
 
 ## Team workflow
 
