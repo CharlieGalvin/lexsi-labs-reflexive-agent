@@ -18,7 +18,7 @@ Most systems treat these as terminal failures that need a human to "reset" the p
 
 This project introduces a **Reflexive self-healing agent** that treats hallucinations as
 repairable data points rather than terminal failures. Using the Lexsi Labs stack, we build a
-multi-step workflow (a financial / business data analyst) with **AgentTune**, and a closed loop
+multi-step customer-service agent with database write tools (on τ²-bench) with **AgentTune**, and a closed loop
 in which the agent's `EventLog` is monitored by a **DECIDE**-based decision engine. When a
 failure is detected (a ToolNotFound error, a loop, or a hallucinated argument), the system:
 
@@ -47,12 +47,18 @@ towards verified correctness through automated, gated weight updates.
 
 ## 2. Experiment design — "the proof"
 
-**Task suite.** 200 multi-step queries that need SQL database access plus API calls, e.g.
-*"Find the user with the highest churn in the last 30 days and email the regional manager a
-summary of their last 3 failed orders."* Every task has a programmatically verifiable outcome
-(final DB/API state or answer), and side-effecting tools (email, etc.) are sandboxed mocks that
-record what was sent. Split: dev/train for healing and prompt optimisation, held-out test for
-all reported numbers.
+**Task suites** (decision 2 Nov: public benchmarks instead of a synthetic suite, so our numbers are
+comparable with published results; see the [dataset options doc](https://claude.ai/artifact/F3PaRT61su9kdYb6LcWtxe)):
+
+- **[τ²-bench](https://github.com/sierra-research/tau2-bench)** (MIT): retail, airline and telecom
+  customer-service tasks with database write tools and an LLM-simulated user, scored by final database
+  state. We heal on the train split and report all arms on the official test split.
+- **[BFCL v3 multi-turn](https://gorilla.cs.berkeley.edu/blogs/13_bfcl_v3_multi_turn.html)** (Apache-2.0):
+  state-scored multi-turn function calling. Generalisation test only, never trained on; its
+  missing-parameter and missing-function sets map onto Arg and Tool hallucination.
+
+Our published data contribution is the curated set of verified teacher fixes for τ²-bench train
+failures, labelled Tool / Arg / Loop.
 
 **Four arms** (same student model, same harness, same test split, same decoding):
 
@@ -150,7 +156,7 @@ make after evaluate compare     # tuned rollouts → metrics → before/after ta
 ```
 
 The starter task is BioGRID SQL QA (AgentTune's own example) so the whole pipeline runs on
-day one; Role 1 replaces it with the SQL + API task suite above.
+day one; Role 1 replaces it with τ²-bench (main) and BFCL v3 multi-turn (generalisation).
 
 ## Repo layout
 
