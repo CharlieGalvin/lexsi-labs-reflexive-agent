@@ -186,9 +186,11 @@ one, so log the terms separately when calibrating.
 
 ## Team workflow
 
-- Work is tracked as GitHub Issues on a Project board generated from `docs/WORKPLAN.md`
-  (`bash scripts/setup_github_project.sh --apply`).
-- Branch per issue (`cg/12-arg-classifier`), PR into `main`, CI must pass, one review.
+- Work is tracked in **Linear**: [Reflexive Agents project](https://linear.app/self-healing-hallucination/project/reflexive-agents-e8769e1623aa)
+  (issues `SEL-5`…`SEL-30`, milestones M1–M4, role labels Curator / Architect / Trainer / Shared).
+- Branch per issue using Linear's branch name (copy it from the issue, e.g. `charliegalvin/sel-12-…`),
+  or mention `SEL-12` in the PR title — Linear moves the issue to In Progress / Done automatically.
+- PR into `main`, CI must pass, one review.
 - Every run gets a config file, an `EXPERIMENTS.md` row and a committed `metrics.json`.
 - Models and datasets go to the team HF org, not git.
 

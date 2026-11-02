@@ -4,8 +4,8 @@ Claim: **a Detect → Synthesise → Retrain → Verify loop raises success rate
 hallucination, loops, steps and redundant calls versus a naive agent (A), a "be careful" prompt
 (C) and a DSPy-optimised prompt (D).**
 
-Edit the tasks below, then run `scripts/setup_github_project.sh` to turn them into GitHub
-issues on a project board. Headings carry the label in backticks; `- [ ]` lines become issues.
+**Live tracking is in Linear** ([Reflexive Agents project](https://linear.app/self-healing-hallucination/project/reflexive-agents-e8769e1623aa));
+this file is the original plan the Linear issues (`SEL-5`…`SEL-30`) were created from.
 
 ## Key dates
 
