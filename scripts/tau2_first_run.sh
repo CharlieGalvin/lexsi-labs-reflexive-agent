@@ -45,6 +45,13 @@ USER_LLM=${USER_LLM:-$DEFAULT_LLM}         # the simulated customer
 OUT=${OUT:-tau2-first-run-$DOMAIN}
 echo "agent=$AGENT_LLM  customer=$USER_LLM  domain=$DOMAIN"
 
+# τ²-bench refuses to overwrite an earlier run with the same name, so clear the last first-run.
+PREV=$(python -c 'import sys; from tau2.utils.utils import DATA_DIR; print(DATA_DIR / "simulations" / sys.argv[1])' "$OUT")
+if [[ -e "$PREV" ]]; then
+  echo "Removing previous run: $PREV"
+  rm -rf "$PREV"
+fi
+
 echo "== 1. Plan only (no API calls)"
 python "$(dirname "$0")/tau2_cli.py" run --domain "$DOMAIN" --task-split-name train --num-tasks 2 --num-trials 1 \
   --agent-llm "$AGENT_LLM" --user-llm "$USER_LLM" --save-to "$OUT" --dry-run
