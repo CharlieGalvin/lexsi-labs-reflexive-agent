@@ -143,6 +143,8 @@ work is mainly wiring and our own classifier, rewards and evaluation:
 
 Needs two small tools, once per machine: [uv](https://docs.astral.sh/uv/) (Python + packages)
 and [just](https://just.systems) (task runner). On a Mac: `brew install uv just`.
+Don't `pip install just`: that's an unrelated Python package with the same name. Without
+Homebrew, use `uv tool install rust-just`. Check with `which just`: it should not be inside `.venv`.
 
 ```bash
 git clone https://github.com/CharlieGalvin/lexsi-labs-reflexive-agent && cd lexsi-labs-reflexive-agent

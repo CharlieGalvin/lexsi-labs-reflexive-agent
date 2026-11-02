@@ -1,4 +1,5 @@
 # ReAgent task runner. Install just once: `brew install just` (or `uv tool install rust-just`).
+# Not `pip install just`: that is an unrelated Python package with the same name.
 # Run `just` to list every command.
 
 set dotenv-load := true                       # loads API keys from .env automatically
