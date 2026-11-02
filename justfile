@@ -6,6 +6,7 @@ export PATH := justfile_directory() + "/.venv/bin:" + env_var("PATH")
 
 config := "configs/grpo_efficiency.yaml"
 run := "grpo-eff-v0"
+tau2_version := "v2.0.0"
 
 # List all commands
 default:
@@ -20,9 +21,19 @@ venv:
     @python -V
 
 # Laptop setup: tests, classifier, metrics and τ²-bench. No GPU needed.
-setup-dev: venv
+setup-dev: venv tau2
     uv pip install --python .venv/bin/python -e ".[dev,bench]"
-    @test -f .env || { cp .env.example .env; echo "Created .env: add OPENAI_API_KEY or OPENROUTER_API_KEY"; }
+    @test -f .env || { cp .env.example .env; echo "Created .env: add OPENAI_API_KEY (needed for retail/airline scoring) or OPENROUTER_API_KEY"; }
+
+# τ²-bench, pinned, WITH its data folder (sparse clone into third_party/, ~340 MB, skips past results)
+tau2:
+    @test -d third_party/tau2-bench || { \
+      git clone -q --depth 1 --branch {{tau2_version}} --filter=blob:none --no-checkout \
+        https://github.com/sierra-research/tau2-bench.git third_party/tau2-bench && \
+      git -C third_party/tau2-bench sparse-checkout set --no-cone '/*' '!/data/tau2/results/' '!/web/' '!/figs/' && \
+      git -C third_party/tau2-bench checkout -q {{tau2_version}}; }
+    uv pip uninstall --python .venv/bin/python tau2 >/dev/null 2>&1 || true
+    uv pip install --python .venv/bin/python -e "third_party/tau2-bench[gym]"
 
 # GPU box: everything in setup-dev, plus training libraries and AgentTune
 setup: setup-dev

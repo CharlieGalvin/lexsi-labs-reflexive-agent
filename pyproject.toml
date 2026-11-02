@@ -14,13 +14,14 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# AgentTune is installed from source (see README / Makefile), it pins torch + transformers.
+# AgentTune is installed from source by `just setup`; it pins torch + transformers.
 train = ["datasets", "peft", "wandb"]
 dev = ["pytest>=8", "ruff>=0.6"]
-# τ²-bench, pinned to the v2.0.0 release (SEL-31). Gym extra = train/test splits + RL interface.
+# τ²-bench itself is NOT installed from here: a pip install from git leaves out its data/ folder
+# (tasks, databases, language packs). `just setup-dev` clones v2.0.0 into third_party/ and
+# installs it editable instead. This extra only adds what τ²-bench needs on top.
 # audioop-lts: Python 3.13 removed `audioop`, which τ²-bench imports; harmless on 3.12.
 bench = [
-  "tau2[gym] @ git+https://github.com/sierra-research/tau2-bench.git@v2.0.0",
   "audioop-lts; python_version >= '3.13'",
 ]
 

@@ -146,8 +146,8 @@ and [just](https://just.systems) (task runner). On a Mac: `brew install uv just`
 
 ```bash
 git clone https://github.com/CharlieGalvin/lexsi-labs-reflexive-agent && cd lexsi-labs-reflexive-agent
-just setup-dev                  # .venv with Python 3.12 + τ²-bench + test tools; creates .env
-#   → open .env and add OPENAI_API_KEY or OPENROUTER_API_KEY (just loads it for you)
+just setup-dev                  # .venv (Python 3.12) + τ²-bench with its data + test tools; creates .env
+#   → open .env and add OPENAI_API_KEY (needed to score retail/airline) and/or OPENROUTER_API_KEY
 just check                      # lint + tests
 just tau2-first-run             # 2 τ²-bench retail tasks: official score + cost (a few cents)
 source .venv/bin/activate && hf auth login   # then accept the Tiny Aya licence on its model page

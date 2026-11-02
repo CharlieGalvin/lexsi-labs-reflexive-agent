@@ -13,22 +13,30 @@ the write-up. If dropped, we fall back to retail + airline (104 train / 60 test)
 ## Install
 
 ```bash
-just setup-dev                   # .venv (Python 3.12) + τ²-bench v2.0.0 + gym extra (train/test splits)
+just setup-dev                   # .venv (Python 3.12) + τ²-bench v2.0.0 WITH its data folder
 just tau2-inspect                # splits, prompt sizes, context fit (no API calls)
 just tau2-first-run telecom      # first live run on a domain (default: retail)
 ```
 
-Without `just`: `uv venv --python 3.12 .venv && source .venv/bin/activate && uv pip install -e ".[bench]"`.
+- Pinned to the **v2.0.0** release tag. `just tau2` does a sparse clone into `third_party/tau2-bench`
+  (~350 MB; skips the 577 MB of past leaderboard results) and installs it editable.
+- **Don't `pip install` τ²-bench from git.** That installs the code but not its `data/` folder
+  (tasks, databases, language packs), and runs then fail with
+  `ValueError: no published language pack for 'en'` and a "Data directory does not exist" warning.
+- Requires **Python 3.12 or 3.13** (3.14 is rejected). `just setup-dev` creates a 3.12 environment.
+  On 3.13, τ²-bench also needs the `audioop-lts` backport, which the `bench` extra installs.
 
-- Pinned to the **v2.0.0** release tag (commit `989d328`), so every teammate and every run uses
-  identical tasks, policies and databases.
-- Requires **Python 3.12 or 3.13** (3.14 is rejected). Use **3.12**, which also suits AgentTune
-  and PyTorch. Easiest on a Mac: `brew install uv`, then
-  `uv venv --python 3.12 .venv && source .venv/bin/activate && uv pip install -e ".[bench]"`. On 3.13, τ²-bench crashes on import (`No module named
-  'audioop'`) because Python removed that module; the `bench` extra installs the
-  `audioop-lts` backport to fix it.
-- `pip install git+https://…` downloads the whole repository and can be very slow. If it
-  stalls, clone with `--depth 1`, `git checkout v2.0.0`, then `pip install -e ".[gym]"`.
+## API keys and judges
+
+| Domain | How τ²-bench scores it | Keys needed |
+| --- | --- | --- |
+| retail | Final database **plus an LLM judge** (`gpt-5.4-mini`) on 112 of 114 tasks | `OPENAI_API_KEY` (judge is pinned to OpenAI) |
+| airline | Final database **plus an LLM judge** (`gpt-5.5`) on what the agent told the customer | `OPENAI_API_KEY` |
+| telecom | Environment state checks only, no LLM judge | `OPENROUTER_API_KEY` alone is enough |
+
+The agent and simulated customer can run through either OpenAI or OpenRouter. With both keys in
+`.env`, the script uses OpenAI for everything; set `AGENT_LLM` / `USER_LLM` to
+`openrouter/openai/gpt-4.1` to bill those to OpenRouter while the judges use OpenAI.
 
 ## Splits (from τ²-bench's own `split_tasks.json`)
 
