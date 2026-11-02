@@ -3,9 +3,9 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "leanagent"
+name = "reflexive-agents"
 version = "0.1.0"
-description = "Lexsi Labs hackathon, Track 3: RL on tool-calling trajectories for efficient, grounded agents"
+description = "Reflexive Agents: a self-healing loop for mitigating agent hallucination (Lexsi Labs hackathon, Track 3)"
 requires-python = ">=3.12"   # AgentTune requires 3.12+
 dependencies = [
   "pyyaml>=6",

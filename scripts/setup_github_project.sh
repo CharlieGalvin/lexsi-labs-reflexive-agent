@@ -21,10 +21,9 @@ while IFS='|' read -r name color; do
   run gh label create "$name" --color "$color" --force --repo "$REPO"
 done <<'EOF'
 area:data|0e8a16
-area:rewards|5319e7
 area:training|d93f0b
 area:eval|1d76db
-area:demo|fbca04
+area:systems|0052cc
 type:task|c5def5
 type:experiment|f9d0c4
 stretch|ededed
@@ -44,7 +43,7 @@ EOF
 # --- project board ------------------------------------------------------------
 PROJECT_NUM=""
 if (( APPLY )); then
-  PROJECT_NUM=$(gh project create --owner "$OWNER" --title "Lexsi Track 3 — lean agent" \
+  PROJECT_NUM=$(gh project create --owner "$OWNER" --title "Reflexive Agents — Lexsi Track 3" \
                 --format json -q .number)
   gh project link "$PROJECT_NUM" --owner "$OWNER" --repo "$REPO" || true
   echo "Project #$PROJECT_NUM created"

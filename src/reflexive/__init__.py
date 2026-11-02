@@ -1,4 +1,4 @@
-"""leanagent: RL on tool-calling trajectories for fewer, better tool calls and fewer hallucinations."""
+"""reflexive: a self-healing loop (Detect -> Synthesise -> Retrain -> Verify) for agent hallucination."""
 
 from __future__ import annotations
 

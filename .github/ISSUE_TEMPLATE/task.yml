@@ -5,8 +5,8 @@ body:
   - type: dropdown
     id: area
     attributes:
-      label: Workstream
-      options: [data, rewards, training, eval, demo]
+      label: Role / area
+      options: [data, systems, training, eval]
     validations: {required: true}
   - type: textarea
     id: what

@@ -1,15 +1,15 @@
 """Offline tests: no model, no GPU, no network. Run with `pytest`."""
 
-from leanagent import trajectory as T
-from leanagent.metrics import aggregate, episode_metrics
-from leanagent.rewards import (
+from reflexive import trajectory as T
+from reflexive.metrics import aggregate, episode_metrics
+from reflexive.rewards import (
     build_reward_funcs,
     correctness_reward,
     groundedness_reward,
     make_efficiency_reward,
     make_validity_reward,
 )
-from leanagent.rollout import run_episode
+from reflexive.rollout import run_episode
 
 Q = [{"role": "user", "content": "Does the gene X interact with Y?"}]
 

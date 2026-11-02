@@ -14,7 +14,7 @@ from collections import defaultdict
 from pathlib import Path
 from statistics import mean
 
-from leanagent.metrics import aggregate, episode_metrics
+from reflexive.metrics import aggregate, episode_metrics
 
 DEFAULT_SCORERS = ["redundant_tool_calls", "agent_loop_detection", "tool_call_validity",
                    "tool_selection"]

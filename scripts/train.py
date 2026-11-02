@@ -13,10 +13,10 @@ import argparse
 import json
 from pathlib import Path
 
-from leanagent import load_config
-from leanagent.data import load_task
-from leanagent.rewards import build_reward_funcs
-from leanagent.tools import get_tools
+from reflexive import load_config
+from reflexive.data import load_task
+from reflexive.rewards import build_reward_funcs
+from reflexive.tools import get_tools
 
 
 def main() -> None:

@@ -17,10 +17,10 @@ from pathlib import Path
 
 from tqdm import tqdm
 
-from leanagent import load_config
-from leanagent.data import load_task
-from leanagent.rollout import hf_generate_fn, run_episode
-from leanagent.tools import get_tools
+from reflexive import load_config
+from reflexive.data import load_task
+from reflexive.rollout import hf_generate_fn, run_episode
+from reflexive.tools import get_tools
 
 
 def main() -> None:

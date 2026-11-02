@@ -1,64 +1,63 @@
-# Work plan
+# Work plan — Reflexive Agents
 
-Thesis: **RL on tool-calling trajectories makes a small Cohere open-weights agent use fewer,
-better tool calls and hallucinate less — without lowering task success.**
+Claim: **a Detect → Synthesise → Retrain → Verify loop raises success rate and cuts
+hallucination, loops, steps and redundant calls versus a naive agent (A), a "be careful" prompt
+(C) and a DSPy-optimised prompt (D).**
 
-Replace the suggested tasks below with your own breakdown, then run
-`scripts/setup_github_project.sh` to turn them into GitHub issues on a project board.
+Edit the tasks below, then run `scripts/setup_github_project.sh` to turn them into GitHub
+issues on a project board. Headings carry the label in backticks; `- [ ]` lines become issues.
 
-## Key dates (hackathon)
+## Key dates
 
 | Date | Event | Our milestone |
 |---|---|---|
-| Tue 4 Nov | — | **M1 Baseline**: pipeline runs end to end, baseline numbers committed |
-| Sun 9 Nov | — | **M2 First win**: one trained adapter beats baseline on calls/success *and* hallucination |
-| Thu 13 Nov | — | **M3 Submission-ready**: ablations done, model + data on HF, README results table |
+| Tue 4 Nov | — | **M1 Baseline**: starter pipeline runs end to end; Arm A numbers on the starter task |
+| Sun 9 Nov | — | **M2 First heal**: task suite v1 + one heal cycle beats Arm A on the dev split |
+| Thu 13 Nov | — | **M3 Submission-ready**: all 4 arms on the test split, model + data on HF, README results |
 | **Fri 14 Nov** | **Submission deadline** | Submit (buffer day) |
 | Sun 16 Nov | Shortlist announced | — |
-| Fri 21 Nov | Shortlist deadline | **M4 Thesis proven**: second task / larger eval, demo rehearsed |
+| Fri 21 Nov | Shortlist deadline | **M4 Thesis proven**: multiple heal cycles, B′ ablation, demo rehearsed |
 | **Sat 22 Nov** | **Demo Day** | Live demo |
 
-## Workstreams and suggested tasks
+## Role 1 — Data & Synthesis, "the Curator" (`area:data`)
+- [ ] Design the SQL + API task suite schema (DB tables, mock APIs incl. sandboxed email) and verifiable outcomes
+- [ ] Build 200 tasks; split dev/train vs. held-out test; push to the team HF org with a dataset card
+- [ ] Build the "hard hallucination" subset: tasks that trigger Tool / Arg / Loop failures in Arm A
+- [ ] Teacher setup: serve Aya Expanse 32B (HF endpoint / vLLM) and generate golden trajectories for failed tasks
+- [ ] Verify every golden trajectory by executing it in the sandbox; drop the ones that fail (CuratorKIT quality gate)
+- [ ] AuditKIT verification suite: outcome oracles per task + agent scorers; wire into `scripts/evaluate.py`
+- [ ] Final ROI and success-per-token charts across the 4 arms
 
-Owner initials go in the issue assignee. One owner per task; pair if blocked.
+## Role 2 — Systems & Logic, "the Architect" (`area:systems`)
+- [ ] Extend `healing.classify_hallucination` to the new task suite; add tests for each failure type
+- [ ] Measure classifier agreement with AgentTune's LLM `FailureClassifier` on 50 failures
+- [ ] Build the `ReflexiveAgent` class (rollout → classify → queue failure → swap adapter when the gate passes)
+- [ ] DECIDE YAML workflow orchestrating Detect → Synthesise → Retrain → Verify (reuse `agenttune.decide.closed_loop`)
+- [ ] Arm C (prompt-only) and Arm D (DSPy-optimised prompt on dev/train) harnesses, same rollout code as A
+- [ ] Public demo: live UI or notebook showing a failure being detected, healed and re-run
+- [ ] (Stretch) Online mode: heal cycles triggered during serving, with `DeploymentGate`
 
-### W1 — Environment & data (`area:data`)
-- [ ] Get gated access to `CohereLabs/tiny-aya-global` for every teammate; create team HF org
-- [ ] GPU access sorted (Colab / Kaggle / lab / HF credits) and `make smoke` passes on it
-- [ ] Verify BioGRID schema; fix `UNANSWERABLE_TEMPLATES` so they are truly unanswerable
-- [ ] Decide on the second task (optional, M4): another DB/API agent from the problem list
-- [ ] Push eval split + unanswerable probes to the Hub as a dataset with a card
+## Role 3 — Model & Training, "the Trainer" (`area:training`)
+- [ ] GPU access sorted; `make smoke` passes with `CohereLabs/tiny-aya-global` (gated licence accepted by all)
+- [ ] Baseline GRPO run on the starter task (`configs/grpo_efficiency.yaml`)
+- [ ] HEAL training step: retrain the student on the Curator's golden trajectories (GRPO with rewards, and BCO)
+- [ ] Adapter lifecycle: version every adapter on the Hub with model card + `lexsi_provenance.json`
+- [ ] Multiple heal cycles: success / hallucination vs. cycle number (does it keep improving or overfit?)
+- [ ] Ablation B′: heal without the teacher (student's own successful rollouts only)
+- [ ] (Stretch) GRPO vs. BCO vs. RLOO comparison on the same heal data
 
-### W2 — Rewards (`area:rewards`)
-- [ ] Unit-test every reward on hand-written good/bad trajectories (extend `tests/`)
-- [ ] Reward-hacking review: try to get high reward with bad behaviour; patch the hole
-- [ ] Calibrate weights: log each reward separately on 50 rollouts before combining
-- [ ] (Stretch) LLM-judge or process reward for argument quality
-
-### W3 — Training (`area:training`)
-- [ ] `make smoke` (10 steps) green on the team GPU
-- [ ] Baseline GRPO run (`configs/grpo_efficiency.yaml`)
-- [ ] Ablation: correctness-only reward vs. full reward (shows *our* rewards matter)
-- [ ] Ablation: no unanswerable probes (shows the hallucination term matters)
-- [ ] (Stretch) RLOO or DPO-on-ranked-rollouts comparison
-- [ ] Push best adapter to the Hub with model card + `lexsi_provenance.json`
-
-### W4 — Evaluation (`area:eval`)
-- [ ] `make baseline` → commit `results/base.metrics.json`
-- [ ] Evaluate each trained adapter; commit `results/<run>.metrics.json`
-- [ ] Confidence intervals (bootstrap over episodes) for the headline metrics
-- [ ] Error analysis: 20 failure transcripts categorised (loop / bad args / guess / refusal)
-
-### W5 — Story & demo (`area:demo`)
-- [ ] README results table (from `scripts/compare.py`) + one plot (calls vs. success)
-- [ ] Side-by-side transcript demo: base agent loops/hallucinates, tuned agent doesn't
-- [ ] Submission write-up; feedback/feature requests for Lexsi (they asked for it)
+## Shared — Evaluation & story (`area:eval`)
+- [ ] Run all 4 arms on the held-out test split; commit `results/<arm>.metrics.json`
+- [ ] Bootstrap confidence intervals for SR, hallucination rate, loop rate, steps/task
+- [ ] Error analysis: 20 remaining failures after healing, categorised
+- [ ] README results table + plots; submission write-up incl. feedback for Lexsi Labs
 - [ ] Demo Day slides + rehearsal
 
 ## Definition of done for the headline claim
 
-Across the held-out eval split, tuned vs. base:
-- `calls_per_success` **down**, `redundant_call_rate` **down**
-- `hallucination_rate` **down**, `correct_abstention_unanswerable` **up**
-- `task_success` **not lower** (within CI)
+On the held-out test split, Arm B vs. Arms A, C and D:
+- Success rate **up** (CIs not overlapping A; ideally not overlapping D)
+- Hallucination rate and loop rate **down**
+- Steps per task and redundant call rate **down**
 - AuditKIT's independent scorers agree in direction
+- No test-split task or teacher output for a test task was used in training or prompt optimisation
