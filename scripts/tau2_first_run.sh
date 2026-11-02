@@ -2,10 +2,11 @@
 # SEL-31: first end-to-end τ²-bench run + cost per task.
 # Works with an OpenAI key OR an OpenRouter key (τ²-bench uses LiteLLM, which supports both).
 #
-#   cp .env.example .env   # fill OPENAI_API_KEY or OPENROUTER_API_KEY (never commit .env)
-#   set -a; source .env; set +a
-#   bash scripts/tau2_first_run.sh                    # 2 retail train tasks
-#   DOMAIN=telecom bash scripts/tau2_first_run.sh     # try telecom
+#   just tau2-first-run              # 2 retail train tasks (just loads .env for you)
+#   just tau2-first-run telecom      # try telecom
+#
+# Without just: set -a; source .env; set +a; DOMAIN=retail bash scripts/tau2_first_run.sh
+# Put OPENAI_API_KEY or OPENROUTER_API_KEY in .env (copied from .env.example; never commit .env).
 #
 # Costs a few cents: 2 train tasks, 1 trial, GPT-4.1 as both agent and simulated customer.
 set -euo pipefail

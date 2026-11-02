@@ -141,19 +141,27 @@ work is mainly wiring and our own classifier, rewards and evaluation:
 
 ## Quick start
 
+Needs two small tools, once per machine: [uv](https://docs.astral.sh/uv/) (Python + packages)
+and [just](https://just.systems) (task runner). On a Mac: `brew install uv just`.
+
 ```bash
 git clone https://github.com/CharlieGalvin/lexsi-labs-reflexive-agent && cd lexsi-labs-reflexive-agent
-python3.12 -m venv .venv && source .venv/bin/activate   # 3.12 required (3.14 not supported); or: uv venv --python 3.12 .venv
-cp .env.example .env            # fill HF_TOKEN etc.; then: set -a; source .env; set +a
-hf auth login                   # and accept the Tiny Aya licence on its model page
+just setup-dev                  # .venv with Python 3.12 + τ²-bench + test tools; creates .env
+#   → open .env and add OPENAI_API_KEY or OPENROUTER_API_KEY (just loads it for you)
+just check                      # lint + tests
+just tau2-first-run             # 2 τ²-bench retail tasks: official score + cost (a few cents)
+source .venv/bin/activate && hf auth login   # then accept the Tiny Aya licence on its model page
 
-make setup-dev && make test     # laptop: classifier, rewards, metrics, tests — no GPU
-make setup                      # GPU box: also installs AgentTune from source
-make smoke                      # 10 training steps, checks the plumbing
-make baseline                   # Arm A rollouts on the held-out split
-make train                      # GRPO with the reward stack
-make after evaluate compare     # tuned rollouts → metrics → before/after table
+# GPU box
+just setup                      # also installs the training libraries and AgentTune
+just smoke                      # 10 training steps, checks the plumbing
+just baseline                   # Arm A rollouts on the held-out split
+just train                      # GRPO with the reward stack
+just after && just evaluate && just compare   # tuned rollouts → metrics → before/after table
 ```
+
+Run `just` on its own to list every command. Python must be **3.12 or 3.13** (τ²-bench rejects
+3.14); `just setup-dev` creates a 3.12 environment for you.
 
 The starter task is BioGRID SQL QA (AgentTune's own example) so the whole pipeline runs on
 day one; Role 1 replaces it with τ²-bench (main) and BFCL v3 multi-turn (generalisation).

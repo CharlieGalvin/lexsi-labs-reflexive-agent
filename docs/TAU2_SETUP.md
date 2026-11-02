@@ -13,8 +13,12 @@ the write-up. If dropped, we fall back to retail + airline (104 train / 60 test)
 ## Install
 
 ```bash
-pip install -e ".[bench]"        # τ²-bench v2.0.0 + gym extra (train/test splits)
+just setup-dev                   # .venv (Python 3.12) + τ²-bench v2.0.0 + gym extra (train/test splits)
+just tau2-inspect                # splits, prompt sizes, context fit (no API calls)
+just tau2-first-run telecom      # first live run on a domain (default: retail)
 ```
+
+Without `just`: `uv venv --python 3.12 .venv && source .venv/bin/activate && uv pip install -e ".[bench]"`.
 
 - Pinned to the **v2.0.0** release tag (commit `989d328`), so every teammate and every run uses
   identical tasks, policies and databases.
