@@ -11,7 +11,8 @@
 #   - Scoring: retail and airline are partly graded by LLM judges that τ²-bench pins to OpenAI
 #     models, so those two domains need OPENAI_API_KEY. Telecom is graded by state checks only.
 #
-# Costs a few cents: 2 train tasks, 1 trial, GPT-4.1 as both agent and simulated customer.
+# Costs a few cents: 2 train tasks by default (NUM_TASKS=n for more, or TASK_IDS="id1 id2"),
+# 1 trial, GPT-4.1 as both agent and simulated customer.
 set -euo pipefail
 
 fail() { echo "✗ $*" >&2; exit 1; }
@@ -43,6 +44,13 @@ fi
 AGENT_LLM=${AGENT_LLM:-$DEFAULT_LLM}
 USER_LLM=${USER_LLM:-$DEFAULT_LLM}         # the simulated customer
 OUT=${OUT:-tau2-first-run-$DOMAIN}
+NUM_TASKS=${NUM_TASKS:-2}
+SELECT=(--num-tasks "$NUM_TASKS")
+if [[ -n "${TASK_IDS:-}" ]]; then         # space-separated task IDs instead of the first N
+  read -ra IDS <<< "$TASK_IDS"
+  SELECT=(--task-ids "${IDS[@]}")
+  NUM_TASKS=${#IDS[@]}
+fi
 echo "agent=$AGENT_LLM  customer=$USER_LLM  domain=$DOMAIN"
 
 # τ²-bench refuses to overwrite an earlier run with the same name, so clear the last first-run.
@@ -53,11 +61,11 @@ if [[ -e "$PREV" ]]; then
 fi
 
 echo "== 1. Plan only (no API calls)"
-python "$(dirname "$0")/tau2_cli.py" run --domain "$DOMAIN" --task-split-name train --num-tasks 2 --num-trials 1 \
+python "$(dirname "$0")/tau2_cli.py" run --domain "$DOMAIN" --task-split-name train "${SELECT[@]}" --num-trials 1 \
   --agent-llm "$AGENT_LLM" --user-llm "$USER_LLM" --save-to "$OUT" --dry-run
 
-echo "== 2. Real run: 2 $DOMAIN train tasks"
-python "$(dirname "$0")/tau2_cli.py" run --domain "$DOMAIN" --task-split-name train --num-tasks 2 --num-trials 1 \
+echo "== 2. Real run: $NUM_TASKS $DOMAIN train tasks"
+python "$(dirname "$0")/tau2_cli.py" run --domain "$DOMAIN" --task-split-name train "${SELECT[@]}" --num-trials 1 \
   --agent-llm "$AGENT_LLM" --user-llm "$USER_LLM" --save-to "$OUT"
 
 echo "== 3. Official scores, tokens and cost per task"
