@@ -10,6 +10,12 @@
 # Costs a few cents: 2 train tasks, 1 trial, GPT-4.1 as both agent and simulated customer.
 set -euo pipefail
 
+if ! python -c 'import sys; sys.exit(0 if (3, 12) <= sys.version_info[:2] < (3, 14) else 1)'; then
+  echo "τ²-bench needs Python 3.12 or 3.13; this venv is $(python -V 2>&1)." >&2
+  echo "Fix: uv venv --python 3.12 .venv && source .venv/bin/activate && uv pip install -e '.[bench]'" >&2
+  exit 1
+fi
+
 if [[ -n "${OPENAI_API_KEY:-}" ]]; then
   DEFAULT_LLM=gpt-4.1-2025-04-14             # τ²-bench's default model, pinned snapshot
 elif [[ -n "${OPENROUTER_API_KEY:-}" ]]; then

@@ -143,7 +143,7 @@ work is mainly wiring and our own classifier, rewards and evaluation:
 
 ```bash
 git clone https://github.com/CharlieGalvin/lexsi-labs-reflexive-agent && cd lexsi-labs-reflexive-agent
-python3.12 -m venv .venv && source .venv/bin/activate
+python3.12 -m venv .venv && source .venv/bin/activate   # 3.12 required (3.14 not supported); or: uv venv --python 3.12 .venv
 cp .env.example .env            # fill HF_TOKEN etc.; then: set -a; source .env; set +a
 hf auth login                   # and accept the Tiny Aya licence on its model page
 

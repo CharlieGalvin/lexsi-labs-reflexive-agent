@@ -18,7 +18,9 @@ pip install -e ".[bench]"        # τ²-bench v2.0.0 + gym extra (train/test spl
 
 - Pinned to the **v2.0.0** release tag (commit `989d328`), so every teammate and every run uses
   identical tasks, policies and databases.
-- Requires **Python 3.12 or 3.13**. On 3.13, τ²-bench crashes on import (`No module named
+- Requires **Python 3.12 or 3.13** (3.14 is rejected). Use **3.12**, which also suits AgentTune
+  and PyTorch. Easiest on a Mac: `brew install uv`, then
+  `uv venv --python 3.12 .venv && source .venv/bin/activate && uv pip install -e ".[bench]"`. On 3.13, τ²-bench crashes on import (`No module named
   'audioop'`) because Python removed that module; the `bench` extra installs the
   `audioop-lts` backport to fix it.
 - `pip install git+https://…` downloads the whole repository and can be very slow. If it
