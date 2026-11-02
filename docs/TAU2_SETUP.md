@@ -60,9 +60,16 @@ so real rollouts (extra lookups, retries, chat) will be longer: treat these as l
 
 - **Choice:** `gpt-4.1-2025-04-14`, τ²-bench's default user simulator. Using the default keeps
   our Arm A numbers comparable with published τ²-bench results.
+- **OpenRouter works too:** set `OPENROUTER_API_KEY` instead of `OPENAI_API_KEY` and the
+  script uses `openrouter/openai/gpt-4.1`.
+- Pick **one** route (OpenAI direct or OpenRouter) and keep it for every arm and every run, so
+  the simulated customer is identical across the experiment.
 - Optional for cheap development runs only: `gpt-4.1-mini`. Never mix simulators between arms.
 - **Cost per task:** τ²-bench records `agent_cost` and `user_cost` for every run.
-  `bash scripts/tau2_first_run.sh` runs 2 retail train tasks and prints both. Post the numbers
+  `bash scripts/tau2_first_run.sh` runs 2 retail train tasks and prints both, plus token counts
+  (`scripts/tau2_report.py`). LiteLLM may not price OpenRouter model IDs, so the reported cost
+  can be empty; the script then estimates it from tokens at GPT-4.1 list prices. Your
+  OpenRouter activity page shows the actual spend. Post the numbers
   in SEL-31 / SEL-37 and multiply: (178 train + 100 test × 3 trials × 4 arms) × user cost per task.
 
 ## Version note
