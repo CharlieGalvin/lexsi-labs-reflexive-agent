@@ -11,13 +11,15 @@ this file is the original plan the Linear issues (`SEL-5`…`SEL-30`) were creat
 
 | Date | Event | Our milestone |
 |---|---|---|
-| Tue 4 Nov | — | **M1 Baseline**: starter pipeline runs end to end; Arm A numbers on the starter task |
-| Sun 9 Nov | — | **M2 First heal**: task suite v1 + one heal cycle beats Arm A on the dev split |
-| Thu 13 Nov | — | **M3 Submission-ready**: all 4 arms on the test split, model + data on HF, README results |
-| **Fri 14 Nov** | **Submission deadline** | Submit (buffer day) |
-| Sun 16 Nov | Shortlist announced | — |
-| Fri 21 Nov | Shortlist deadline | **M4 Thesis proven**: multiple heal cycles, B′ ablation, demo rehearsed |
-| **Sat 22 Nov** | **Demo Day** | Live demo |
+| Thu 5 Nov | — | **M1 Baseline**: schema + GPU smoke test + Arm A numbers on the starter task; data contract agreed |
+| Tue 10 Nov | — | **M2 First heal**: v0 task suite (50) → one heal cycle beats Arm A on the dev split |
+| Fri 13 Nov | Internal deadline | **M3 Submission-ready**: all 4 arms on the 200-task test split, README results |
+| **Sat 14 Nov** | **Submission deadline** | Submit (buffer day; aim for Fri evening) |
+| Mon 16 Nov | Shortlist announced | — |
+| Sat 21 Nov | Shortlist deadline | **M4 Thesis proven**: multiple heal cycles, B′ ablation, demo rehearsed |
+| **Sun 22 Nov** | **Demo Day** | Live demo |
+
+The live, day-by-day plan (with sub-issues SEL-31…SEL-55) is the *Delivery plan* document in the Linear project.
 
 ## Role 1 — Data & Synthesis, "the Curator" (`area:data`)
 - [ ] Design the SQL + API task suite schema (DB tables, mock APIs incl. sandboxed email) and verifiable outcomes
