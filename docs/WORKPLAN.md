@@ -40,7 +40,7 @@ The live, day-by-day plan (with sub-issues SEL-31…SEL-55) is the *Delivery pla
 - [ ] (Stretch) Online mode: heal cycles triggered during serving, with `DeploymentGate`
 
 ## Role 3 — Model & Training, "the Trainer" (`area:training`)
-- [ ] GPU access sorted; `make smoke` passes with `CohereLabs/tiny-aya-global` (gated licence accepted by all)
+- [ ] GPU access sorted; `just smoke` passes with `CohereLabs/tiny-aya-global` (gated licence accepted by all)
 - [ ] Baseline GRPO run on the starter task (`configs/grpo_efficiency.yaml`)
 - [ ] HEAL training step: retrain the student on the Curator's golden trajectories (GRPO with rewards, and BCO)
 - [ ] Adapter lifecycle: version every adapter on the Hub with model card + `lexsi_provenance.json`
