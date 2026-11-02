@@ -46,11 +46,11 @@ OUT=${OUT:-tau2-first-run-$DOMAIN}
 echo "agent=$AGENT_LLM  customer=$USER_LLM  domain=$DOMAIN"
 
 echo "== 1. Plan only (no API calls)"
-tau2 run --domain "$DOMAIN" --task-split-name train --num-tasks 2 --num-trials 1 \
+python "$(dirname "$0")/tau2_cli.py" run --domain "$DOMAIN" --task-split-name train --num-tasks 2 --num-trials 1 \
   --agent-llm "$AGENT_LLM" --user-llm "$USER_LLM" --save-to "$OUT" --dry-run
 
 echo "== 2. Real run: 2 $DOMAIN train tasks"
-tau2 run --domain "$DOMAIN" --task-split-name train --num-tasks 2 --num-trials 1 \
+python "$(dirname "$0")/tau2_cli.py" run --domain "$DOMAIN" --task-split-name train --num-tasks 2 --num-trials 1 \
   --agent-llm "$AGENT_LLM" --user-llm "$USER_LLM" --save-to "$OUT"
 
 echo "== 3. Official scores, tokens and cost per task"
