@@ -136,7 +136,7 @@ work is mainly wiring and our own classifier, rewards and evaluation:
 | [CuratorKIT](https://github.com/Lexsi-Labs/CuratorKIT) | Hard-hallucination dataset, quality-gated golden trajectories |
 | `CohereLabs/tiny-aya-global` | Student (gated: accept the licence on the Hub) |
 | Aya Expanse 32B (Cohere Labs) | Teacher |
-| Hugging Face Hub | Adapters, datasets, logs |
+| Hugging Face Hub ([reagent-lexsi](https://huggingface.co/reagent-lexsi)) | Adapters, datasets, logs |
 | W&B or Trackio | Training curves |
 
 ## Quick start
@@ -198,7 +198,7 @@ one, so log the terms separately when calibrating.
   or mention `SEL-12` in the PR title — Linear moves the issue to In Progress / Done automatically.
 - PR into `main`, CI must pass, one review.
 - Every run gets a config file, an `EXPERIMENTS.md` row and a committed `metrics.json`.
-- Models and datasets go to the team HF org, not git.
+- Models, adapters and datasets go to the team HF org [reagent-lexsi](https://huggingface.co/reagent-lexsi), not git.
 
 ## Licences
 
