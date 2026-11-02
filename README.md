@@ -2,6 +2,8 @@
 
 **A self-healing loop for mitigating agent hallucination in production workflows**
 
+> The incredible LBG RAI team is embarking on an epic conquest to self-heal a hallucinating agent using reinforcement learning.
+
 Lexsi Labs AI Safety & Alignment Hackathon (Nov 2026) · Track 3: Agentic Fine-tuning
 Problem statements: *Self-healing agents*, *Efficient trajectories*, *Reliable tool calling*,
 *Reward design and reward-hacking defences*.
@@ -134,7 +136,7 @@ work is mainly wiring and our own classifier, rewards and evaluation:
 ## Quick start
 
 ```bash
-git clone https://github.com/CharlieGalvin/reflexive-agents && cd reflexive-agents
+git clone https://github.com/CharlieGalvin/lexsi-labs-reflexive-agent && cd lexsi-labs-reflexive-agent
 python3.12 -m venv .venv && source .venv/bin/activate
 cp .env.example .env            # fill HF_TOKEN etc.; then: set -a; source .env; set +a
 hf auth login                   # and accept the Tiny Aya licence on its model page
