@@ -149,6 +149,7 @@ Homebrew, use `uv tool install rust-just`. Check with `which just`: it should no
 git clone https://github.com/CharlieGalvin/lexsi-labs-reflexive-agent && cd lexsi-labs-reflexive-agent
 just setup-dev                  # .venv (Python 3.12) + τ²-bench with its data + test tools; creates .env
 #   → open .env and add OPENAI_API_KEY (needed to score retail/airline) and/or OPENROUTER_API_KEY
+#     (+ COHERE_API_KEY for the teacher: docs/TEACHER_SETUP.md)
 just check                      # lint + tests
 just tau2-first-run telecom     # 2 τ²-bench tasks: official score + cost (a few cents; retail/airline need OPENAI_API_KEY)
 source .venv/bin/activate && hf auth login   # then accept the Tiny Aya licence on its model page
@@ -172,6 +173,7 @@ scripts/tau2_*           τ²-bench: first run, cost report, context-fit check, 
 third_party/             τ²-bench v2.0.0 (with data) and AgentTune, cloned by `just setup-dev` / `just setup`
 tests/                   offline tests (no GPU) — run in CI on every PR
 docs/TAU2_SETUP.md       τ²-bench setup decisions (splits, judges, context fit, costs)
+docs/TEACHER_SETUP.md    teacher (Aya Expanse 32B) via the Cohere API: limits, tool calling, budget
 docs/WORKPLAN.md         milestones + tasks per role → GitHub issues
 docs/EXPERIMENTS.md      one row per run
 results/*.metrics.json   committed evidence for the demo
