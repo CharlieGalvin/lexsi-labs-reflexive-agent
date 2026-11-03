@@ -13,8 +13,10 @@ with LiteLLM. See docs/TEACHER_SETUP.md for limits and prices.
 **Two ways to make tool calls** (`scripts/teacher_probe.py` shows which one works):
 
 - ``native``: pass the tool schemas as ``tools=`` and read structured ``tool_calls`` back.
-  Cohere doesn't document whether Aya Expanse supports this.
-- ``prompted``: list the tools in the system prompt and ask for a JSON tool call in the reply.
+  **Aya Expanse doesn't support this:** Cohere rejects it with "tool use is not supported by
+  the provided model" (probe, 3 Nov). Kept for other teacher models.
+- ``prompted`` (default, and what Aya Expanse needs): list the tools in the system prompt
+  and ask for a JSON tool call in the reply.
   This uses the **same format as AgentTune's fallback for models without a tool template**
   (which is what Tiny Aya gets): a JSON list ``[{"tool_name": ..., "parameters": {...}}]``, with
   results returned as a user turn ``Tool result for <name>: ...``. That keeps the teacher's
@@ -26,7 +28,8 @@ and the saved trajectory is always OpenAI-style, whichever mode produced it.
 
 **Rate limiting.** Off by default: we use a production key. If a key does have a per-minute
 cap (trial keys: 20/min and 1,000 calls a month), set ``rpm`` or the TEACHER_RPM environment
-variable and calls are spaced to stay under it. Rate-limit errors are retried either way.
+variable and calls are spaced to stay under it. Rate limits, server errors and timeouts
+are retried (up to ``num_retries``, with back-off); a rejected request is not.
 """
 
 from __future__ import annotations
@@ -191,6 +194,16 @@ class Usage:
                 "errors": self.errors, "unparsed": self.unparsed, "est_cost": round(self.cost, 4)}
 
 
+_RETRYABLE = ("RateLimitError", "InternalServerError", "ServiceUnavailableError",
+              "APIConnectionError", "Timeout", "APIError")
+
+
+def _retryable(e: Exception) -> bool:
+    """Rate limits, server errors and timeouts can succeed later; a bad request won't."""
+    names = {c.__name__ for c in type(e).__mro__}
+    return "BadRequestError" not in names and bool(names & set(_RETRYABLE))
+
+
 class TeacherClient:
     """Aya Expanse 32B (by default) as the agent: one call per agent turn."""
 
@@ -216,20 +229,28 @@ class TeacherClient:
         if self._completion is None:
             import litellm
 
+            litellm.suppress_debug_info = True  # no "Give Feedback / Get Help" banner per error
             self._completion = litellm.completion
         kwargs: dict[str, Any] = dict(
             model=f"openai/{self.model}", api_base=self.api_base, api_key=self.api_key,
             messages=messages, temperature=self.temperature, max_tokens=self.max_tokens,
-            num_retries=self.num_retries,
+            num_retries=0,  # we retry ourselves, and only errors that can succeed later
         )
         if tools:
             kwargs["tools"] = tools
         if self.seed is not None:
             kwargs["seed"] = self.seed
-        self.limiter.wait()
         start = time.monotonic()
         try:
-            resp = self._completion(**kwargs)
+            for attempt in range(self.num_retries + 1):
+                self.limiter.wait()
+                try:
+                    resp = self._completion(**kwargs)
+                    break
+                except Exception as e:
+                    if attempt == self.num_retries or not _retryable(e):
+                        raise
+                    time.sleep(min(2 ** attempt, 30))  # 1 s, 2 s, 4 s ...
         except Exception:
             self.usage.errors += 1
             raise

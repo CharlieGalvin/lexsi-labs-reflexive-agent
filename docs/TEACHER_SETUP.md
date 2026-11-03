@@ -54,12 +54,14 @@ These are Cohere's documented facts as of 3 Nov 2026, plus what they mean for ou
   - This is the easiest route for us: LiteLLM, which τ²-bench already uses, can call it as an OpenAI-compatible model.
 - **Playground**, for trying prompts by hand: [dashboard.cohere.com/playground/chat](https://dashboard.cohere.com/playground/chat).
 
-## Tool calling: to be tested
+## Tool calling: prompted (native isn't supported)
 
-Cohere's docs don't say whether Aya Expanse supports native tool calling. Its model card describes it as text in, text out, and Cohere's [tool-use guide](https://docs.cohere.com/docs/tools) doesn't list it. So:
+**Tested 3 Nov (`just teacher-probe`).** A request with `tools=` is rejected by Cohere:
+`invalid request: tool use is not supported by the provided model: c4ai-aya-expanse-32b`.
+The prompted format worked first time: the teacher replied with a valid JSON tool call that
+parsed. So the teacher runs in **prompted mode** (`TeacherClient("prompted")`, the default):
 
-1. **Probe first.** Send one request with `tools=` through the Compatibility API, and see whether it returns structured `tool_calls`.
-2. **Fallback: prompted JSON tool calls.** Describe the tools in the prompt and ask for a JSON tool call, then parse it. This is the same approach Tiny Aya needs (AgentTune's JSON fallback prompt), so **the teacher and the student should share one tool-call format and parser.** Agree it with the Architect (data contract, SEL-35), so the teacher's fixes are directly usable as training data.
+- **Prompted JSON tool calls.** Describe the tools in the prompt and ask for a JSON tool call, then parse it. This is the same approach Tiny Aya needs (AgentTune's JSON fallback prompt), so **the teacher and the student should share one tool-call format and parser.** Agree it with the Architect (data contract, SEL-35), so the teacher's fixes are directly usable as training data.
 
 ## Cost and budget (to be measured in SEL-37)
 

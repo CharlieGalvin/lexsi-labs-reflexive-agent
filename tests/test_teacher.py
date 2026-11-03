@@ -140,6 +140,41 @@ def test_rate_limiter_spaces_calls():
     assert slept == [pytest.approx(3.0), pytest.approx(3.0)]  # 60 / 20 = 3 s apart
 
 
+class RateLimitError(Exception):
+    pass
+
+
+class BadRequestError(Exception):
+    pass
+
+
+def test_retries_transient_errors_but_not_rejected_requests(monkeypatch):
+    monkeypatch.setattr("reflexive.teacher.time.sleep", lambda s: None)
+    ok = fake_completion(["fine"])
+    attempts = []
+
+    def flaky(**kw):
+        attempts.append(1)
+        if len(attempts) < 3:
+            raise RateLimitError("429")
+        return ok(**kw)
+
+    t = TeacherClient("prompted", completion=flaky, rpm=0)
+    assert t.turn([{"role": "user", "content": "hi"}], TOOLS)["content"] == "fine"
+    assert len(attempts) == 3 and t.usage.calls == 1 and t.usage.errors == 0
+
+    rejected = []
+
+    def bad(**kw):
+        rejected.append(1)
+        raise BadRequestError("tool use is not supported by the provided model")
+
+    t = TeacherClient("native", completion=bad, rpm=0)
+    with pytest.raises(BadRequestError):
+        t.turn([{"role": "user", "content": "hi"}], TOOLS)
+    assert len(rejected) == 1 and t.usage.errors == 1
+
+
 def test_no_rate_limit_by_default(monkeypatch):
     monkeypatch.delenv("TEACHER_RPM", raising=False)
     t = TeacherClient(completion=fake_completion([]))
