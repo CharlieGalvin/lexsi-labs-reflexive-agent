@@ -266,6 +266,18 @@ def print_summary(rows: list[dict]) -> None:
         print("  In between                             → add ~20 tasks, or go straight to the hinted test.")
 
 
+def print_overlap(passed_by: dict[str, set]) -> None:
+    """Teacher vs student: the tasks only one of them solves. The first set is the fix pool."""
+    if "aya" not in passed_by or "tiny" not in passed_by:
+        return
+    teacher, student = passed_by["aya"], passed_by["tiny"]
+    fix = sorted(teacher - student)
+    print("\nTeacher vs student on the same tasks:")
+    print(f"  Aya solves, Tiny Aya doesn't (possible teacher fixes): {len(fix)}  "
+          f"{', '.join(f'{d}:{t}' for d, t in fix) or '-'}")
+    print(f"  Tiny Aya solves, Aya doesn't: {len(student - teacher)}   both: {len(teacher & student)}")
+
+
 # --- Main ---------------------------------------------------------------------------------------
 
 
@@ -291,6 +303,7 @@ def main() -> int:
             print(d, t)
         return 0
     rows = []
+    passed_by: dict[str, set] = {}
     for model in a.models:
         out = pathlib.Path(f"results/episodes/sample-{model}.jsonl")
         out.parent.mkdir(parents=True, exist_ok=True)
@@ -324,7 +337,9 @@ def main() -> int:
                 print(f"   {'✅' if rec['outcome']['passed'] else '❌'} {d}:{t:<6} "
                       f"{x['tools_ran']:>2} tools  {rec['wall_s']:>5.0f}s  {'; '.join(flags)}")
         rows.append(summarise(model, [done[t] for t in tasks if t in done]))
+        passed_by[model] = {t for t in tasks if t in done and done[t]["outcome"]["passed"]}
     print_summary(rows)
+    print_overlap(passed_by)
     return 0
 
 

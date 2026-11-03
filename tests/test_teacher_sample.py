@@ -109,3 +109,11 @@ def test_tiny_uses_tiny_aya_prompted_inside_its_8k_window(monkeypatch):
     assert agent.client.model == "tiny-aya-global" and agent.client.mode == "prompted"
     assert agent.client.style == "cohere" and agent.usage_dict()["est_cost"] == 0.0
     assert ts.CONTEXT["tiny"] == (8192, 1024) and "aya" not in ts.CONTEXT
+
+
+def test_overlap_lists_tasks_only_the_teacher_solves(capsys):
+    ts = load()
+    ts.print_overlap({"aya": {("retail", "4"), ("airline", "7")},
+                      "tiny": {("airline", "7"), ("retail", "9")}})
+    out = capsys.readouterr().out
+    assert "possible teacher fixes): 1  retail:4" in out and "Aya doesn't: 1   both: 1" in out
