@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import pathlib
+import sys
 from types import SimpleNamespace as NS
 
 import pytest
@@ -160,6 +161,7 @@ FAKE_LIST = {
     "z-ai/glm-4.7-flash": {"id": "z-ai/glm-4.7-flash", "hugging_face_id": "zai-org/GLM-4.7-Flash",
                            "pricing": {"prompt": "0.00000007", "completion": "0.0000004"}},
     "anthropic/claude-haiku-5.5": {"id": "anthropic/claude-haiku-5.5", "hugging_face_id": "",
+                                   "supported_parameters": ["tools", "tool_choice", "max_tokens"],
                                    "pricing": {"prompt": "0.000001", "completion": "0.000005"}},
 }
 
@@ -170,7 +172,8 @@ def test_bakeoff_slate_prices_and_open_weights_come_from_openrouter(monkeypatch)
     glm = ts.make_agent("glm")()
     assert glm.model == "openrouter/z-ai/glm-4.7-flash" and glm.prices == (7e-8, 4e-7)
     assert ts._open_weights("glm") is True and ts._open_weights("haiku") is False
-    assert ts.make_agent("or:anthropic/claude-haiku-5.5")().prices == (1e-6, 5e-6)
+    haiku = ts.make_agent("or:anthropic/claude-haiku-5.5")()
+    assert haiku.prices == (1e-6, 5e-6) and "temperature" not in haiku.supported
     assert ts.resolve_models(["aya", "bakeoff", "glm"])[:3] == ["aya", "glm", "glm53f"]
     assert ts._file_name("or:moonshotai/kimi-k2.6") == "or-moonshotai__kimi-k2.6"
 
@@ -179,3 +182,19 @@ def test_removed_models_stop_the_run():
     ts = load()
     assert ts._gone({"error": "NotFoundError: model 'x' was removed on April 4, 2026"})
     assert not ts._gone({"error": "RateLimitError"}) and not ts._gone({})
+
+
+def test_temperature_is_only_sent_when_the_model_accepts_it(monkeypatch):
+    import types
+
+    ts = load()
+    sent = []
+    msg = types.SimpleNamespace(tool_calls=None, content="Hello")
+    resp = types.SimpleNamespace(choices=[types.SimpleNamespace(message=msg)], usage=None)
+    fake = types.SimpleNamespace(suppress_debug_info=False,
+                                 completion=lambda **kw: sent.append(kw) or resp)
+    monkeypatch.setitem(sys.modules, "litellm", fake)
+    ts.NativeAgent("openrouter/a/b", (0, 0), supported={"tools"}).turn([], [])
+    ts.NativeAgent("openrouter/a/c", (0, 0), supported={"tools", "temperature"}).turn([], [])
+    assert "temperature" not in sent[0] and sent[1]["temperature"] == 0.0
+    assert sent[0]["extra_body"] == {"provider": {"require_parameters": True}}

@@ -116,8 +116,12 @@ def sample_tasks(sizes: dict[str, int] = SAMPLE, seed: int = SEED) -> list[tuple
 class NativeAgent:
     """An API model with native tool calling, as the agent (one call per turn)."""
 
-    def __init__(self, model: str, prices: tuple[float, float], no_think: bool = False):
+    def __init__(self, model: str, prices: tuple[float, float], no_think: bool = False,
+                 supported: set[str] | None = None):
         self.model, self.prices, self.no_think = model, prices, no_think
+        # OpenRouter's list of parameters the model accepts. Some newer models (reasoning ones)
+        # refuse `temperature`; with require_parameters on, sending it finds no endpoint at all.
+        self.supported = supported
         self.usage = {"calls": 0, "prompt_tokens": 0, "completion_tokens": 0, "seconds": 0.0}
 
     def turn(self, messages: list[dict], tools: list[dict]) -> dict:
@@ -131,8 +135,10 @@ class NativeAgent:
             start = time.monotonic()
             extra = ({"extra_body": {"provider": {"require_parameters": True}}}  # tools must work
                      if self.model.startswith("openrouter/") else {})
+            if not self.supported or "temperature" in self.supported:
+                extra["temperature"] = 0.0
             resp = litellm.completion(model=self.model, messages=messages, tools=tools,
-                                      temperature=0.0, num_retries=3, **extra)
+                                      num_retries=3, **extra)
             self.usage["seconds"] += time.monotonic() - start
             self.usage["calls"] += 1
             u = getattr(resp, "usage", None)
@@ -191,7 +197,8 @@ def make_agent(name: str) -> Callable[[], Any]:
         return AyaAgent
     if name in SLATE or name.startswith("or:"):
         slug = SLATE.get(name) or name[3:]
-        return lambda: NativeAgent(f"openrouter/{slug}", openrouter_info(slug)["prices"])
+        info = openrouter_info(slug)
+        return lambda: NativeAgent(f"openrouter/{slug}", info["prices"], supported=info["supported"])
     if name == "aya8":  # self-hosted: Cohere retired c4ai-aya-expanse-8b on 4 Apr 2026
         return _self_hosted_aya8
     raise ValueError(name)
@@ -245,7 +252,8 @@ def openrouter_info(slug: str) -> dict:
     fixed = next((PRICES[k] for k, v in SLATE.items() if v == slug and k in PRICES), (0.0, 0.0))
     prices = (float(p["prompt"]), float(p["completion"])) if "prompt" in p else fixed
     return {"prices": prices, "open_weights": bool(m.get("hugging_face_id")) if m else None,
-            "hf": m.get("hugging_face_id"), "context": m.get("context_length"), "listed": bool(m)}
+            "hf": m.get("hugging_face_id"), "context": m.get("context_length"), "listed": bool(m),
+            "supported": set(m.get("supported_parameters") or []) or None}
 
 
 def resolve_models(names: list[str]) -> list[str]:
@@ -353,6 +361,9 @@ def print_summary(rows: list[dict]) -> None:
           f"{'invented IDs':>13} {'unknown tool':>13} {'retried fail':>13} {'no tools':>9} "
           f"{'over 8K':>8} {'errors':>7} {'cost':>7} {'$/pass':>7}")
     for s in rows:
+        if not s["n"]:
+            print(f"{s['model'][:9]:<9}  (no finished runs)")
+            continue
         lo, hi = s["ci"]
         dom = s["by_domain"]
         ow = {True: "yes", False: "no", None: "?"}[s["open_weights"]]
