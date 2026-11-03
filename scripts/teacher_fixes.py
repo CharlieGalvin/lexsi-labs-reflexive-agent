@@ -17,8 +17,10 @@ communicate check need ``OPENAI_API_KEY``. Telecom needs no judges. The database
 kept too, to show how much the judges change. A failed judge call keeps the conversation and
 marks it ``judge_error`` for re-judging, rather than losing it.
 
-**Accounts.** The teacher goes through OpenRouter; the simulated customer (GPT-4.1) and the judges
-through OpenAI when ``OPENAI_API_KEY`` is set. Estimated ~$13 for GLM-5.3-Flash on all 148 tasks.
+**Accounts.** The teacher and the simulated customer (GPT-4.1) go through OpenRouter (~$11); the
+judges through OpenAI (~$2), as τ²-bench pins them. ``--customer openai`` uses OpenAI's exact
+GPT-4.1 snapshot instead, but a new OpenAI account's rate limit (10K tokens/min) is far too low.
+If judge calls hit a rate limit, the conversation is kept: run ``--rejudge`` afterwards.
 
 Records go to ``results/fixes/<model>.jsonl``, one line per (task, attempt). An interrupted run
 resumes where it stopped; ``--retry-broken`` redoes broken conversations.
@@ -140,6 +142,50 @@ def _clean(rec: dict) -> bool:
             and not x["repeated_failures"] and not x["unknown_tools"])
 
 
+def needs_judging(rec: dict) -> bool:
+    """Scored without its judged checks (a judge call failed, or the run used --no-judges)."""
+    if ts._broken(rec) and not rec.get("judge_error"):
+        return False
+    return bool(rec.get("judge_error")) or bool(rec["outcome"].get("skipped"))
+
+
+def rejudge(path: pathlib.Path, workers: int = 2, tries: int = 6) -> tuple[int, int]:
+    """Score again, judges on, every saved conversation that's missing its judged checks.
+
+    Judges run one call per conversation, so a couple at a time stays inside small OpenAI
+    rate limits; rate-limit errors are retried with a growing wait.
+    """
+    import time
+
+    from reflexive.outcome import score
+
+    recs = [json.loads(x) for x in path.read_text().splitlines()]
+    todo = [r for r in recs if needs_judging(r)]
+
+    def one(r: dict) -> bool:
+        for k in range(tries):
+            try:
+                o = score(r["domain"], r["task_id"], r["messages"], r["termination"], judges=True)
+            except Exception as e:  # noqa: BLE001 - retry rate limits, give up on the rest
+                if "rate" in str(e).lower() and k < tries - 1:
+                    time.sleep(5 * 2 ** k)
+                    continue
+                r["judge_error"] = f"{type(e).__name__}: {str(e)[:300]}"
+                return False
+            r["outcome"] = {"passed": o.passed, "reward": o.reward, "checks": o.checks,
+                            "judged": o.judged, "skipped": o.skipped, "note": o.note}
+            r.pop("judge_error", None)
+            return True
+        return False
+
+    with ThreadPoolExecutor(workers) as pool:
+        ok = sum(pool.map(one, todo))
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text("".join(json.dumps(r) + "\n" for r in recs))
+    tmp.replace(path)
+    return ok, len(todo)
+
+
 def print_report(model: str, rows: dict) -> None:
     def pct(kn):
         k, n = kn
@@ -154,7 +200,7 @@ def print_report(model: str, rows: dict) -> None:
               f"{pct(s['pass_all_3']):>24} {s['clean_fixes']:>11} {s['broken']:>6} ${s['cost']:>6.2f}")
     a = rows.get("all", {})
     if a.get("judge_errors"):
-        print(f"⚠ {a['judge_errors']} conversations have a failed judge call: rerun with --rejudge later.")
+        print(f"⚠ {a['judge_errors']} conversations have a failed judge call: run with --rejudge.")
     if a.get("broken"):
         print(f"⚠ {a['broken']} broken conversations (API failures): rerun with --retry-broken.")
     print("pass@1 = attempt 1 (temperature 0). pass@3 = at least one of 3 attempts passed. "
@@ -172,16 +218,24 @@ def main() -> int:
     ap.add_argument("--provider", help="pin one OpenRouter provider, e.g. 'z-ai' (default: any)")
     ap.add_argument("--no-judges", action="store_true", help="database checks only (no OpenAI key)")
     ap.add_argument("--customer", choices=sorted(CUSTOMER), default=None,
-                    help="where the simulated customer (GPT-4.1) runs: openai (default when "
-                         "OPENAI_API_KEY is set) or openrouter")
+                    help="where the simulated customer (GPT-4.1) runs: openrouter (default) or "
+                         "openai (the exact pinned snapshot; needs a high OpenAI rate limit)")
     ap.add_argument("--limit", type=int, help="only the first N tasks (smoke test)")
     ap.add_argument("--domains", nargs="+", choices=DOMAINS, default=list(DOMAINS))
     ap.add_argument("--retry-broken", action="store_true")
     ap.add_argument("--list", action="store_true", help="print the tasks and exit")
     ap.add_argument("--report", action="store_true", help="summarise saved results and exit")
+    ap.add_argument("--rejudge", action="store_true",
+                    help="score saved conversations that are missing their judged checks, then exit")
     a = ap.parse_args()
 
     out = pathlib.Path(f"results/fixes/{ts._file_name(a.model)}.jsonl")
+    if a.rejudge:
+        if not out.exists():
+            ap.error(f"nothing saved yet at {out}")
+        ok, n = rejudge(out)
+        print(f"re-judged {ok}/{n} conversations" + ("" if ok == n else "; run --rejudge again for the rest"))
+        a.report = True
     if a.report:
         recs = [json.loads(x) for x in out.read_text().splitlines()] if out.exists() else []
         print_report(a.model, report(recs, a.attempts))
@@ -224,9 +278,8 @@ def main() -> int:
         if left < ts.MIN_CREDITS:
             print("   ⛔ add credits at https://openrouter.ai/settings/credits first")
             return 1
-    import os
 
-    customer = CUSTOMER[a.customer or ("openai" if os.environ.get("OPENAI_API_KEY") else "openrouter")]
+    customer = CUSTOMER[a.customer or "openrouter"]  # OpenAI's low new-account rate limits stall runs
     print(f"   simulated customer: {customer}; judges: {'off' if a.no_judges else ', '.join(judge_models())}")
     if todo:
         ts.make_agent(a.model)()  # fail now if the model can't be set up

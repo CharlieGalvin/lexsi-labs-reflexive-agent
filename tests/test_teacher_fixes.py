@@ -75,3 +75,14 @@ def test_preflight_reports_every_failing_model(monkeypatch):
     fx = load()
     problems = fx.preflight(["good", "bad", "bad"])
     assert len(problems) == 1 and "add OpenAI credits" in problems[0]
+
+
+def test_needs_judging_picks_failed_or_skipped_judges():
+    fx = load()
+    ok = rec("retail", "1", 1, True)
+    ok["outcome"]["skipped"] = []
+    skipped = rec("retail", "2", 1, True)
+    skipped["outcome"]["skipped"] = ["NL_ASSERTION"]
+    failed = {**rec("retail", "3", 1, True), "judge_error": "RateLimitError"}
+    broken = rec("retail", "4", 1, False, broken=True)
+    assert [fx.needs_judging(r) for r in (ok, skipped, failed, broken)] == [False, True, True, False]
