@@ -61,7 +61,28 @@ These are Cohere's documented facts as of 3 Nov 2026, plus what they mean for ou
 The prompted format worked first time: the teacher replied with a valid JSON tool call that
 parsed. So the teacher runs in **prompted mode** (`TeacherClient("prompted")`, the default):
 
-- **Prompted JSON tool calls.** Describe the tools in the prompt and ask for a JSON tool call, then parse it. This is the same approach Tiny Aya needs (AgentTune's JSON fallback prompt), so **the teacher and the student should share one tool-call format and parser.** Agree it with the Architect (data contract, SEL-35), so the teacher's fixes are directly usable as training data.
+- **Use Aya's own tool format (`style="cohere"`, the default).** Aya Expanse comes from
+  Cohere's Command R family and was trained on its tool-use prompt. Its model template, which
+  Ollama also uses ([Ollama: aya-expanse:32b](https://ollama.com/library/aya-expanse:32b-q4_0/blobs/4f426f0c38cf)),
+  lists the tools as Python stubs under "## Available Tools" and asks the model to "Write
+  'Action:' followed by a json-formatted list of actions", each `{"tool_name", "parameters"}`,
+  with a `directly-answer` pseudo-tool. Ollama's tool support for Aya is this same prompting,
+  so we use the same wording through Cohere's API, with no self-hosting.
+- **Our additions for τ²-bench:**
+  - A turn is an Action *or* a message, never both.
+  - Results come back in `<results>` tags.
+  - "Never write tool results yourself."
+  - Stop sequences (`<results>`, `Tool result`, `Document: 0`) end the reply where Aya started
+    inventing results on 3 Nov.
+- **Safety nets:**
+  - A call written inside prose is still found, and the prose is dropped.
+  - `directly-answer` becomes a message to the customer.
+- **Alternative (`style="agenttune"`):** AgentTune's generic fallback wording, which is what
+  Tiny Aya gets. Compare both with `just teacher-check cohere` / `just teacher-check agenttune`.
+  Both write the same `{"tool_name", "parameters"}` objects, and the saved trajectory is
+  OpenAI-style either way, so teacher fixes convert to the student's format. Which format the
+  *student* uses is for the data contract (SEL-35). Tiny Aya is also a Cohere model, so the
+  `cohere` format may suit it too.
 
 ## Cost and budget (measured 3 Nov, `just teacher-check`, prompted mode)
 
@@ -118,7 +139,7 @@ team decision if Aya's pass rate turns out too low.
 | Command | What it does | Cohere calls |
 |---|---|---|
 | `just teacher-probe` | Checks the key and model ID, whether native tool calling works, and whether prompted JSON calls parse. Ends with a recommended `mode`. | 3 |
-| `just teacher-check` | Teacher on one train task per domain (prompted mode). Reports cost, latency and score, then the budget estimate. `just teacher-check native` if the probe says native works. | ~30–60 |
+| `just teacher-check [cohere\|agenttune]` | Teacher on one train task per domain, in that prompt style (default `cohere`). Reports cost, latency, score and the tool calls that actually ran, then the budget estimate. Saves to `results/episodes/teacher-check-<style>.jsonl`. | ~30–60 |
 
 - **Rate:** we use a **production key** (decided 3 Nov), so the driver doesn't throttle by default. If calls start failing with rate-limit errors (HTTP 429), they're retried; to space them out, set `TEACHER_RPM` in `.env` (e.g. `20` for a trial key).
 - **Code:** `reflexive.teacher.TeacherClient`, used as the agent in `reflexive.episode.Tau2Episode`.

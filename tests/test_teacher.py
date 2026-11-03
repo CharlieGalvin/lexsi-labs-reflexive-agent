@@ -14,6 +14,7 @@ from reflexive.teacher import (
     find_prompted_calls,
     parse_prompted,
     to_prompted,
+    tool_stub,
 )
 
 TOOLS = [{"type": "function", "function": {"name": "get_order_details", "parameters": {}}}]
@@ -168,6 +169,72 @@ def test_json_in_a_message_without_tool_name_is_not_a_call():
 def test_reply_that_is_only_json_is_not_counted_as_embedded():
     calls, embedded = find_prompted_calls('[{"tool_name": "get_order_details", "parameters": {}}]')
     assert calls and not embedded
+
+
+# --- Aya's own (Cohere) prompt style -----------------------------------------------------------
+
+ORDER_TOOL = {"type": "function", "function": {
+    "name": "get_order_details", "description": "Get the status of an order.\nMore detail here.",
+    "parameters": {"type": "object", "properties": {
+        "order_id": {"type": "string", "description": "The order id."},
+        "item_ids": {"type": "array", "items": {"type": "string"}, "description": "Items."}},
+        "required": ["order_id"]}}}
+
+
+def test_tool_stub_renders_python_signature_and_args():
+    stub = tool_stub(ORDER_TOOL)
+    assert stub.startswith("def get_order_details(order_id: str, item_ids: list[str] = None)")
+    assert "        order_id (str): The order id." in stub
+    assert "        item_ids (list[str], optional): Items." in stub
+    assert "\n    More detail here." in stub  # continuation lines indented
+
+
+def test_cohere_style_uses_action_format_and_results_tags():
+    convo = [
+        {"role": "system", "content": "POLICY"},
+        {"role": "assistant", "content": None, "tool_calls": [
+            {"id": "c1", "function": {"name": "get_order_details", "arguments": '{"order_id": "#W1"}'}}]},
+        {"role": "tool", "tool_call_id": "c1", "content": "pending"},
+    ]
+    out = to_prompted(convo, [ORDER_TOOL], "cohere")
+    assert out[0]["content"].startswith("POLICY\n\n## Available Tools")
+    assert "def get_order_details(" in out[0]["content"] and "Write 'Action:'" in out[0]["content"]
+    assert out[1]["content"].startswith("Action: ```json")
+    assert out[2]["content"] == ("<results>\nDocument: 0\ntool_name: get_order_details\n"
+                                 "result: pending\n</results>")
+
+
+def test_action_prefixed_reply_is_a_call_not_embedded():
+    calls, embedded = find_prompted_calls(
+        'Action: ```json\n[{"tool_name": "get_order_details", "parameters": {"order_id": "#W1"}}]\n```')
+    assert calls and not embedded
+
+
+def test_cohere_turn_sends_stop_sequences():
+    fc = fake_completion(['Action: ```json\n[{"tool_name": "get_order_details", "parameters": {}}]\n```'])
+    t = TeacherClient("prompted", completion=fc, rpm=0)
+    assert t.style == "cohere"  # Aya's own format is the teacher's default
+    turn = t.turn([{"role": "system", "content": "P"}, {"role": "user", "content": "hi"}], [ORDER_TOOL])
+    assert turn["tool_calls"][0]["function"]["name"] == "get_order_details"
+    assert "<results>" in fc.calls[0]["stop"] and "Tool result" in fc.calls[0]["stop"]
+
+
+def test_directly_answer_with_prose_becomes_a_message():
+    reply = ('Your order is on its way!\n\nAction: ```json\n'
+             '[{"tool_name": "directly-answer", "parameters": {}}]\n```')
+    t = TeacherClient("prompted", completion=fake_completion([reply]), rpm=0)
+    turn = t.turn([{"role": "user", "content": "thanks"}], [ORDER_TOOL])
+    assert turn == {"role": "assistant", "content": "Your order is on its way!"}
+    assert t.usage.directly_answer == 1 and t.usage.calls == 1
+
+
+def test_directly_answer_alone_asks_once_for_the_reply():
+    fc = fake_completion(['Action: ```json\n[{"tool_name": "directly-answer", "parameters": {}}]\n```',
+                          "You're welcome, have a nice day!"])
+    t = TeacherClient("prompted", completion=fc, rpm=0)
+    turn = t.turn([{"role": "user", "content": "thanks"}], [ORDER_TOOL])
+    assert turn == {"role": "assistant", "content": "You're welcome, have a nice day!"}
+    assert t.usage.calls == 2 and "plain text" in fc.calls[1]["messages"][-1]["content"]
 
 
 # --- Client -------------------------------------------------------------------------------------

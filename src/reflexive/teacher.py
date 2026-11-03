@@ -16,12 +16,19 @@ with LiteLLM. See docs/TEACHER_SETUP.md for limits and prices.
   **Aya Expanse doesn't support this:** Cohere rejects it with "tool use is not supported by
   the provided model" (probe, 3 Nov). Kept for other teacher models.
 - ``prompted`` (default, and what Aya Expanse needs): list the tools in the system prompt
-  and ask for a JSON tool call in the reply.
-  This uses the **same format as AgentTune's fallback for models without a tool template**
-  (which is what Tiny Aya gets): a JSON list ``[{"tool_name": ..., "parameters": {...}}]``, with
-  results returned as a user turn ``Tool result for <name>: ...``. That keeps the teacher's
-  fixes in the shape the student is trained on. The exact shared format is for the data
-  contract (SEL-35) to confirm. This module's copy is ours, kept deliberately small.
+  and ask for a JSON tool call in the reply. Two wordings (``style``):
+
+  - ``cohere`` (default): **Aya Expanse's own trained format**, Cohere's Command R tool-use
+    prompt (as in the model's tool_use chat template, which Ollama also uses). Tools as Python
+    stubs; calls as ``Action: ```json [{"tool_name", "parameters"}]``` ``; results in
+    ``<results>`` tags; a ``directly-answer`` pseudo-tool for "no tool needed".
+  - ``agenttune``: AgentTune's fallback for models without a tool template (what Tiny Aya
+    gets): a bare JSON list, results as ``Tool result for <name>: ...``.
+
+  Both use the same ``{"tool_name", "parameters"}`` objects, and the saved trajectory is
+  OpenAI-style either way, so fixes convert to the student's format. Generation stops where
+  Aya would start writing tool results itself (``STOP_SEQUENCES``), and a call written inside
+  prose is still found (``find_prompted_calls``).
 
 Either way, `turn()` returns an OpenAI-style assistant dict that `Tau2Episode.step` accepts,
 and the saved trajectory is always OpenAI-style, whichever mode produced it.
@@ -60,25 +67,104 @@ TOOLS_PROMPT = (
 )
 TOOL_RESULT = "Tool result for {name}: {content}\nUse this result to answer the original question."
 
+# Aya Expanse's own tool format: Cohere's Command R tool-use prompt (as in the model's tool_use
+# chat template, which Ollama also uses): tools as Python stubs under "## Available Tools", and
+# "Action:" followed by a JSON list of {"tool_name", "parameters"}. The last paragraph is ours:
+# it adapts the format to τ²-bench, where a turn is a tool call *or* a message to the customer.
+COHERE_TOOLS_PROMPT = """## Available Tools
+Here is a list of tools that you have available to you:
+
+```python
+{stubs}
+```
+
+## Tool calls
+Write 'Action:' followed by a json-formatted list of actions that you want to perform in order to \
+produce a good response to the user's last input. You can use any of the supplied tools any number \
+of times, but you should aim to execute the minimum number of necessary actions for the input. \
+You should use the `directly-answer` tool if calling the other tools is unnecessary. The list of \
+actions you want to call should be formatted as a list of json objects, for example:
+```json
+[
+    {{
+        "tool_name": title of the tool in the specification,
+        "parameters": a dict of parameters to input into the tool as they are defined in the specs, \
+or {{}} if it takes no parameters
+    }}
+]
+```
+
+In this conversation each of your turns is EITHER an Action OR a message to the customer, never \
+both. After an Action, stop: the tool results come back to you in the next turn inside <results> \
+tags. Never write tool results yourself, and never tell the customer an action has happened \
+until its result says so. To reply to the customer, write the reply as plain text with no Action."""
+COHERE_RESULT = "<results>\nDocument: {i}\ntool_name: {name}\nresult: {content}\n</results>"
+# Stop the reply where Aya would start writing tool results itself (seen 3 Nov).
+STOP_SEQUENCES = ["<results>", "Tool result", "Document: 0"]
+DIRECTLY_ANSWER = {"directly-answer", "directly_answer"}
+_PY_TYPES = {"string": "str", "integer": "int", "number": "float", "boolean": "bool",
+             "object": "dict", "array": "list", "null": "None"}
+
+
+def _py_type(schema: dict) -> str:
+    t = schema.get("type")
+    if isinstance(t, list):
+        return " | ".join(_PY_TYPES.get(x, "Any") for x in t)
+    if t == "array" and isinstance(schema.get("items"), dict):
+        return f"list[{_py_type(schema['items'])}]"
+    if "anyOf" in schema:
+        return " | ".join(_py_type(x) for x in schema["anyOf"])
+    return _PY_TYPES.get(t, "Any")
+
+
+def tool_stub(schema: dict) -> str:
+    """One tool as a Python function stub with a docstring, as Cohere's tool template renders it."""
+    fn = schema.get("function", schema)
+    params = fn.get("parameters") or {}
+    props, required = params.get("properties") or {}, set(params.get("required") or [])
+    sig = ", ".join(f"{k}: {_py_type(v)}" + ("" if k in required else " = None")
+                    for k, v in props.items())
+    desc = "\n    ".join(line.strip() for line in (fn.get("description") or "").strip().splitlines())
+    lines = [f"def {fn['name']}({sig}) -> list[dict]:", '    """' + desc]
+    if props:
+        lines += ["", "    Args:"]
+        for k, v in props.items():
+            opt = "" if k in required else ", optional"
+            lines.append(f"        {k} ({_py_type(v)}{opt}): {(v.get('description') or '').strip()}")
+    lines += ['    """', "    pass"]
+    return "\n".join(lines)
+
 
 # --- Prompted tool-call format -----------------------------------------------------------------
 
 
-def to_prompted(messages: list[dict], tool_schemas: list[dict]) -> list[dict]:
+def to_prompted(messages: list[dict], tool_schemas: list[dict], style: str = "agenttune"
+                ) -> list[dict]:
     """Rewrite an OpenAI-style conversation for a model without native tool calling.
 
-    The tools go into the system prompt; earlier agent tool calls become their JSON-list text;
-    tool results become ``Tool result for <name>: ...`` user turns. Adjacent turns from the same
-    role are merged, so roles alternate.
+    The tools go into the system prompt (after τ²-bench's instructions and policy, unchanged);
+    earlier agent tool calls become their JSON-list text; tool results become user turns.
+    Adjacent turns from the same role are merged, so roles alternate.
+
+    - ``style="agenttune"``: AgentTune's fallback wording (what Tiny Aya gets); tools as JSON
+      schemas; results as ``Tool result for <name>: ...``.
+    - ``style="cohere"``: Aya Expanse's own trained format; tools as Python stubs; calls as
+      ``Action: ```json [...]```  ``; results in ``<results>`` tags.
     """
+    if style not in ("agenttune", "cohere"):
+        raise ValueError("style must be 'agenttune' or 'cohere'")
     names: dict[str, str] = {}
     out: list[dict] = []
-    tools_text = json.dumps([s.get("function", s) for s in tool_schemas], separators=(",", ":"))
+    if style == "cohere":
+        tools_block = COHERE_TOOLS_PROMPT.format(stubs="\n\n".join(tool_stub(t) for t in tool_schemas))
+    else:
+        tools_text = json.dumps([t.get("function", t) for t in tool_schemas], separators=(",", ":"))
+        tools_block = TOOLS_PROMPT.format(tools=tools_text)
+    n_results = 0
     for m in messages:
         role, content = m["role"], m.get("content")
         if role == "system":
-            out.append({"role": "system",
-                        "content": f"{content}\n\n{TOOLS_PROMPT.format(tools=tools_text)}"})
+            out.append({"role": "system", "content": f"{content}\n\n{tools_block}"})
             continue
         if role == "assistant" and m.get("tool_calls"):
             calls = []
@@ -89,11 +175,19 @@ def to_prompted(messages: list[dict], tool_schemas: list[dict]) -> list[dict]:
                     args = json.loads(args) if args.strip() else {}
                 names[tc.get("id", "")] = fn["name"]
                 calls.append({"tool_name": fn["name"], "parameters": args})
-            out.append({"role": "assistant", "content": json.dumps(calls)})
+            text = json.dumps(calls)
+            if style == "cohere":
+                text = f"Action: ```json\n{json.dumps(calls, indent=4)}\n```"
+            out.append({"role": "assistant", "content": text})
             continue
         if role == "tool":
             name = names.get(m.get("tool_call_id", ""), "tool")
-            out.append({"role": "user", "content": TOOL_RESULT.format(name=name, content=content)})
+            if style == "cohere":
+                out.append({"role": "user", "content": COHERE_RESULT.format(
+                    i=n_results, name=name, content=content)})
+                n_results += 1
+            else:
+                out.append({"role": "user", "content": TOOL_RESULT.format(name=name, content=content)})
             continue
         out.append({"role": role, "content": content or ""})
     merged: list[dict] = []
@@ -162,7 +256,7 @@ def find_prompted_calls(text: str, id_prefix: str = "call") -> tuple[list[dict] 
     - A well-formed call to a tool that doesn't exist is kept: τ²-bench records it, and it is
       exactly the Tool hallucination we want to detect.
     """
-    stripped = _FENCE.sub("", text.strip())
+    stripped = _FENCE.sub("", re.sub(r"^\s*Action:\s*", "", text.strip(), flags=re.IGNORECASE))
     if stripped.startswith(("[", "{")):
         first = next(_json_values(stripped), None)
         calls = _calls_from(first, id_prefix, strict=False)
@@ -211,6 +305,7 @@ class Usage:
     errors: int = 0
     unparsed: int = 0  # prompted replies that looked like a tool call but didn't parse
     embedded: int = 0  # prompted tool calls written inside prose (the prose was dropped)
+    directly_answer: int = 0  # "directly-answer" pseudo-calls turned into a message
     per_call: list[dict] = field(default_factory=list)
 
     @property
@@ -222,6 +317,7 @@ class Usage:
         return {"calls": self.calls, "prompt_tokens": self.prompt_tokens,
                 "completion_tokens": self.completion_tokens, "seconds": round(self.seconds, 2),
                 "errors": self.errors, "unparsed": self.unparsed, "embedded": self.embedded,
+                "directly_answer": self.directly_answer,
                 "est_cost": round(self.cost, 4)}
 
 
@@ -238,14 +334,16 @@ def _retryable(e: Exception) -> bool:
 class TeacherClient:
     """Aya Expanse 32B (by default) as the agent: one call per agent turn."""
 
-    def __init__(self, mode: str = "prompted", *, model: str = TEACHER_MODEL,
+    def __init__(self, mode: str = "prompted", *, style: str = "cohere", model: str = TEACHER_MODEL,
                  api_base: str = COHERE_COMPAT_BASE, api_key: str | None = None,
                  rpm: float | None = None, temperature: float = 0.0, max_tokens: int = 1024,
                  seed: int | None = None, num_retries: int = 3,
                  completion: Callable[..., Any] | None = None):
         if mode not in ("native", "prompted"):
             raise ValueError("mode must be 'native' or 'prompted'")
-        self.mode, self.model, self.api_base = mode, model, api_base
+        if style not in ("agenttune", "cohere"):
+            raise ValueError("style must be 'agenttune' or 'cohere'")
+        self.mode, self.style, self.model, self.api_base = mode, style, model, api_base
         self.api_key = api_key or os.environ.get("COHERE_API_KEY")
         if not self.api_key and completion is None:
             raise RuntimeError("Set COHERE_API_KEY in .env (see docs/TEACHER_SETUP.md)")
@@ -256,7 +354,8 @@ class TeacherClient:
         self._completion = completion
         self.usage = Usage()
 
-    def _call(self, messages: list[dict], tools: list[dict] | None) -> Any:
+    def _call(self, messages: list[dict], tools: list[dict] | None,
+              stop: list[str] | None = None) -> Any:
         if self._completion is None:
             import litellm
 
@@ -269,6 +368,8 @@ class TeacherClient:
         )
         if tools:
             kwargs["tools"] = tools
+        if stop:
+            kwargs["stop"] = stop
         if self.seed is not None:
             kwargs["seed"] = self.seed
         start = time.monotonic()
@@ -308,12 +409,37 @@ class TeacherClient:
                 return {"role": "assistant", "content": None, "tool_calls": calls}
             return {"role": "assistant", "content": msg.content or ""}
 
-        msg = self._call(to_prompted(messages, tool_schemas), None).choices[0].message
+        prompt = to_prompted(messages, tool_schemas, self.style)
+        msg = self._call(prompt, None, stop=STOP_SEQUENCES).choices[0].message
         text = msg.content or ""
         calls, embedded = find_prompted_calls(text, id_prefix=f"t{self.usage.calls}")
+        if calls and all(c["function"]["name"] in DIRECTLY_ANSWER for c in calls):
+            return self._directly_answer(prompt, text)
         if calls:
+            calls = [c for c in calls if c["function"]["name"] not in DIRECTLY_ANSWER]
             self.usage.embedded += embedded
             return {"role": "assistant", "content": None, "tool_calls": calls}
         if text.strip().startswith(("[", "{")):
             self.usage.unparsed += 1  # looked like a call but wasn't valid: sent as a message
         return {"role": "assistant", "content": text}
+
+    def _directly_answer(self, prompt: list[dict], text: str) -> dict:
+        """The model chose `directly-answer`: its message to the customer, as a message turn.
+
+        Uses any prose around the Action; if there is none, asks once more for the reply.
+        """
+        self.usage.directly_answer += 1
+        prose = _strip_actions(text)
+        if prose:
+            return {"role": "assistant", "content": prose}
+        follow = [*prompt, {"role": "assistant", "content": text.strip()},
+                  {"role": "user", "content": "(Now write your reply to the customer, as plain text.)"}]
+        reply = self._call(follow, None, stop=STOP_SEQUENCES).choices[0].message.content or ""
+        return {"role": "assistant", "content": _strip_actions(reply) or reply}
+
+
+def _strip_actions(text: str) -> str:
+    """``text`` without any 'Action:' JSON block (fenced or bare)."""
+    text = re.sub(r"Action:\s*```(?:json)?.*?```", "", text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r"Action:\s*\[.*?\]\s*$", "", text, flags=re.DOTALL | re.IGNORECASE)
+    return text.strip()

@@ -4,7 +4,7 @@
 
 1. Plain chat: is the key and model ID right? What latency?
 2. Native: the same question with ``tools=``. Do structured ``tool_calls`` come back?
-3. Prompted: the tools in the prompt, in AgentTune's JSON-list format. Does the reply parse?
+3. Prompted: the tools in the prompt, in Aya's own Cohere 'Action:' format. Does the reply parse?
 
 Prints a recommendation for TeacherClient's ``mode``.
 """
@@ -54,7 +54,7 @@ def main() -> int:
         results["native"] = False
         print(f"   ✗ request failed: {type(e).__name__}: {str(e)[:300]}")
 
-    print("3. prompted tool calling (JSON list in the reply)")
+    print("3. prompted tool calling (Aya's own 'Action:' format)")
     p = TeacherClient("prompted")
     try:
         turn = p.turn(ASK, TOOLS)

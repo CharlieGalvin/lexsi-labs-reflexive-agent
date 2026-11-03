@@ -42,8 +42,8 @@ def first_train_task(domain: str) -> str:
     return registry.get_task_splits_loader(domain)()["train"][0]
 
 
-def run(domain: str, task_id: str, mode: str, judges: bool) -> dict:
-    teacher = TeacherClient(mode)
+def run(domain: str, task_id: str, mode: str, style: str, judges: bool) -> dict:
+    teacher = TeacherClient(mode, style=style)
     ep = Tau2Episode(domain, task_id, max_context=128_000, reserve=4_096)  # Aya: 128K / 4K out
     start = time.monotonic()
     ep.reset()
@@ -53,7 +53,7 @@ def run(domain: str, task_id: str, mode: str, judges: bool) -> dict:
             break
         ep.step(teacher.turn(messages, ep.tool_schemas))
     rec = ep.record(judges=judges, agent_llm=f"cohere/{teacher.model}", teacher_mode=mode,
-                    teacher_usage=teacher.usage.as_dict())
+                    teacher_style=style, teacher_usage=teacher.usage.as_dict())
     rec["wall_s"] = round(time.monotonic() - start, 1)
     return rec
 
@@ -61,24 +61,27 @@ def run(domain: str, task_id: str, mode: str, judges: bool) -> dict:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--mode", choices=["prompted", "native"], default="prompted")
+    ap.add_argument("--style", choices=["cohere", "agenttune"], default="cohere",
+                    help="prompted tool-call format: Aya's own (cohere) or AgentTune's fallback")
     ap.add_argument("--tasks", nargs="*", help="domain:task_id (default: first train task per domain)")
-    ap.add_argument("--out", default="results/episodes/teacher-check.jsonl")
+    ap.add_argument("--out", default=None, help="default: results/episodes/teacher-check-<style>.jsonl")
     a = ap.parse_args()
     tasks = [t.split(":", 1) for t in a.tasks] if a.tasks else [
         (d, first_train_task(d)) for d in ("retail", "airline", "telecom")]
     have_judges = bool(os.environ.get("OPENAI_API_KEY"))
-    out = pathlib.Path(a.out)
+    out = pathlib.Path(a.out or f"results/episodes/teacher-check-{a.style}.jsonl")
     out.parent.mkdir(parents=True, exist_ok=True)
 
     rpm = os.environ.get("TEACHER_RPM") or "no limit"
-    print(f"teacher=c4ai-aya-expanse-32b ({a.mode})  rpm={rpm}  → {out}")
+    print(f"teacher=c4ai-aya-expanse-32b ({a.mode}, {a.style} style)  rpm={rpm}  "
+          f"judges={'on' if have_judges else 'telecom only (no OPENAI_API_KEY)'}  → {out}")
     print(f"{'task':<40} {'ended':<14} {'reward':>6} {'turns':>5} {'tools':>5} {'tok in/out':>14} "
           f"{'teacher$':>8} {'cust$':>6} {'time':>6}")
     rows = []
     with out.open("w") as f:
         for domain, tid in tasks:
             judges = have_judges or domain == "telecom"
-            rec = run(domain, tid, a.mode, judges)
+            rec = run(domain, tid, a.mode, a.style, judges)
             f.write(json.dumps(rec) + "\n")
             rows.append(rec)
             u = rec["teacher_usage"]
