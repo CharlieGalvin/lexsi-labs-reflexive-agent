@@ -19,7 +19,7 @@ Four levels, from free to a full re-run. You only need an `OPENROUTER_API_KEY` i
 |---|---|---|---|
 | 0 | The code and statistics are right | `just check` | free, ~2 min |
 | 1 | A finalist runs end to end | `python scripts/teacher_sample.py --models glm53f --limit 2` | ~$0.05, ~2 min |
-| 2 | Reproduce the finalists' rows | `just teacher-sample glm53f qwen38` | ~$1, ~15 min |
+| 2 | Reproduce the finalists' rows | `just teacher-sample glm53f qwen38` | ~$2, ~20 min |
 | 3 | Recompute every number in this write-up | put Charlie's `results/episodes/` files in place, then `just bakeoff-report` | free, seconds |
 
 - **Setup:** `just setup-dev` once, which installs τ²-bench and its data.
