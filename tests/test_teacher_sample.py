@@ -15,6 +15,16 @@ from reflexive.teacher import tool_errors
 _PATH = pathlib.Path(__file__).parents[1] / "scripts" / "teacher_sample.py"
 
 
+def fake_module(monkeypatch, name, **attrs):
+    """A stand-in for an optional dependency (litellm, httpx), so CI needs neither installed."""
+    import types
+
+    mod = types.ModuleType(name)
+    mod.__dict__.update(attrs)
+    monkeypatch.setitem(sys.modules, name, mod)
+    return mod
+
+
 def load():
     spec = importlib.util.spec_from_file_location("teacher_sample", _PATH)
     mod = importlib.util.module_from_spec(spec)
@@ -58,7 +68,7 @@ def test_native_agent_adds_no_think_and_reads_tool_calls(monkeypatch):
                                                                  arguments='{"order_id": "#W1"}'))])
         return NS(choices=[NS(message=msg)], usage=NS(prompt_tokens=1000, completion_tokens=10))
 
-    import litellm
+    litellm = fake_module(monkeypatch, "litellm", suppress_debug_info=False, completion=None)
 
     monkeypatch.setattr(litellm, "completion", fake)
     agent = ts.NativeAgent("openrouter/qwen/qwen3-32b", ts.PRICES["qwen"], no_think=True)
@@ -130,7 +140,7 @@ def test_aya_steps_is_the_teacher_with_hints_and_qwen_retries_an_empty_reply(mon
     def fake(**kw):
         return NS(choices=[NS(message=next(replies))], usage=NS(prompt_tokens=10, completion_tokens=1))
 
-    import litellm
+    litellm = fake_module(monkeypatch, "litellm", suppress_debug_info=False, completion=None)
 
     monkeypatch.setattr(litellm, "completion", fake)
     agent = ts.NativeAgent("openrouter/qwen/qwen3-32b", ts.PRICES["qwen"], no_think=True)
@@ -224,7 +234,7 @@ def test_openrouter_agent_hands_reasoning_back_and_retries_provider_errors(monke
         def raise_for_status(self):
             pass
 
-    import httpx
+    httpx = fake_module(monkeypatch, "httpx", HTTPError=Exception, post=None)
     monkeypatch.setattr(httpx, "post",
                         lambda url, json, headers, timeout: bodies.append(json) or R(replies.pop(0)))
     agent = ts.OpenRouterAgent("google/x", (0.0, 0.0), supported={"tools"})
