@@ -27,7 +27,7 @@ from loguru import logger
 
 sys.path.insert(0, str(pathlib.Path(__file__).parents[1] / "src"))
 from reflexive.episode import Tau2Episode  # noqa: E402
-from reflexive.teacher import TeacherClient  # noqa: E402
+from reflexive.teacher import EmptyTeacherReply, TeacherClient  # noqa: E402
 
 logger.remove()
 logger.add(sys.stderr, level="ERROR")
@@ -47,13 +47,18 @@ def run(domain: str, task_id: str, mode: str, style: str, judges: bool) -> dict:
     ep = Tau2Episode(domain, task_id, max_context=128_000, reserve=4_096)  # Aya: 128K / 4K out
     start = time.monotonic()
     ep.reset()
+    error = None
     while not ep.done:
         messages = ep.prompt()
         if ep.done:
             break
-        ep.step(teacher.turn(messages, ep.tool_schemas))
+        try:
+            ep.step(teacher.turn(messages, ep.tool_schemas))
+        except EmptyTeacherReply as e:  # end cleanly and record why, rather than crash
+            error = str(e)
+            ep.finish()
     rec = ep.record(judges=judges, agent_llm=f"cohere/{teacher.model}", teacher_mode=mode,
-                    teacher_style=style, teacher_usage=teacher.usage.as_dict())
+                    teacher_style=style, teacher_usage=teacher.usage.as_dict(), teacher_error=error)
     rec["wall_s"] = round(time.monotonic() - start, 1)
     return rec
 
@@ -96,6 +101,10 @@ def main() -> int:
                 print(f"   ⚠ {u['unparsed']} reply(ies) looked like a tool call but didn't parse")
             if u.get("embedded"):
                 print(f"   ⚠ {u['embedded']} tool call(s) were written inside prose (prose dropped)")
+            if u.get("empty"):
+                print(f"   ⚠ {u['empty']} empty reply(ies) re-asked")
+            if rec.get("teacher_error"):
+                print(f"   ⚠ ended early: {rec['teacher_error']}")
             if not tools:
                 print("   ⚠ no agent tool calls ran: a pass here can only mean 'leave the database as is'")
 

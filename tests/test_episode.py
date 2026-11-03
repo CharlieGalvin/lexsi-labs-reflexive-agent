@@ -126,3 +126,15 @@ def test_tool_functions_match_the_tools_and_run_in_the_conversation():
 def test_unknown_task_fails_fast():
     with pytest.raises(KeyError):
         Tau2Episode("retail", "no-such-task", **CUSTOMER)
+
+
+def test_empty_agent_turn_is_refused_and_the_conversation_carries_on():
+    ep = Tau2Episode("retail", "0", **CUSTOMER)
+    ep.reset()
+    with pytest.raises(ValueError, match="message or at least one tool call"):
+        ep.step({"role": "assistant", "content": "   "})
+    assert not ep.done
+    new = ep.step({"role": "assistant", "content": "How can I help with your order?"})
+    assert new and new[0]["role"] == "user"
+    ep.finish()
+    assert ep.record(judges=False)["termination"] == "agent_stop"

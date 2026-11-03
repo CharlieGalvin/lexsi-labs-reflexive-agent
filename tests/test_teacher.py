@@ -9,6 +9,7 @@ import pytest
 
 from reflexive.teacher import (
     TOOL_RESULT,
+    EmptyTeacherReply,
     RateLimiter,
     TeacherClient,
     find_prompted_calls,
@@ -235,6 +236,27 @@ def test_directly_answer_alone_asks_once_for_the_reply():
     turn = t.turn([{"role": "user", "content": "thanks"}], [ORDER_TOOL])
     assert turn == {"role": "assistant", "content": "You're welcome, have a nice day!"}
     assert t.usage.calls == 2 and "plain text" in fc.calls[1]["messages"][-1]["content"]
+
+
+def test_empty_reply_is_re_asked_once_without_stop_sequences():
+    fc = fake_completion(["", "Could you share your order number?"])
+    t = TeacherClient("prompted", completion=fc, rpm=0)
+    turn = t.turn([{"role": "user", "content": "hi"}], [ORDER_TOOL])
+    assert turn == {"role": "assistant", "content": "Could you share your order number?"}
+    assert t.usage.empty == 1 and "stop" in fc.calls[0] and "stop" not in fc.calls[1]
+
+
+def test_twice_empty_reply_raises_instead_of_sending_an_empty_turn():
+    t = TeacherClient("prompted", completion=fake_completion(["", "   "]), rpm=0)
+    with pytest.raises(EmptyTeacherReply):
+        t.turn([{"role": "user", "content": "hi"}], [ORDER_TOOL])
+
+
+def test_message_is_cut_before_invented_results():
+    reply = "Let me check that for you.\n<results>\nDocument: 0\nresult: shipped\n</results>"
+    t = TeacherClient("prompted", completion=fake_completion(["", reply]), rpm=0)
+    turn = t.turn([{"role": "user", "content": "hi"}], [ORDER_TOOL])
+    assert turn["content"] == "Let me check that for you."
 
 
 # --- Client -------------------------------------------------------------------------------------

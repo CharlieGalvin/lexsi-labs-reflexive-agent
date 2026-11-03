@@ -306,6 +306,7 @@ class Usage:
     unparsed: int = 0  # prompted replies that looked like a tool call but didn't parse
     embedded: int = 0  # prompted tool calls written inside prose (the prose was dropped)
     directly_answer: int = 0  # "directly-answer" pseudo-calls turned into a message
+    empty: int = 0  # empty replies (re-asked once without stop sequences)
     per_call: list[dict] = field(default_factory=list)
 
     @property
@@ -317,7 +318,7 @@ class Usage:
         return {"calls": self.calls, "prompt_tokens": self.prompt_tokens,
                 "completion_tokens": self.completion_tokens, "seconds": round(self.seconds, 2),
                 "errors": self.errors, "unparsed": self.unparsed, "embedded": self.embedded,
-                "directly_answer": self.directly_answer,
+                "directly_answer": self.directly_answer, "empty": self.empty,
                 "est_cost": round(self.cost, 4)}
 
 
@@ -329,6 +330,10 @@ def _retryable(e: Exception) -> bool:
     """Rate limits, server errors and timeouts can succeed later; a bad request won't."""
     names = {c.__name__ for c in type(e).__mro__}
     return "BadRequestError" not in names and bool(names & set(_RETRYABLE))
+
+
+class EmptyTeacherReply(RuntimeError):
+    """The teacher returned nothing usable twice in a row for one turn."""
 
 
 class TeacherClient:
@@ -410,8 +415,16 @@ class TeacherClient:
             return {"role": "assistant", "content": msg.content or ""}
 
         prompt = to_prompted(messages, tool_schemas, self.style)
-        msg = self._call(prompt, None, stop=STOP_SEQUENCES).choices[0].message
-        text = msg.content or ""
+        text = self._call(prompt, None, stop=STOP_SEQUENCES).choices[0].message.content or ""
+        if not text.strip():
+            # Usually a stop sequence at the very start (Aya began by echoing <results>). Ask
+            # once more without stop sequences; anything results-like is dropped by the parser.
+            self.usage.empty += 1
+            nudge = [*prompt, {"role": "user", "content":
+                               "(Write your next turn now: an Action, or a message to the customer.)"}]
+            text = self._call(nudge, None).choices[0].message.content or ""
+            if not text.strip():
+                raise EmptyTeacherReply("The teacher returned an empty reply twice")
         calls, embedded = find_prompted_calls(text, id_prefix=f"t{self.usage.calls}")
         if calls and all(c["function"]["name"] in DIRECTLY_ANSWER for c in calls):
             return self._directly_answer(prompt, text)
@@ -421,7 +434,10 @@ class TeacherClient:
             return {"role": "assistant", "content": None, "tool_calls": calls}
         if text.strip().startswith(("[", "{")):
             self.usage.unparsed += 1  # looked like a call but wasn't valid: sent as a message
-        return {"role": "assistant", "content": text}
+        message = _strip_results(text)
+        if not message:
+            raise EmptyTeacherReply("The teacher's reply had no message and no tool call")
+        return {"role": "assistant", "content": message}
 
     def _directly_answer(self, prompt: list[dict], text: str) -> dict:
         """The model chose `directly-answer`: its message to the customer, as a message turn.
@@ -436,6 +452,12 @@ class TeacherClient:
                   {"role": "user", "content": "(Now write your reply to the customer, as plain text.)"}]
         reply = self._call(follow, None, stop=STOP_SEQUENCES).choices[0].message.content or ""
         return {"role": "assistant", "content": _strip_actions(reply) or reply}
+
+
+def _strip_results(text: str) -> str:
+    """``text`` cut at the first thing that looks like an invented tool result."""
+    cut = min((i for i in (text.find(s) for s in STOP_SEQUENCES) if i >= 0), default=len(text))
+    return text[:cut].strip()
 
 
 def _strip_actions(text: str) -> str:

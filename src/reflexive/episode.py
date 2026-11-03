@@ -142,6 +142,9 @@ class Tau2Episode:
             raise RuntimeError("The conversation has ended")
         if reply.get("role", "assistant") != "assistant":
             raise ValueError("An agent turn must have role 'assistant'")
+        if not reply.get("tool_calls") and not (reply.get("content") or "").strip():
+            # τ²-bench rejects this and the whole run crashes, losing the conversation
+            raise ValueError("An agent turn needs a message or at least one tool call (got neither)")
         (msg,) = from_openai([{**reply, "role": "assistant"}])
         self._env._agent.set_action(msg)
         self._wait_for_turn()
@@ -277,9 +280,17 @@ class Tau2Episode:
         return run.termination_reason.value
 
     def trajectory(self) -> list[dict]:
-        """The full conversation, including the customer's own tool calls, as OpenAI-style dicts."""
+        """The full conversation, including the customer's own tool calls, as OpenAI-style dicts.
+
+        If τ²-bench's run crashed, this is the conversation up to the crash.
+        """
         run = self._env._simulation_run
-        return to_openai(run.messages) if run is not None and run.messages else []
+        if run is not None and run.messages:
+            return to_openai(run.messages)
+        try:  # crashed run: recover what the orchestrator had so far
+            return to_openai(self._env._orchestrator.get_messages())
+        except Exception:  # noqa: BLE001 - best effort; an empty trajectory is still valid
+            return []
 
     def record(self, judges: bool = True, **extra: Any) -> dict:
         """Everything about this conversation, ready to save as one JSON line.
