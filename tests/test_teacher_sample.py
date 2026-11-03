@@ -144,8 +144,20 @@ def test_tiny_counts_tokens_more_cautiously():
     assert ts.COUNT["tiny"](msgs) > ts.estimate_tokens(msgs)
 
 
-def test_aya8_runs_inside_its_8k_window(monkeypatch):
-    monkeypatch.setenv("COHERE_API_KEY", "test-placeholder")
+def test_aya8_is_self_hosted_inside_its_8k_window(monkeypatch):
     ts = load()
-    assert ts.make_agent("aya8")().client.model == "c4ai-aya-expanse-8b"
+    monkeypatch.delenv("AYA8_API_BASE", raising=False)
+    with pytest.raises(ts.ModelUnavailable, match="removed 4 Apr 2026"):
+        ts.make_agent("aya8")()
+    monkeypatch.setenv("AYA8_API_BASE", "http://localhost:11434/v1")
+    monkeypatch.setenv("AYA8_MODEL", "aya-expanse:8b")
+    c = ts.make_agent("aya8")().client
+    assert (c.model, c.api_base) == ("aya-expanse:8b", "http://localhost:11434/v1")
     assert ts.CONTEXT["aya8"] == (8192, 1024)
+
+
+def test_glm_is_a_native_teacher_and_removed_models_stop_the_run():
+    ts = load()
+    assert ts.make_agent("glm")().model == "openrouter/z-ai/glm-4.7-flash" and "glm" in ts.TEACHERS
+    assert ts._gone({"error": "NotFoundError: model 'x' was removed on April 4, 2026"})
+    assert not ts._gone({"error": "RateLimitError"}) and not ts._gone({})

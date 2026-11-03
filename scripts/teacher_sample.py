@@ -16,10 +16,14 @@ judged checks would pass too. If even the best case is low, the model is a weak 
 - ``qwen``: Qwen3 32B via OpenRouter, native tool calling, thinking off (``/no_think``): a
   same-size model trained for tool use, so it separates "Aya is weak" from "32B is too small".
 - ``gpt``: GPT-4.1 via OpenRouter (or OpenAI), native tool calling: shows the tasks are solvable.
+- ``glm``: GLM-4.7-Flash (``z-ai/glm-4.7-flash``) via OpenRouter, native tool calling, thinking
+  left on: the candidate *teacher* (MIT-licensed weights, so its outputs can be trained on).
 - ``aya-steps``: the teacher again, with τ²-bench's resolution steps (tool names in order, no
   IDs) added to its prompt, the hinted test from the decision rule. Train tasks only.
-- ``aya8``: Aya Expanse 8B (``c4ai-aya-expanse-8b``) via Cohere, a candidate student, prompted
-  like the others inside its real 8K window.
+- ``aya8``: Aya Expanse 8B, a candidate student, prompted like the others inside its real 8K
+  window. Cohere removed it from its API on 4 Apr 2026, so it runs on a server you start
+  yourself (Ollama, vLLM...): set ``AYA8_API_BASE`` (an OpenAI-compatible ``/v1`` URL) and
+  ``AYA8_MODEL`` (the server's own name for it, e.g. ``aya-expanse:8b`` on Ollama).
 - ``tiny``: Tiny Aya (``tiny-aya-global``) via Cohere, our *student*, prompted exactly like the
   teacher, inside its real 8,192-token window (our context guard on; overflows are counted). Its
   API price isn't published, so its cost line is the simulated customer only.
@@ -62,7 +66,7 @@ logger.add(sys.stderr, level="ERROR")
 SAMPLE = {"retail": 20, "airline": 10}
 SEED = 0
 # USD per token, for models whose cost LiteLLM doesn't report (listed prices, 3 Nov 2026)
-PRICES = {"qwen": (0.08e-6, 0.28e-6), "gpt": (2.0e-6, 8.0e-6)}
+PRICES = {"qwen": (0.08e-6, 0.28e-6), "gpt": (2.0e-6, 8.0e-6), "glm": (0.07e-6, 0.40e-6)}
 
 
 # --- Task sample --------------------------------------------------------------------------------
@@ -135,8 +139,9 @@ class NativeAgent:
 class AyaAgent:
     """A Cohere Aya model, prompted tool calls in Aya's own format (default: the 32B teacher)."""
 
-    def __init__(self, model: str = "c4ai-aya-expanse-32b", prices: tuple[float, float] | None = None):
-        self.client = TeacherClient("prompted", style="cohere", model=model, prices=prices)
+    def __init__(self, model: str = "c4ai-aya-expanse-32b", prices: tuple[float, float] | None = None,
+                 **server):  # api_base / api_key for a self-hosted model
+        self.client = TeacherClient("prompted", style="cohere", model=model, prices=prices, **server)
         self.model = f"cohere/{self.client.model}"
 
     def turn(self, messages, tools):
@@ -159,10 +164,27 @@ def make_agent(name: str) -> Callable[[], Any]:
         return lambda: AyaAgent("tiny-aya-global", prices=(0.0, 0.0))  # price not published
     if name == "aya-steps":
         return AyaAgent
-    if name == "aya8":  # listed at the same price as the 32B (cloudprice.net, 3 Nov)
-        return lambda: AyaAgent("c4ai-aya-expanse-8b", prices=(0.50e-6, 1.50e-6))
+    if name == "glm":
+        return lambda: NativeAgent("openrouter/z-ai/glm-4.7-flash", PRICES["glm"])
+    if name == "aya8":  # self-hosted: Cohere retired c4ai-aya-expanse-8b on 4 Apr 2026
+        return _self_hosted_aya8
     raise ValueError(name)
 
+
+class ModelUnavailable(RuntimeError):
+    """The model can't be reached at all (removed, wrong ID, server not set): stop the run."""
+
+
+def _self_hosted_aya8() -> AyaAgent:
+    import os
+
+    base, model = os.environ.get("AYA8_API_BASE"), os.environ.get("AYA8_MODEL")
+    if not base or not model:
+        raise ModelUnavailable(
+            "Aya Expanse 8B is no longer on Cohere's API (removed 4 Apr 2026). Serve it yourself "
+            "and set AYA8_API_BASE and AYA8_MODEL; see docs/TEACHER_SETUP.md.")
+    return AyaAgent(model, prices=(0.0, 0.0),  # self-hosted: no API price
+                    api_base=base, api_key=os.environ.get("AYA8_API_KEY", "none"))
 
 # (max_context, reserve) per model: the student gets its real 8K window, the others don't need one
 CONTEXT = {"tiny": (8192, 1024), "aya8": (8192, 1024)}
@@ -171,7 +193,7 @@ COUNT = {"tiny": lambda msgs: int(estimate_tokens(msgs) * 1.15),
          "aya8": lambda msgs: int(estimate_tokens(msgs) * 1.15)}
 # τ²-bench resolution-step hints (train tasks only; see Tau2Episode(hints=...))
 HINTS = {"aya-steps": "steps"}
-MODELS = ["aya", "qwen", "gpt", "tiny", "aya8", "aya-steps"]
+MODELS = ["aya", "qwen", "gpt", "glm", "tiny", "aya8", "aya-steps"]
 
 
 # --- One conversation ---------------------------------------------------------------------------
@@ -290,8 +312,13 @@ def print_summary(rows: list[dict]) -> None:
         print("  In between                             → add ~20 tasks, or go straight to the hinted test.")
 
 
-TEACHERS = ("gpt", "qwen", "aya-steps", "aya")  # candidate teachers, strongest first
+TEACHERS = ("gpt", "glm", "qwen", "aya-steps", "aya")  # candidate teachers, strongest first
 STUDENTS = ("aya", "aya8", "tiny")              # candidate students
+
+
+def _gone(rec: dict) -> bool:
+    err = rec.get("error") or ""
+    return "NotFoundError" in err or "was removed" in err
 
 
 def print_overlap(passed_by: dict[str, set]) -> None:
@@ -316,11 +343,13 @@ def main() -> int:
     ap.add_argument("--workers", type=int, default=4, help="conversations run at once per model")
     ap.add_argument("--fresh", action="store_true", help="ignore earlier results and start again")
     ap.add_argument("--list", action="store_true", help="only print the task sample")
+    ap.add_argument("--limit", type=int, help="run only the first N tasks (a quick smoke test)")
     ap.add_argument("--retry-broken", action="store_true",
                     help="re-run conversations that broke (API failures, crashes)")
     a = ap.parse_args()
 
     tasks = sample_tasks()  # also loads each domain's tasks once, before the worker threads
+    tasks = tasks[:a.limit] if a.limit else tasks
     from tau2.gym import register_gym_agent
 
     import reflexive.episode as episode
@@ -347,11 +376,22 @@ def main() -> int:
         print(f"\n== {model}: {len(tasks)} tasks ({len(done)} already done) → {out}")
         if a.retry_broken and not a.fresh:
             out.write_text("".join(json.dumps(r) + "\n" for r in done.values()))
+        try:
+            if todo:
+                make_agent(model)()  # fail now, not 30 times, if the model can't be set up
+        except ModelUnavailable as e:
+            print(f"   ⛔ {e}")
+            continue
         with out.open("w" if a.fresh else "a") as f, ThreadPoolExecutor(a.workers) as pool:
             futures = {pool.submit(run_one, model, d, t): (d, t) for d, t in todo}
             for fut in as_completed(futures):
                 d, t = futures[fut]
                 rec = fut.result()
+                if _gone(rec):  # removed model / wrong ID: every other task would fail the same way
+                    for other in futures:
+                        other.cancel()
+                    print(f"   ⛔ {model}: model not available, stopping ({rec['error'][:160]})")
+                    break
                 f.write(json.dumps(rec) + "\n")
                 f.flush()
                 done[(d, t)] = rec

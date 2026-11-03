@@ -215,11 +215,19 @@ Same 30 train tasks, database checks only (a best case):
     as fails, so Qwen's true rate is probably higher. Re-run them with `--retry-broken`.
   - The invented-ID check is a heuristic, so some flags may be false positives. Check a few
     transcripts.
-- **Next: Aya Expanse 8B** (`just teacher-sample aya8`, model `c4ai-aya-expanse-8b`, 8K window,
-  ~$0.50 / $1.50 per 1M tokens) as a second student candidate. The team is leaning towards a
-  stronger teacher (Qwen3 32B or GPT-4.1) with Aya 32B or 8B as the student. The summary now
-  prints a fix-pool line for every teacher → student pair (e.g. `qwen → aya8`), so the 8B's pool
-  can be compared with the 32B's and Tiny Aya's.
+- **Re-plan (3 Nov): a stronger teacher, Aya as the student.** Leading option: **GLM-4.7-Flash**
+  as teacher (`just teacher-sample glm`, `z-ai/glm-4.7-flash` on OpenRouter, 200K context,
+  ~$0.07 / $0.40 per 1M tokens, native tools, thinking on, MIT-licensed weights) and **Aya
+  Expanse 32B** as student. The summary prints a fix-pool line per teacher → student pair
+  (e.g. `glm → aya`): the tasks the teacher solves and the student doesn't.
+- **Aya Expanse 8B is no longer on Cohere's API** (`c4ai-aya-expanse-8b` removed 4 Apr 2026;
+  [deprecations](https://docs.cohere.com/docs/deprecations)). To test it, serve the open weights
+  (`CohereLabs/aya-expanse-8b` on Hugging Face, CC-BY-NC) on any OpenAI-compatible server and
+  point the script at it:
+  `AYA8_API_BASE=http://localhost:11434/v1 AYA8_MODEL=aya-expanse:8b just teacher-sample aya8`
+  (Ollama shown; vLLM on a GPU is much faster). Without those settings the script stops at once
+  instead of logging 30 broken runs. Any removed or misnamed model now stops after the first
+  failure too.
 - **Tiny Aya's probe:** no native tool calling (it answered in prose). Prompted, it wrote
   `Action: get_order_details({...})` in function-call style, which the parser now also reads.
 
