@@ -53,7 +53,13 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from math import sqrt
 from typing import Any
 
-from loguru import logger
+try:  # loguru comes with τ²-bench; CI installs the project without it
+    from loguru import logger
+
+    logger.remove()
+    logger.add(sys.stderr, level="ERROR")
+except ImportError:  # pragma: no cover - only without τ²-bench
+    logger = None
 
 sys.path.insert(0, str(pathlib.Path(__file__).parents[1] / "src"))
 from reflexive.episode import Tau2Episode, estimate_tokens  # noqa: E402
@@ -64,9 +70,6 @@ from reflexive.teacher import (  # noqa: E402
     tool_errors,
     unseen_arguments,
 )
-
-logger.remove()
-logger.add(sys.stderr, level="ERROR")
 
 SAMPLE = {"retail": 20, "airline": 10}
 SEED = 0
