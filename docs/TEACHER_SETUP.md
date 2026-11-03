@@ -134,12 +134,48 @@ examples with `command-a-plus-05-2026`). `TeacherClient("native", model=...)` al
 supports this. Switching would depart from the proposal's teacher (Aya Expanse 32B), so it's a
 team decision if Aya's pass rate turns out too low.
 
+## Second run (3 Nov, both prompt styles, before the empty-reply fix)
+
+The transcripts show the remaining problem is **Aya's task-solving, not the tool-call format**.
+Both styles now get tool calls through, and every failure is a hallucination of the kind we
+study:
+
+| Run | What happened |
+|---|---|
+| AgentTune, retail | **Invented item IDs** (`1012345678`) and a payment method (`credit_card_0000000`) without looking up the order; called the exchange **5 times with the same invented IDs** (a loop); told the customer "I have resolved the issue". |
+| AgentTune, airline ("pass") | **False pass.** Wrote a pseudo-call `[(tool_name: …)]` (not JSON, so not run), invented a "$250" refund, then transferred. The database was untouched. |
+| AgentTune, telecom | Called 4 customer-side tools plus `get_customer_by_phone("user's phone number")`; never identified the customer. |
+| Cohere, airline | Tool calling worked, but it **cancelled immediately**, without checking the policy or asking for confirmation, and promised a full refund. The correct outcome is to refuse. |
+| Cohere, retail and telecom | Crashed on an empty reply (fixed since). |
+
+## Hints: τ²-bench's resolution steps (teacher only)
+
+τ²-bench ships a "ground truth" agent setting, `llm_agent_gt`. It adds `<resolution_steps>`,
+generated from the task's expected actions, to the agent's prompt. `Tau2Episode(hints=...)`
+uses it:
+
+- **`steps` (recommended):** tool names in order, e.g. "[Step 1] Assistant action:
+  find_user_id_by_name_zip. [Step 2] Assistant action: get_order_details. …". Aya still has to
+  find every ID through the lookups, so its transcripts stay grounded.
+- **`steps_with_args`:** the exact calls, IDs included. This risks teaching the student to use
+  IDs it never looked up, the very hallucination we're fighting. Use it only to diagnose.
+- **Guard rails:**
+  - Hints are refused on test-split tasks (they come from the answer key), and every record
+    stores `hints` / `hinted`.
+  - Tasks whose correct outcome is "do nothing", such as refusals, get no steps.
+  - The student is trained on the conversation, not on this prompt.
+- **Other diagnostics:**
+  - `unseen_arguments` lists ID-like tool arguments that never appeared earlier in the
+    conversation, i.e. probable inventions. `teacher-check` prints them, and SEL-9 can use
+    them to reject fixes.
+  - Replies that mention `tool_name` but don't parse are now counted as `unparsed`.
+
 ## Commands
 
 | Command | What it does | Cohere calls |
 |---|---|---|
 | `just teacher-probe` | Checks the key and model ID, whether native tool calling works, and whether prompted JSON calls parse. Ends with a recommended `mode`. | 3 |
-| `just teacher-check [cohere\|agenttune]` | Teacher on one train task per domain, in that prompt style (default `cohere`). Reports cost, latency, score and the tool calls that actually ran, then the budget estimate. Saves to `results/episodes/teacher-check-<style>.jsonl`. | ~30–60 |
+| `just teacher-check [cohere\|agenttune] [none\|steps\|steps_with_args]` | Teacher on one train task per domain, in that prompt style (default `cohere`) and with those hints (default `none`). Reports cost, latency, score, the tool calls that actually ran and any invented IDs, then the budget. Saves to `results/episodes/teacher-check-<style>[-<hints>].jsonl`. | ~30–60 |
 
 - **Rate:** we use a **production key** (decided 3 Nov), so the driver doesn't throttle by default. If calls start failing with rate-limit errors (HTTP 429), they're retried; to space them out, set `TEACHER_RPM` in `.env` (e.g. `20` for a trial key).
 - **Code:** `reflexive.teacher.TeacherClient`, used as the agent in `reflexive.episode.Tau2Episode`.

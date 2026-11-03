@@ -432,7 +432,7 @@ class TeacherClient:
             calls = [c for c in calls if c["function"]["name"] not in DIRECTLY_ANSWER]
             self.usage.embedded += embedded
             return {"role": "assistant", "content": None, "tool_calls": calls}
-        if text.strip().startswith(("[", "{")):
+        if text.strip().startswith(("[", "{")) or "tool_name" in text:
             self.usage.unparsed += 1  # looked like a call but wasn't valid: sent as a message
         message = _strip_results(text)
         if not message:
@@ -452,6 +452,36 @@ class TeacherClient:
                   {"role": "user", "content": "(Now write your reply to the customer, as plain text.)"}]
         reply = self._call(follow, None, stop=STOP_SEQUENCES).choices[0].message.content or ""
         return {"role": "assistant", "content": _strip_actions(reply) or reply}
+
+
+_ID_LIKE = re.compile(r"^(?=.*\d)[\w#@.\-]{4,}$")
+
+
+def unseen_arguments(messages: list[dict]) -> list[str]:
+    """Agent tool-call arguments that look like IDs but never appeared earlier in the conversation.
+
+    A diagnostic for teacher transcripts (SEL-9): a value like ``1012345678`` or
+    ``credit_card_0000000`` that no customer message or tool result mentioned before the call is
+    probably invented. Strings with a digit, 4+ characters and no spaces count as ID-like.
+    """
+    seen, unseen = "", []
+    for m in messages:
+        if m["role"] == "assistant" and m.get("tool_calls"):
+            for tc in m["tool_calls"]:
+                fn = tc.get("function", tc)
+                args = fn.get("arguments") or {}
+                if isinstance(args, str):
+                    try:
+                        args = json.loads(args) if args.strip() else {}
+                    except ValueError:
+                        continue
+                values = []
+                for v in args.values():
+                    values += v if isinstance(v, list) else [v]
+                unseen += [v for v in values if isinstance(v, str) and _ID_LIKE.match(v)
+                           and v.lstrip("#") not in seen and v not in unseen]
+        seen += " " + (m.get("content") or "")
+    return unseen
 
 
 def _strip_results(text: str) -> str:

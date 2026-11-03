@@ -16,6 +16,7 @@ from reflexive.teacher import (
     parse_prompted,
     to_prompted,
     tool_stub,
+    unseen_arguments,
 )
 
 TOOLS = [{"type": "function", "function": {"name": "get_order_details", "parameters": {}}}]
@@ -257,6 +258,33 @@ def test_message_is_cut_before_invented_results():
     t = TeacherClient("prompted", completion=fake_completion(["", reply]), rpm=0)
     turn = t.turn([{"role": "user", "content": "hi"}], [ORDER_TOOL])
     assert turn["content"] == "Let me check that for you."
+
+
+def test_unseen_arguments_flags_invented_ids_from_a_real_transcript():
+    # Excerpt of the 3 Nov agenttune-style retail run: the order number came from the customer,
+    # the user ID from a tool result, but the item IDs and payment method were invented.
+    convo = [
+        {"role": "user", "content": "order number W2378156 ... Yusuf Rossi, zip code 19122"},
+        {"role": "assistant", "content": None, "tool_calls": [{"id": "a", "function": {
+            "name": "find_user_id_by_name_zip",
+            "arguments": '{"first_name": "Yusuf", "last_name": "Rossi", "zip": "19122"}'}}]},
+        {"role": "tool", "tool_call_id": "a", "content": "yusuf_rossi_9620"},
+        {"role": "assistant", "content": None, "tool_calls": [{"id": "b", "function": {
+            "name": "exchange_delivered_order_items", "arguments": json.dumps({
+                "order_id": "#W2378156", "item_ids": ["1012345678", "9876543210"],
+                "new_item_ids": ["1012345679", "9876543211"],
+                "payment_method_id": "credit_card_0000000"})}}]},
+    ]
+    assert unseen_arguments(convo) == ["1012345678", "9876543210", "1012345679", "9876543211",
+                                       "credit_card_0000000"]
+
+
+def test_pseudo_tool_call_text_is_counted_as_unparsed():
+    # Seen 3 Nov: "[(tool_name: get_reservation_details, parameters: {...})]" is not JSON
+    text = 'Let me check.\n\n[(tool_name: get_reservation_details, parameters: {"reservation_id": "X"})]'
+    t = TeacherClient("prompted", style="agenttune", completion=fake_completion([text]), rpm=0)
+    turn = t.turn([{"role": "user", "content": "hi"}], TOOLS)
+    assert "tool_calls" not in turn and t.usage.unparsed == 1
 
 
 # --- Client -------------------------------------------------------------------------------------

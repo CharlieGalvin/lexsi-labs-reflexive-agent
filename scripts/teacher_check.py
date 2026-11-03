@@ -27,7 +27,7 @@ from loguru import logger
 
 sys.path.insert(0, str(pathlib.Path(__file__).parents[1] / "src"))
 from reflexive.episode import Tau2Episode  # noqa: E402
-from reflexive.teacher import EmptyTeacherReply, TeacherClient  # noqa: E402
+from reflexive.teacher import EmptyTeacherReply, TeacherClient, unseen_arguments  # noqa: E402
 
 logger.remove()
 logger.add(sys.stderr, level="ERROR")
@@ -42,9 +42,10 @@ def first_train_task(domain: str) -> str:
     return registry.get_task_splits_loader(domain)()["train"][0]
 
 
-def run(domain: str, task_id: str, mode: str, style: str, judges: bool) -> dict:
+def run(domain: str, task_id: str, mode: str, style: str, judges: bool, hints: str) -> dict:
     teacher = TeacherClient(mode, style=style)
-    ep = Tau2Episode(domain, task_id, max_context=128_000, reserve=4_096)  # Aya: 128K / 4K out
+    ep = Tau2Episode(domain, task_id, max_context=128_000, reserve=4_096,  # Aya: 128K / 4K out
+                     hints=hints)
     start = time.monotonic()
     ep.reset()
     error = None
@@ -69,16 +70,20 @@ def main() -> int:
     ap.add_argument("--style", choices=["cohere", "agenttune"], default="cohere",
                     help="prompted tool-call format: Aya's own (cohere) or AgentTune's fallback")
     ap.add_argument("--tasks", nargs="*", help="domain:task_id (default: first train task per domain)")
-    ap.add_argument("--out", default=None, help="default: results/episodes/teacher-check-<style>.jsonl")
+    ap.add_argument("--hints", choices=["none", "steps", "steps_with_args"], default="none",
+                    help="add tau2's resolution steps to the teacher's prompt (train tasks only)")
+    ap.add_argument("--out", default=None,
+                    help="default: results/episodes/teacher-check-<style>[-<hints>].jsonl")
     a = ap.parse_args()
     tasks = [t.split(":", 1) for t in a.tasks] if a.tasks else [
         (d, first_train_task(d)) for d in ("retail", "airline", "telecom")]
     have_judges = bool(os.environ.get("OPENAI_API_KEY"))
-    out = pathlib.Path(a.out or f"results/episodes/teacher-check-{a.style}.jsonl")
+    tag = a.style if a.hints == "none" else f"{a.style}-{a.hints}"
+    out = pathlib.Path(a.out or f"results/episodes/teacher-check-{tag}.jsonl")
     out.parent.mkdir(parents=True, exist_ok=True)
 
     rpm = os.environ.get("TEACHER_RPM") or "no limit"
-    print(f"teacher=c4ai-aya-expanse-32b ({a.mode}, {a.style} style)  rpm={rpm}  "
+    print(f"teacher=c4ai-aya-expanse-32b ({a.mode}, {a.style} style, hints={a.hints})  rpm={rpm}  "
           f"judges={'on' if have_judges else 'telecom only (no OPENAI_API_KEY)'}  → {out}")
     print(f"{'task':<40} {'ended':<14} {'reward':>6} {'turns':>5} {'tools':>5} {'tok in/out':>14} "
           f"{'teacher$':>8} {'cust$':>6} {'time':>6}")
@@ -86,7 +91,8 @@ def main() -> int:
     with out.open("w") as f:
         for domain, tid in tasks:
             judges = have_judges or domain == "telecom"
-            rec = run(domain, tid, a.mode, a.style, judges)
+            rec = run(domain, tid, a.mode, a.style, judges, a.hints)
+            rec["unseen_arguments"] = unseen_arguments(rec["messages"])
             f.write(json.dumps(rec) + "\n")
             rows.append(rec)
             u = rec["teacher_usage"]
@@ -105,6 +111,11 @@ def main() -> int:
                 print(f"   ⚠ {u['empty']} empty reply(ies) re-asked")
             if rec.get("teacher_error"):
                 print(f"   ⚠ ended early: {rec['teacher_error']}")
+            unseen = rec["unseen_arguments"]
+            if unseen:
+                print(f"   ⚠ ID-like arguments never seen earlier (likely invented): {unseen[:5]}")
+            if rec.get("hints") != "none" and not rec.get("hinted"):
+                print("   (no resolution steps for this task: it expects no actions)")
             if not tools:
                 print("   ⚠ no agent tool calls ran: a pass here can only mean 'leave the database as is'")
 

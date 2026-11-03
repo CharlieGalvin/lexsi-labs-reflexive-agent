@@ -89,8 +89,8 @@ tau2-check-gold *domains:
 teacher-probe:
     python scripts/teacher_probe.py
 
-# Teacher on 3 tasks (one per domain): cost, latency, budget (style: cohere = Aya's own format, or agenttune)
-teacher-check style="cohere":
-    python scripts/teacher_check.py --style {{style}}
+# Teacher on 3 tasks (one per domain). style: cohere (Aya's own) | agenttune; hints: none | steps | steps_with_args
+teacher-check style="cohere" hints="none":
+    python scripts/teacher_check.py --style {{style}} --hints {{hints}}
 
 # Experiment commands (train, baseline, evaluate…) are added by the Architect and Trainer.
