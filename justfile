@@ -83,4 +83,14 @@ tau2-episode-check:
 tau2-check-gold *domains:
     python scripts/tau2_check_scorer.py gold {{domains}}
 
+# --- Teacher (Aya Expanse 32B via Cohere; needs COHERE_API_KEY) -----------------
+
+# Does the teacher do native tool calling? 3 API calls (SEL-37)
+teacher-probe:
+    python scripts/teacher_probe.py
+
+# Teacher on 3 tasks (one per domain): cost, latency, budget estimate (SEL-37)
+teacher-check mode="prompted":
+    python scripts/teacher_check.py --mode {{mode}}
+
 # Experiment commands (train, baseline, evaluate…) are added by the Architect and Trainer.
