@@ -170,7 +170,7 @@ def test_bakeoff_slate_prices_and_open_weights_come_from_openrouter(monkeypatch)
     ts = load()
     monkeypatch.setattr(ts, "_openrouter_models", lambda: FAKE_LIST)
     glm = ts.make_agent("glm")()
-    assert glm.model == "openrouter/z-ai/glm-4.7-flash" and glm.prices == (7e-8, 4e-7)
+    assert glm.slug == "z-ai/glm-4.7-flash" and glm.prices == (7e-8, 4e-7)
     assert ts._open_weights("glm") is True and ts._open_weights("haiku") is False
     haiku = ts.make_agent("or:anthropic/claude-haiku-5.5")()
     assert haiku.prices == (1e-6, 5e-6) and "temperature" not in haiku.supported
@@ -198,3 +198,39 @@ def test_temperature_is_only_sent_when_the_model_accepts_it(monkeypatch):
     ts.NativeAgent("openrouter/a/c", (0, 0), supported={"tools", "temperature"}).turn([], [])
     assert "temperature" not in sent[0] and sent[1]["temperature"] == 0.0
     assert sent[0]["extra_body"] == {"provider": {"require_parameters": True}}
+
+
+def test_openrouter_agent_hands_reasoning_back_and_retries_provider_errors(monkeypatch):
+    ts = load()
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-placeholder")
+    monkeypatch.setattr(ts.time, "sleep", lambda s: None)
+    replies = [
+        {"choices": [{"finish_reason": "error", "message": {}}]},  # Gemini-style failure: retried
+        {"provider": "Google", "usage": {"prompt_tokens": 10, "completion_tokens": 5, "cost": 0.001},
+         "choices": [{"finish_reason": "tool_calls", "message": {
+             "content": None, "reasoning_details": [{"type": "reasoning.encrypted", "data": "sig"}],
+             "tool_calls": [{"id": "c1", "function": {"name": "find_user", "arguments": "{}"}}]}}]},
+        {"provider": "Google", "usage": {}, "choices": [{"message": {"content": "Done."}}]},
+    ]
+    bodies = []
+
+    class R:
+        def __init__(self, data):
+            self.data, self.status_code, self.text = data, 200, ""
+
+        def json(self):
+            return self.data
+
+        def raise_for_status(self):
+            pass
+
+    import httpx
+    monkeypatch.setattr(httpx, "post",
+                        lambda url, json, headers, timeout: bodies.append(json) or R(replies.pop(0)))
+    agent = ts.OpenRouterAgent("google/x", (0.0, 0.0), supported={"tools"})
+    first = agent.turn([{"role": "user", "content": "hi"}], [])
+    assert first["tool_calls"][0]["id"] == "c1" and "temperature" not in bodies[0]
+    agent.turn([{"role": "user", "content": "hi"}, first,
+                {"role": "tool", "tool_call_id": "c1", "content": "{}"}], [])
+    assert bodies[-1]["messages"][1]["reasoning_details"][0]["data"] == "sig"
+    assert agent.usage_dict()["est_cost"] == 0.001 and agent.usage["providers"] == {"Google": 2}

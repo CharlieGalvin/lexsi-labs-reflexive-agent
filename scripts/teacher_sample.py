@@ -169,6 +169,112 @@ class NativeAgent:
                                   + self.usage["completion_tokens"] * pout, 4)}
 
 
+class ModelError(RuntimeError):
+    """The provider failed mid-reply (finish_reason 'error'), even after retries."""
+
+
+class OpenRouterAgent(NativeAgent):
+    """A bake-off model, called on OpenRouter's chat API directly rather than through LiteLLM.
+
+    Why: some newer models (Gemini 3.x, models that think between tool calls) need their
+    reasoning handed back on the next turn. OpenRouter returns it as ``reasoning_details`` on
+    the reply; τ²-bench rebuilds the history without it, so the next call fails with
+    ``finish_reason: "error"``. This agent remembers each reply's ``reasoning_details`` and puts
+    them back on the matching assistant message. It also records OpenRouter's billed cost
+    and which provider served each call.
+    """
+
+    URL = "https://openrouter.ai/api/v1/chat/completions"
+
+    def __init__(self, slug: str, prices: tuple[float, float], supported: set[str] | None = None):
+        super().__init__(f"openrouter/{slug}", prices, supported=supported)
+        self.slug = slug
+        self.reasoning: dict[str, Any] = {}  # first tool-call id or reply text -> reasoning_details
+        self.usage.update(billed_cost=0.0, providers={})
+
+    def _with_reasoning(self, messages: list[dict]) -> list[dict]:
+        out = []
+        for m in messages:
+            if m.get("role") == "assistant":
+                key = (m.get("tool_calls") or [{}])[0].get("id") or m.get("content")
+                if key in self.reasoning:
+                    m = {**m, "reasoning_details": self.reasoning[key]}
+            out.append(m)
+        return out
+
+    def _post(self, body: dict) -> dict:
+        import os
+
+        import httpx
+
+        headers = {"Authorization": f"Bearer {os.environ['OPENROUTER_API_KEY']}"}
+        last = None
+        for attempt in range(4):
+            if attempt:
+                time.sleep(2 ** attempt)
+            try:
+                r = httpx.post(self.URL, json=body, headers=headers, timeout=300)
+            except httpx.HTTPError as e:  # network blip or timeout: retry
+                last = f"{type(e).__name__}: {e}"
+                continue
+            if r.status_code == 404 or (r.status_code == 400 and "No endpoints" in r.text):
+                raise ModelUnavailable(f"NotFoundError: {r.text[:300]}")
+            if r.status_code in (408, 429) or r.status_code >= 500:
+                last = f"HTTP {r.status_code}: {r.text[:200]}"
+                continue
+            r.raise_for_status()
+            data = r.json()
+            choice = (data.get("choices") or [{}])[0]
+            if "error" in data or choice.get("finish_reason") == "error":  # failed mid-reply
+                last = f"provider error: {json.dumps(data.get('error') or choice.get('error'))[:300]}"
+                continue
+            return data
+        raise ModelError(f"{self.slug}: {last}")
+
+    def turn(self, messages: list[dict], tools: list[dict]) -> dict:
+        body: dict[str, Any] = {"model": self.slug, "tools": tools,
+                                "provider": {"require_parameters": True},
+                                "usage": {"include": True}}
+        if not self.supported or "temperature" in self.supported:
+            body["temperature"] = 0.0
+        msgs = self._with_reasoning(messages)
+        for _attempt in range(2):  # an empty reply: ask once more
+            start = time.monotonic()
+            data = self._post({**body, "messages": msgs})
+            self.usage["seconds"] += time.monotonic() - start
+            self.usage["calls"] += 1
+            u = data.get("usage") or {}
+            self.usage["prompt_tokens"] += u.get("prompt_tokens") or 0
+            self.usage["completion_tokens"] += u.get("completion_tokens") or 0
+            self.usage["billed_cost"] += u.get("cost") or 0.0
+            prov = data.get("provider") or "?"
+            self.usage["providers"][prov] = self.usage["providers"].get(prov, 0) + 1
+            msg = data["choices"][0]["message"]
+            text = (msg.get("content") or "").replace("<think>", "").replace("</think>", "").strip()
+            if msg.get("tool_calls") or text:
+                break
+            self.usage["empty"] = self.usage.get("empty", 0) + 1
+            msgs = [*msgs, {"role": "user", "content":
+                            "(Write your next turn now: a tool call, or a message to the customer.)"}]
+        calls = [{"id": tc["id"], "type": "function",
+                  "function": {"name": tc["function"]["name"],
+                               "arguments": tc["function"].get("arguments") or "{}"}}
+                 for tc in (msg.get("tool_calls") or [])]
+        if msg.get("reasoning_details"):
+            self.reasoning[calls[0]["id"] if calls else text] = msg["reasoning_details"]
+        if calls:  # τ²-bench's rule: a tool call or a message, not both
+            return {"role": "assistant", "content": None, "tool_calls": calls}
+        if not text:
+            raise EmptyTeacherReply(f"{self.slug} returned an empty reply")
+        return {"role": "assistant", "content": text}
+
+    def usage_dict(self) -> dict:
+        d = super().usage_dict()
+        if self.usage["billed_cost"]:  # OpenRouter's own bill beats our price × tokens
+            d["est_cost"] = round(self.usage["billed_cost"], 4)
+        return d
+
+
 class AyaAgent:
     """A Cohere Aya model, prompted tool calls in Aya's own format (default: the 32B teacher)."""
 
@@ -200,7 +306,7 @@ def make_agent(name: str) -> Callable[[], Any]:
     if name in SLATE or name.startswith("or:"):
         slug = SLATE.get(name) or name[3:]
         info = openrouter_info(slug)
-        return lambda: NativeAgent(f"openrouter/{slug}", info["prices"], supported=info["supported"])
+        return lambda: OpenRouterAgent(slug, info["prices"], supported=info["supported"])
     if name == "aya8":  # self-hosted: Cohere retired c4ai-aya-expanse-8b on 4 Apr 2026
         return _self_hosted_aya8
     raise ValueError(name)
@@ -406,7 +512,7 @@ def _open_weights(model: str) -> bool | None:
 
 def _gone(rec: dict) -> bool:
     err = rec.get("error") or ""
-    return "NotFoundError" in err or "was removed" in err
+    return "NotFoundError" in err or "was removed" in err or "ModelUnavailable" in err
 
 
 def print_overlap(passed_by: dict[str, set]) -> None:
