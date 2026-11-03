@@ -116,4 +116,29 @@ def test_overlap_lists_tasks_only_the_teacher_solves(capsys):
     ts.print_overlap({"aya": {("retail", "4"), ("airline", "7")},
                       "tiny": {("airline", "7"), ("retail", "9")}})
     out = capsys.readouterr().out
-    assert "possible teacher fixes): 1  retail:4" in out and "Aya doesn't: 1   both: 1" in out
+    assert "possible teacher fixes): 1  retail:4" in out and "aya doesn't: 1   both: 1" in out
+
+
+def test_aya_steps_is_the_teacher_with_hints_and_qwen_retries_an_empty_reply(monkeypatch):
+    monkeypatch.setenv("COHERE_API_KEY", "test-placeholder")
+    ts = load()
+    assert ts.HINTS == {"aya-steps": "steps"} and ts.make_agent("aya-steps")().client.model == \
+        "c4ai-aya-expanse-32b"
+    replies = iter([NS(content="", tool_calls=None), NS(content="How can I help?", tool_calls=None)])
+
+    def fake(**kw):
+        return NS(choices=[NS(message=next(replies))], usage=NS(prompt_tokens=10, completion_tokens=1))
+
+    import litellm
+
+    monkeypatch.setattr(litellm, "completion", fake)
+    agent = ts.NativeAgent("openrouter/qwen/qwen3-32b", ts.PRICES["qwen"], no_think=True)
+    assert agent.turn([{"role": "user", "content": "hi"}], []) == {
+        "role": "assistant", "content": "How can I help?"}
+    assert agent.usage["calls"] == 2 and agent.usage["empty"] == 1
+
+
+def test_tiny_counts_tokens_more_cautiously():
+    ts = load()
+    msgs = [{"role": "user", "content": "x" * 4000}]
+    assert ts.COUNT["tiny"](msgs) > ts.estimate_tokens(msgs)

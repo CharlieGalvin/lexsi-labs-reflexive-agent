@@ -194,6 +194,30 @@ A fixed test to settle it, agreed 3 Nov:
 - **Cost:** ~$3 for Aya plus the customer, ~$2 for Qwen plus the customer, +$4 with GPT-4.1.
   It runs 4 conversations at a time and resumes if interrupted.
 
+## Result (3 Nov): unaided Aya is a poor teacher
+
+Same 30 train tasks, database checks only (a best case):
+
+| Model | Passed | 95% range | Conversations with invented IDs | With retried failed calls | Over 8K |
+|---|---:|---|---:|---:|---:|
+| Aya Expanse 32B (teacher) | 1/30 | 1–17% | 21 | 7 | – |
+| Qwen3 32B (same size, native tools) | 14/30 | 30–64% | 12 | 0 | – |
+| Tiny Aya (student, 8K window) | 0/30 | 0–11% | 28 | 19 | 8 |
+
+- **The decision rule is met.** Aya ≤ 3/30 while the same-size reference solved about half. So
+  it's Aya, not 32B being too small.
+- **The fix pool is 1 task** (airline 42): unaided, the teacher can't supply ~200 verified
+  fixes. Next is the hinted test (`just teacher-sample aya-steps tiny`). If hints don't rescue
+  it, teacher-free healing (B′, SEL-24) becomes the main path.
+- **Caveats:**
+  - 21 runs broke on bugs since fixed: a bundle of tool results the converter didn't handle,
+    Qwen's empty replies, an 8K overflow by 35 tokens, and a `None` response. They were counted
+    as fails, so Qwen's true rate is probably higher. Re-run them with `--retry-broken`.
+  - The invented-ID check is a heuristic, so some flags may be false positives. Check a few
+    transcripts.
+- **Tiny Aya's probe:** no native tool calling (it answered in prose). Prompted, it wrote
+  `Action: get_order_details({...})` in function-call style, which the parser now also reads.
+
 ## Commands
 
 | Command | What it does | Cohere calls |

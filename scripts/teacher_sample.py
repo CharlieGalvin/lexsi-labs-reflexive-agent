@@ -16,6 +16,8 @@ judged checks would pass too. If even the best case is low, the model is a weak 
 - ``qwen``: Qwen3 32B via OpenRouter, native tool calling, thinking off (``/no_think``): a
   same-size model trained for tool use, so it separates "Aya is weak" from "32B is too small".
 - ``gpt``: GPT-4.1 via OpenRouter (or OpenAI), native tool calling: shows the tasks are solvable.
+- ``aya-steps``: the teacher again, with τ²-bench's resolution steps (tool names in order, no
+  IDs) added to its prompt, the hinted test from the decision rule. Train tasks only.
 - ``tiny``: Tiny Aya (``tiny-aya-global``) via Cohere, our *student*, prompted exactly like the
   teacher, inside its real 8,192-token window (our context guard on; overflows are counted). Its
   API price isn't published, so its cost line is the simulated customer only.
@@ -43,8 +45,9 @@ from typing import Any
 from loguru import logger
 
 sys.path.insert(0, str(pathlib.Path(__file__).parents[1] / "src"))
-from reflexive.episode import Tau2Episode  # noqa: E402
+from reflexive.episode import Tau2Episode, estimate_tokens  # noqa: E402
 from reflexive.teacher import (  # noqa: E402
+    ContextTooLong,
     EmptyTeacherReply,
     TeacherClient,
     tool_errors,
@@ -95,15 +98,21 @@ class NativeAgent:
         if self.no_think and messages and messages[0]["role"] == "system":
             messages = [{**messages[0], "content": messages[0]["content"] + "\n\n/no_think"},
                         *messages[1:]]
-        start = time.monotonic()
-        resp = litellm.completion(model=self.model, messages=messages, tools=tools,
-                                  temperature=0.0, num_retries=3)
-        self.usage["seconds"] += time.monotonic() - start
-        self.usage["calls"] += 1
-        u = getattr(resp, "usage", None)
-        self.usage["prompt_tokens"] += getattr(u, "prompt_tokens", 0) or 0
-        self.usage["completion_tokens"] += getattr(u, "completion_tokens", 0) or 0
-        msg = resp.choices[0].message
+        for _attempt in range(2):  # Qwen3 sometimes returns an empty reply: ask once more
+            start = time.monotonic()
+            resp = litellm.completion(model=self.model, messages=messages, tools=tools,
+                                      temperature=0.0, num_retries=3)
+            self.usage["seconds"] += time.monotonic() - start
+            self.usage["calls"] += 1
+            u = getattr(resp, "usage", None)
+            self.usage["prompt_tokens"] += getattr(u, "prompt_tokens", 0) or 0
+            self.usage["completion_tokens"] += getattr(u, "completion_tokens", 0) or 0
+            msg = resp.choices[0].message
+            if msg.tool_calls or (msg.content or "").replace("<think>", "").replace("</think>", "").strip():
+                break
+            self.usage["empty"] = self.usage.get("empty", 0) + 1
+            messages = [*messages, {"role": "user", "content":
+                                    "(Write your next turn now: a tool call, or a message to the customer.)"}]
         calls = [{"id": tc.id, "type": "function",
                   "function": {"name": tc.function.name, "arguments": tc.function.arguments or "{}"}}
                  for tc in (msg.tool_calls or [])]
@@ -146,12 +155,18 @@ def make_agent(name: str) -> Callable[[], Any]:
         return lambda: NativeAgent(default_model(), PRICES["gpt"])
     if name == "tiny":
         return lambda: AyaAgent("tiny-aya-global", prices=(0.0, 0.0))  # price not published
+    if name == "aya-steps":
+        return AyaAgent
     raise ValueError(name)
 
 
 # (max_context, reserve) per model: the student gets its real 8K window, the others don't need one
 CONTEXT = {"tiny": (8192, 1024)}
-MODELS = ["aya", "qwen", "gpt", "tiny"]
+# characters ÷ 4 undercounted Tiny Aya's tokenizer (3 Nov: Cohere refused a prompt by 35 tokens)
+COUNT = {"tiny": lambda msgs: int(estimate_tokens(msgs) * 1.15)}
+# τ²-bench resolution-step hints (train tasks only; see Tau2Episode(hints=...))
+HINTS = {"aya-steps": "steps"}
+MODELS = ["aya", "qwen", "gpt", "tiny", "aya-steps"]
 
 
 # --- One conversation ---------------------------------------------------------------------------
@@ -160,7 +175,8 @@ MODELS = ["aya", "qwen", "gpt", "tiny"]
 def run_one(model: str, domain: str, task_id: str) -> dict:
     agent = make_agent(model)()
     max_context, reserve = CONTEXT.get(model, (128_000, 4_096))
-    ep = Tau2Episode(domain, task_id, max_context=max_context, reserve=reserve)
+    ep = Tau2Episode(domain, task_id, max_context=max_context, reserve=reserve,
+                     count_tokens=COUNT.get(model, estimate_tokens), hints=HINTS.get(model, "none"))
     start = time.monotonic()
     error = None
     try:
@@ -169,7 +185,10 @@ def run_one(model: str, domain: str, task_id: str) -> dict:
             messages = ep.prompt()
             if ep.done:
                 break
-            ep.step(agent.turn(messages, ep.tool_schemas))
+            try:
+                ep.step(agent.turn(messages, ep.tool_schemas))
+            except ContextTooLong:  # the API's own token count was over the window: an overflow
+                ep._end_for_context()
     except Exception as e:  # noqa: BLE001 - one bad conversation shouldn't stop the sample
         error = f"{type(e).__name__}: {str(e)[:300]}"
         if ep._env is not None and not ep.done:
@@ -268,14 +287,19 @@ def print_summary(rows: list[dict]) -> None:
 
 def print_overlap(passed_by: dict[str, set]) -> None:
     """Teacher vs student: the tasks only one of them solves. The first set is the fix pool."""
-    if "aya" not in passed_by or "tiny" not in passed_by:
+    if "tiny" not in passed_by:
         return
-    teacher, student = passed_by["aya"], passed_by["tiny"]
+    for name in ("aya", "aya-steps"):
+        if name in passed_by:
+            _overlap(name, passed_by[name], passed_by["tiny"])
+
+
+def _overlap(name: str, teacher: set, student: set) -> None:
     fix = sorted(teacher - student)
-    print("\nTeacher vs student on the same tasks:")
-    print(f"  Aya solves, Tiny Aya doesn't (possible teacher fixes): {len(fix)}  "
+    print(f"\nTeacher ({name}) vs student on the same tasks:")
+    print(f"  {name} solves, Tiny Aya doesn't (possible teacher fixes): {len(fix)}  "
           f"{', '.join(f'{d}:{t}' for d, t in fix) or '-'}")
-    print(f"  Tiny Aya solves, Aya doesn't: {len(student - teacher)}   both: {len(teacher & student)}")
+    print(f"  Tiny Aya solves, {name} doesn't: {len(student - teacher)}   both: {len(teacher & student)}")
 
 
 # --- Main ---------------------------------------------------------------------------------------

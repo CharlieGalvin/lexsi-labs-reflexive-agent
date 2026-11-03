@@ -114,6 +114,9 @@ def to_openai(messages: list[Any]) -> list[dict]:
     """Convert τ²-bench messages to OpenAI-style dicts (customer tool calls kept on `user`)."""
     out = []
     for m in messages:
+        if getattr(m, "tool_messages", None) is not None:  # MultiToolMessage: several results
+            out += to_openai(m.tool_messages)
+            continue
         if m.role == "tool":
             out.append({"role": "tool", "tool_call_id": m.id, "content": m.content})
             continue

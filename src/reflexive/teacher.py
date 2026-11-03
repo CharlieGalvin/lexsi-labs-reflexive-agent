@@ -266,7 +266,43 @@ def find_prompted_calls(text: str, id_prefix: str = "call") -> tuple[list[dict] 
         calls = _calls_from(value, id_prefix, strict=True)
         if calls:
             return calls, True
+    call = _functional_call(stripped)
+    if call:
+        return [{"id": f"{id_prefix}_0", "type": "function", "function": call}], False
     return None, False
+
+
+_FUNCTIONAL = re.compile(r"^([A-Za-z_]\w*)\((.*)\)\s*$", re.DOTALL)
+
+
+def _functional_call(text: str) -> dict | None:
+    """``name({...})`` or ``name(key=value, ...)`` as the whole reply (seen from Tiny Aya, 3 Nov).
+
+    JSON arguments are read directly; keyword arguments go through τ²-bench's own parser for
+    this style (`tau2.utils.tools.parse_action_string`), when τ²-bench is installed.
+    """
+    m = _FUNCTIONAL.match(text.strip())
+    if not m:
+        return None
+    name, inner = m.group(1), m.group(2).strip()
+    if not inner:
+        return {"name": name, "arguments": "{}"}
+    if inner.startswith("{"):
+        try:
+            args = json.loads(inner)
+        except ValueError:
+            return None
+        return {"name": name, "arguments": json.dumps(args)} if isinstance(args, dict) else None
+    try:
+        from tau2.utils.tools import parse_action_string
+
+        msg = parse_action_string(f"{name}({inner})")
+    except Exception:  # noqa: BLE001 - not a call after all
+        return None
+    calls = getattr(msg, "tool_calls", None) or []
+    if len(calls) != 1:
+        return None
+    return {"name": calls[0].name, "arguments": json.dumps(calls[0].arguments)}
 
 
 def parse_prompted(text: str, id_prefix: str = "call") -> list[dict] | None:
@@ -324,7 +360,11 @@ class Usage:
 
 
 _RETRYABLE = ("RateLimitError", "InternalServerError", "ServiceUnavailableError",
-              "APIConnectionError", "Timeout", "APIError")
+              "APIConnectionError", "Timeout", "APIError", "_NoResponse")
+
+
+class _NoResponse(RuntimeError):
+    """The API answered with nothing (seen once from Cohere, 3 Nov); retried."""
 
 
 def _retryable(e: Exception) -> bool:
@@ -335,6 +375,10 @@ def _retryable(e: Exception) -> bool:
 
 class EmptyTeacherReply(RuntimeError):
     """The teacher returned nothing usable twice in a row for one turn."""
+
+
+class ContextTooLong(RuntimeError):
+    """The model's API refused the prompt as longer than its context window."""
 
 
 class TeacherClient:
@@ -385,8 +429,12 @@ class TeacherClient:
                 self.limiter.wait()
                 try:
                     resp = self._completion(**kwargs)
+                    if resp is None or not getattr(resp, "choices", None):
+                        raise _NoResponse("the API returned no choices")
                     break
                 except Exception as e:
+                    if "too many tokens" in str(e).lower():
+                        raise ContextTooLong(str(e)) from e
                     if attempt == self.num_retries or not _retryable(e):
                         raise
                     time.sleep(min(2 ** attempt, 30))  # 1 s, 2 s, 4 s ...

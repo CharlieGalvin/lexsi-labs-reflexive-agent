@@ -9,6 +9,7 @@ import pytest
 
 from reflexive.teacher import (
     TOOL_RESULT,
+    ContextTooLong,
     EmptyTeacherReply,
     RateLimiter,
     TeacherClient,
@@ -285,6 +286,52 @@ def test_pseudo_tool_call_text_is_counted_as_unparsed():
     t = TeacherClient("prompted", style="agenttune", completion=fake_completion([text]), rpm=0)
     turn = t.turn([{"role": "user", "content": "hi"}], TOOLS)
     assert "tool_calls" not in turn and t.usage.unparsed == 1
+
+
+@pytest.mark.parametrize("text,args", [
+    ('Action: get_order_details({"order_id": "#W2378156"})', {"order_id": "#W2378156"}),  # Tiny Aya
+    ("get_order_details()", {}),
+])
+def test_function_call_style_is_read(text, args):
+    calls, embedded = find_prompted_calls(text)
+    assert calls[0]["function"]["name"] == "get_order_details" and not embedded
+    assert json.loads(calls[0]["function"]["arguments"]) == args
+
+
+def test_function_call_with_keyword_arguments_uses_taus_parser():
+    pytest.importorskip("tau2")
+    calls, _ = find_prompted_calls("get_order_details(order_id='#W1')")
+    assert json.loads(calls[0]["function"]["arguments"]) == {"order_id": "#W1"}
+
+
+@pytest.mark.parametrize("text", ["Sure (I can help with that).", "Let me check get_order_details for you."])
+def test_prose_with_brackets_is_not_a_function_call(text):
+    assert find_prompted_calls(text) == (None, False)
+
+
+def test_no_response_from_the_api_is_retried(monkeypatch):
+    monkeypatch.setattr("reflexive.teacher.time.sleep", lambda s: None)
+    ok = fake_completion(["fine"])
+    calls = []
+
+    def flaky(**kw):
+        calls.append(1)
+        return None if len(calls) == 1 else ok(**kw)
+
+    t = TeacherClient("prompted", completion=flaky, rpm=0)
+    assert t.turn([{"role": "user", "content": "hi"}], TOOLS)["content"] == "fine" and len(calls) == 2
+
+
+def test_too_many_tokens_becomes_context_too_long():
+    class BadRequestError(Exception):
+        pass
+
+    def refuse(**kw):
+        raise BadRequestError("too many tokens: size limit exceeded by 35 tokens. The limit is 8192")
+
+    t = TeacherClient("prompted", completion=refuse, rpm=0)
+    with pytest.raises(ContextTooLong):
+        t.turn([{"role": "user", "content": "hi"}], TOOLS)
 
 
 # --- Client -------------------------------------------------------------------------------------
