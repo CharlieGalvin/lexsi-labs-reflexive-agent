@@ -215,6 +215,11 @@ Same 30 train tasks, database checks only (a best case):
     as fails, so Qwen's true rate is probably higher. Re-run them with `--retry-broken`.
   - The invented-ID check is a heuristic, so some flags may be false positives. Check a few
     transcripts.
+- **Next: Aya Expanse 8B** (`just teacher-sample aya8`, model `c4ai-aya-expanse-8b`, 8K window,
+  ~$0.50 / $1.50 per 1M tokens) as a second student candidate. The team is leaning towards a
+  stronger teacher (Qwen3 32B or GPT-4.1) with Aya 32B or 8B as the student. The summary now
+  prints a fix-pool line for every teacher → student pair (e.g. `qwen → aya8`), so the 8B's pool
+  can be compared with the 32B's and Tiny Aya's.
 - **Tiny Aya's probe:** no native tool calling (it answered in prose). Prompted, it wrote
   `Action: get_order_details({...})` in function-call style, which the parser now also reads.
 

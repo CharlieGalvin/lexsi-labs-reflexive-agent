@@ -18,6 +18,8 @@ judged checks would pass too. If even the best case is low, the model is a weak 
 - ``gpt``: GPT-4.1 via OpenRouter (or OpenAI), native tool calling: shows the tasks are solvable.
 - ``aya-steps``: the teacher again, with τ²-bench's resolution steps (tool names in order, no
   IDs) added to its prompt, the hinted test from the decision rule. Train tasks only.
+- ``aya8``: Aya Expanse 8B (``c4ai-aya-expanse-8b``) via Cohere, a candidate student, prompted
+  like the others inside its real 8K window.
 - ``tiny``: Tiny Aya (``tiny-aya-global``) via Cohere, our *student*, prompted exactly like the
   teacher, inside its real 8,192-token window (our context guard on; overflows are counted). Its
   API price isn't published, so its cost line is the simulated customer only.
@@ -157,16 +159,19 @@ def make_agent(name: str) -> Callable[[], Any]:
         return lambda: AyaAgent("tiny-aya-global", prices=(0.0, 0.0))  # price not published
     if name == "aya-steps":
         return AyaAgent
+    if name == "aya8":  # listed at the same price as the 32B (cloudprice.net, 3 Nov)
+        return lambda: AyaAgent("c4ai-aya-expanse-8b", prices=(0.50e-6, 1.50e-6))
     raise ValueError(name)
 
 
 # (max_context, reserve) per model: the student gets its real 8K window, the others don't need one
-CONTEXT = {"tiny": (8192, 1024)}
+CONTEXT = {"tiny": (8192, 1024), "aya8": (8192, 1024)}
 # characters ÷ 4 undercounted Tiny Aya's tokenizer (3 Nov: Cohere refused a prompt by 35 tokens)
-COUNT = {"tiny": lambda msgs: int(estimate_tokens(msgs) * 1.15)}
+COUNT = {"tiny": lambda msgs: int(estimate_tokens(msgs) * 1.15),
+         "aya8": lambda msgs: int(estimate_tokens(msgs) * 1.15)}
 # τ²-bench resolution-step hints (train tasks only; see Tau2Episode(hints=...))
 HINTS = {"aya-steps": "steps"}
-MODELS = ["aya", "qwen", "gpt", "tiny", "aya-steps"]
+MODELS = ["aya", "qwen", "gpt", "tiny", "aya8", "aya-steps"]
 
 
 # --- One conversation ---------------------------------------------------------------------------
@@ -285,21 +290,21 @@ def print_summary(rows: list[dict]) -> None:
         print("  In between                             → add ~20 tasks, or go straight to the hinted test.")
 
 
+TEACHERS = ("gpt", "qwen", "aya-steps", "aya")  # candidate teachers, strongest first
+STUDENTS = ("aya", "aya8", "tiny")              # candidate students
+
+
 def print_overlap(passed_by: dict[str, set]) -> None:
-    """Teacher vs student: the tasks only one of them solves. The first set is the fix pool."""
-    if "tiny" not in passed_by:
+    """Teacher vs student: the tasks only the teacher solves are the possible fixes."""
+    pairs = [(t, s) for t in TEACHERS for s in STUDENTS if t != s and t in passed_by and s in passed_by]
+    if not pairs:
         return
-    for name in ("aya", "aya-steps"):
-        if name in passed_by:
-            _overlap(name, passed_by[name], passed_by["tiny"])
-
-
-def _overlap(name: str, teacher: set, student: set) -> None:
-    fix = sorted(teacher - student)
-    print(f"\nTeacher ({name}) vs student on the same tasks:")
-    print(f"  {name} solves, Tiny Aya doesn't (possible teacher fixes): {len(fix)}  "
-          f"{', '.join(f'{d}:{t}' for d, t in fix) or '-'}")
-    print(f"  Tiny Aya solves, {name} doesn't: {len(student - teacher)}   both: {len(teacher & student)}")
+    print("\nPossible teacher fixes (tasks the teacher solves and the student doesn't):")
+    for t, s in pairs:
+        teacher, student = passed_by[t], passed_by[s]
+        fix = sorted(teacher - student)
+        print(f"  {t:>9} → {s:<5} {len(fix):>2}   ({len(student - teacher)} the other way, "
+              f"{len(teacher & student)} both)  {', '.join(f'{d}:{i}' for d, i in fix) or '-'}")
 
 
 # --- Main ---------------------------------------------------------------------------------------

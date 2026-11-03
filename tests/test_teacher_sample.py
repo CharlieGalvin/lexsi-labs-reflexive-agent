@@ -113,10 +113,10 @@ def test_tiny_uses_tiny_aya_prompted_inside_its_8k_window(monkeypatch):
 
 def test_overlap_lists_tasks_only_the_teacher_solves(capsys):
     ts = load()
-    ts.print_overlap({"aya": {("retail", "4"), ("airline", "7")},
-                      "tiny": {("airline", "7"), ("retail", "9")}})
+    ts.print_overlap({"qwen": {("retail", "4"), ("airline", "7")},
+                      "aya8": {("airline", "7"), ("retail", "9")}})
     out = capsys.readouterr().out
-    assert "possible teacher fixes): 1  retail:4" in out and "aya doesn't: 1   both: 1" in out
+    assert "qwen → aya8   1   (1 the other way, 1 both)  retail:4" in out
 
 
 def test_aya_steps_is_the_teacher_with_hints_and_qwen_retries_an_empty_reply(monkeypatch):
@@ -142,3 +142,10 @@ def test_tiny_counts_tokens_more_cautiously():
     ts = load()
     msgs = [{"role": "user", "content": "x" * 4000}]
     assert ts.COUNT["tiny"](msgs) > ts.estimate_tokens(msgs)
+
+
+def test_aya8_runs_inside_its_8k_window(monkeypatch):
+    monkeypatch.setenv("COHERE_API_KEY", "test-placeholder")
+    ts = load()
+    assert ts.make_agent("aya8")().client.model == "c4ai-aya-expanse-8b"
+    assert ts.CONTEXT["aya8"] == (8192, 1024)
