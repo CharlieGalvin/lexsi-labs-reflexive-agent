@@ -28,3 +28,4 @@ results/*.auditkit.json
 
 # Episode records from the check scripts (local evidence; share via HF, not git)
 results/episodes/
+results/openrouter_models.json
