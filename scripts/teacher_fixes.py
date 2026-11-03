@@ -231,6 +231,8 @@ def main() -> int:
                          "openai (the exact pinned snapshot; needs a high OpenAI rate limit)")
     ap.add_argument("--limit", type=int, help="only the first N tasks (smoke test)")
     ap.add_argument("--domains", nargs="+", choices=DOMAINS, default=list(DOMAINS))
+    ap.add_argument("--tasks", choices=("rest", "phase1", "all"), default="rest",
+                    help="rest = the 148 phase 1 didn't use (default); phase1 = its 30; all = 178")
     ap.add_argument("--retry-broken", action="store_true")
     ap.add_argument("--list", action="store_true", help="print the tasks and exit")
     ap.add_argument("--report", action="store_true", help="summarise saved results and exit")
@@ -250,7 +252,9 @@ def main() -> int:
         print_report(a.model, report(recs, a.attempts))
         return 0
 
-    tasks = [t for t in remaining_train_tasks() if t[0] in a.domains]
+    pool_ = {"rest": remaining_train_tasks, "phase1": ts.sample_tasks,
+             "all": lambda: ts.sample_tasks() + remaining_train_tasks()}[a.tasks]()
+    tasks = [t for t in pool_ if t[0] in a.domains]
     tasks = tasks[:a.limit] if a.limit else tasks
     if a.list:
         for d in DOMAINS:
