@@ -75,6 +75,10 @@ tau2-scorer-run:
 tau2-check-scorer name="tau2-scorer-check":
     python scripts/tau2_check_scorer.py run {{name}}
 
+# SEL-32: GPT-4.1 drives our conversation wrapper on the same 5 telecom tasks (~$0.70)
+tau2-episode-check:
+    python scripts/tau2_episode_check.py telecom --task-ids '{{scorer_tasks}}'
+
 # Replay every task's correct actions through our scorer: all must pass (no API, ~10 min)
 tau2-check-gold *domains:
     python scripts/tau2_check_scorer.py gold {{domains}}

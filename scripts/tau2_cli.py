@@ -11,25 +11,11 @@ through, but treat these as estimates: your OpenRouter activity page shows actua
 
 from __future__ import annotations
 
+import pathlib
 import sys
 
-OPENAI_MODELS = ["gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano", "gpt-4o", "gpt-4o-mini"]
-
-
-def register_openrouter_prices() -> None:
-    import litellm
-
-    extra = {}
-    for model in OPENAI_MODELS:
-        base = litellm.model_cost.get(model)
-        if not base:
-            continue
-        entry = {**base, "litellm_provider": "openrouter"}
-        for alias in (f"openrouter/openai/{model}", f"openrouter/{model}"):
-            if alias not in litellm.model_cost:
-                extra[alias] = entry
-    if extra:
-        litellm.register_model(extra)
+sys.path.insert(0, str(pathlib.Path(__file__).parents[1] / "src"))
+from reflexive.llm import register_openrouter_prices  # noqa: E402
 
 
 def main() -> None:

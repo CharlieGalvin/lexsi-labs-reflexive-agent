@@ -144,3 +144,93 @@ The one exception is **retail task 105**, and it's a τ²-bench data quirk. Its 
 action exchanges the same item twice, which errors inside τ²-bench, so the expected database
 never changes and "doing nothing" matches it. Its NL assertions (judged) still apply. Tasks
 without any state-changing action (10 retail, 24 airline, 20 telecom) can't be tested this way.
+
+## Conversation wrapper (SEL-32)
+
+`reflexive.episode.Tau2Episode` is one τ²-bench conversation that our code drives turn by turn.
+τ²-bench runs everything else, exactly as in `tau2 run`: the simulated customer (GPT-4.1,
+temperature 0), the tools, the database and the customer's own tool calls.
+
+```python
+ep = Tau2Episode("retail", task_id)     # optional: count_tokens=<Tiny Aya tokenizer>, max_context=8192
+opener = ep.reset()                     # τ²-bench's greeting + the customer's first message
+while not ep.done:
+    messages = ep.prompt()              # system prompt + conversation, fitted to the window
+    if ep.done:                         # didn't fit even after trimming → ended as overflow
+        break
+    ep.step(model(messages, tools=ep.tool_schemas))   # {"role": "assistant", "content" | "tool_calls"}
+record = ep.record()                    # trajectory + outcome + flags: one JSON line
+```
+
+- **Built on τ²-bench's Gym environment** (`tau2.gym.AgentGymEnv`), with two changes:
+  - **No in-run scoring.** Its built-in scoring runs the LLM judges and, without an OpenAI key,
+    loses the conversation. `record()` scores with `reflexive.outcome` instead (`judges=`).
+  - **No `done` tool.** The Gym agent's extra `done` tool is hidden, so the model sees exactly
+    the official agent's tools.
+- **Same prompt and tools as the official agent.** `system_prompt` is τ²-bench's agent
+  instructions plus the policy, including τ²-bench's language line. `tool_schemas` is the
+  official agent's tool list. A test checks both against what `tau2 run` gives its agent.
+- **Tool results go to the model as compact JSON.** It's the same data without indentation.
+  This is the format `tau2_inspect.py` measured: retail tasks whose correct path exceeds 8K go
+  from 10 to 7.
+- **Context guard.**
+  - `prompt()` keeps the conversation plus tool definitions within `max_context - reserve`
+    tokens (defaults 8,192 and 1,024). It does this by replacing the oldest tool results with a
+    placeholder, in the model's view only: the saved trajectory keeps them in full.
+  - If the prompt still doesn't fit, the conversation ends as `context_window_exceeded`. That
+    scores 0 and is flagged `context_overflow`, so it's reported separately and never healed.
+  - `flags.peak_prompt_tokens` records the largest untrimmed prompt.
+  - Token counting is pluggable. The default is characters ÷ 4; plug in Tiny Aya's tokenizer
+    once everyone has access.
+- **Tools as Python functions.** `tool_functions()` gives each official tool, with the same name,
+  arguments and description, as a function that runs that tool call in the conversation. This is
+  for AgentTune's `tools=` route. AgentTune's own loop has no simulated customer, so training
+  rollouts need a `rollout_func` that drives `Tau2Episode` (the Trainer's side).
+- **Saved record** (`reagent.tau2.episode/v0`, provisional until the data contract, SEL-35):
+  domain, task, termination, outcome (passed / reward / checks / skipped), flags, models, cost,
+  and `messages`. The messages are the full trajectory in OpenAI style, with the customer's tool
+  calls on `user` messages.
+
+**Prompt size at the first agent turn** (estimate, characters ÷ 4; re-check with Tiny Aya's
+tokenizer):
+
+| Domain | Policy + tools + opener | Left for the conversation (8,192 − 1,024 reserve) |
+|---|---:|---:|
+| Retail | ~4,900 | ~2,270 |
+| Airline | ~4,860 | ~2,300 |
+| Telecom | ~7,690 | **none (−520)** |
+
+At 8K, telecom doesn't fit before the agent's first reply unless the reserve drops below ~500
+tokens, and that leaves almost no room for the conversation. This is the evidence the SEL-31
+drop rule asks for. Confirm it with the real tokenizer and Tiny Aya's actual prompt format before
+the team decides.
+
+**Checks**
+
+| Command | What it shows | Cost |
+|---|---|---|
+| `just check` | 11 episode tests, among them: correct actions pass through the wrapper (retail, airline); prompt and tools match the official agent (all 3 domains); results are compact; the guard trims oldest-first and keeps the full trajectory; an over-long conversation ends as `context_window_exceeded` | free |
+| `just tau2-episode-check` | GPT-4.1 plays the agent through `Tau2Episode` on the 5 SEL-39 telecom tasks: each conversation saves and scores, the customer's tool calls are recorded, and the peak prompt size is reported | ~$0.70 |
+
+**Tool names and ID formats** (for the classifier, SEL-12). Write tools change the database;
+the rest only read.
+
+| Domain | Agent tools | Writes | Customer tools | ID formats (examples) |
+|---|---:|---:|---:|---|
+| Retail | 16 | 7 | 0 | user `yusuf_rossi_9620`, order `#W2378156`, product / item 10 digits `1656367028`, payment `credit_card_3124723` / `paypal_7644869` / `gift_card_…`, email `mia.garcia2723@example.com` |
+| Airline | 14 | 6 | 0 | user `anya_garcia_5901`, reservation 6 characters `4OG6T3`, flight `HAT005`, payment `credit_card_2408938` / `gift_card_1642017` |
+| Telecom | 13 | 6 | 30 | customer `C1001`, line `L1002`, bill `B1234321` |
+
+- **Retail writes:** cancel_pending_order, exchange_delivered_order_items,
+  modify_pending_order_address, modify_pending_order_items, modify_pending_order_payment,
+  modify_user_address, return_delivered_order_items.
+- **Airline writes:** book_reservation, cancel_reservation, send_certificate,
+  update_reservation_baggages, update_reservation_flights, update_reservation_passengers.
+- **Telecom writes:** suspend_line, resume_line, send_payment_request, enable_roaming,
+  disable_roaming, refuel_data.
+- **Telecom customer tools** run on the customer's phone and are called by the simulated
+  customer, never by the agent. Examples: toggle_airplane_mode, toggle_data, toggle_roaming,
+  set_network_mode_preference, reseat_sim_card, make_payment.
+- `transfer_to_human_agents` exists in every domain.
+- A call to a tool name that doesn't exist is a Tool hallucination candidate. τ²-bench returns
+  an error and replays it as a no-op.

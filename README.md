@@ -166,6 +166,8 @@ Run `just` on its own to list every command. Python must be **3.12 or 3.13** (τ
 configs/                 one YAML per experiment / arm (copy, don't edit in place)
 src/reflexive/           Python package: each role adds its modules here
   outcome.py             pass/fail for any τ²-bench trajectory via τ²-bench's own scoring (Curator)
+  episode.py             one τ²-bench conversation our code drives: tools, customer, context guard (Curator)
+  llm.py                 API model names and OpenRouter prices
 scripts/tau2_*           τ²-bench: first run, cost report, context-fit check, OpenRouter pricing
 third_party/             τ²-bench v2.0.0 (with data) and AgentTune, cloned by `just setup-dev` / `just setup`
 tests/                   offline tests (no GPU) — run in CI on every PR
