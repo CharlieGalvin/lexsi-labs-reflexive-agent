@@ -89,6 +89,8 @@ SLATE = {
     "gflite": "google/gemini-3.5-flash-lite", # 78.3%
     "sonnet": "anthropic/claude-sonnet-5.5",  # 78.8%
     "gpt51": "openai/gpt-5.1",                # 80.0%, the ceiling
+    "gem38f": "google/gemini-3.8-flash",      # 71.3%, added 3 Nov at Charlie's request
+    "opus": "anthropic/claude-opus-5.5",      # 75.3%, added 3 Nov; the priciest (~$0.34/task)
 }
 
 
