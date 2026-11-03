@@ -60,3 +60,18 @@ def test_remaining_train_tasks_are_the_148_not_used_in_phase_1():
     assert not set(tasks) & set(fx.ts.sample_tasks())
     assert {d: sum(x == d for x, _ in tasks) for d in fx.DOMAINS} == {"retail": 54, "airline": 20,
                                                                        "telecom": 74}
+
+
+def test_preflight_reports_every_failing_model(monkeypatch):
+    import sys
+    import types
+
+    def completion(model, **kw):
+        if model == "bad":
+            raise RuntimeError("You have no credits remaining.")
+
+    monkeypatch.setitem(sys.modules, "litellm", types.SimpleNamespace(completion=completion,
+                                                                       suppress_debug_info=False))
+    fx = load()
+    problems = fx.preflight(["good", "bad", "bad"])
+    assert len(problems) == 1 and "add OpenAI credits" in problems[0]

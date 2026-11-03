@@ -411,14 +411,14 @@ def _file_name(model: str) -> str:
 
 
 def run_one(model: str, domain: str, task_id: str, *, temperature: float = 0.0,
-            judges: bool = False, provider: str | None = None) -> dict:
+            judges: bool = False, provider: str | None = None, user_llm: str | None = None) -> dict:
     agent = make_agent(model)()
     if hasattr(agent, "temperature"):
         agent.temperature = temperature
     if provider:
         agent.provider = provider
     max_context, reserve = CONTEXT.get(model, (128_000, 4_096))
-    ep = Tau2Episode(domain, task_id, max_context=max_context, reserve=reserve,
+    ep = Tau2Episode(domain, task_id, user_llm=user_llm, max_context=max_context, reserve=reserve,
                      count_tokens=COUNT.get(model, estimate_tokens), hints=HINTS.get(model, "none"))
     start = time.monotonic()
     error = None

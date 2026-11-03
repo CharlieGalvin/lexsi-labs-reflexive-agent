@@ -39,6 +39,37 @@ ts = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(ts)
 
 TEMPERATURES = [0.0, 0.7, 0.7]  # attempt 1, 2, 3
+CUSTOMER = {"openai": "gpt-4.1-2025-04-14",       # the snapshot τ²-bench pins (needs OPENAI_API_KEY)
+            "openrouter": "openrouter/openai/gpt-4.1"}
+
+
+def judge_models() -> list[str]:
+    """The judge models τ²-bench pins: retail NL assertions and airline communicate."""
+    from tau2.config import DEFAULT_LLM_NL_ASSERTIONS, DEFAULT_SEMANTIC_COMMUNICATE_MODEL
+
+    return [DEFAULT_LLM_NL_ASSERTIONS, DEFAULT_SEMANTIC_COMMUNICATE_MODEL]
+
+
+def preflight(models: list[str]) -> list[str]:
+    """One tiny call per model before the run: problems found now cost nothing.
+
+    Catches an empty account or a bad key up front. Otherwise every conversation fails within
+    seconds and τ²-bench hides the reason inside the simulated customer.
+    """
+    import litellm
+
+    litellm.suppress_debug_info = True
+    problems = []
+    for m in dict.fromkeys(models):
+        try:
+            litellm.completion(model=m, messages=[{"role": "user", "content": "Say ok."}],
+                               max_completion_tokens=16, num_retries=1)
+        except Exception as e:  # noqa: BLE001 - report every problem at once
+            msg = str(e).split("\n")[0][:220]
+            hint = (" → add OpenAI credits: https://platform.openai.com/settings/organization/billing"
+                    if "credits" in msg.lower() or "quota" in msg.lower() else "")
+            problems.append(f"{m}: {type(e).__name__}: {msg}{hint}")
+    return problems
 JUDGED = {"NL_ASSERTION", "COMMUNICATE"}
 DOMAINS = ("retail", "airline", "telecom")
 
@@ -140,6 +171,9 @@ def main() -> int:
     ap.add_argument("--workers", type=int, default=8, help="conversations at once (default 8)")
     ap.add_argument("--provider", help="pin one OpenRouter provider, e.g. 'z-ai' (default: any)")
     ap.add_argument("--no-judges", action="store_true", help="database checks only (no OpenAI key)")
+    ap.add_argument("--customer", choices=sorted(CUSTOMER), default=None,
+                    help="where the simulated customer (GPT-4.1) runs: openai (default when "
+                         "OPENAI_API_KEY is set) or openrouter")
     ap.add_argument("--limit", type=int, help="only the first N tasks (smoke test)")
     ap.add_argument("--domains", nargs="+", choices=DOMAINS, default=list(DOMAINS))
     ap.add_argument("--retry-broken", action="store_true")
@@ -190,12 +224,23 @@ def main() -> int:
         if left < ts.MIN_CREDITS:
             print("   ⛔ add credits at https://openrouter.ai/settings/credits first")
             return 1
+    import os
+
+    customer = CUSTOMER[a.customer or ("openai" if os.environ.get("OPENAI_API_KEY") else "openrouter")]
+    print(f"   simulated customer: {customer}; judges: {'off' if a.no_judges else ', '.join(judge_models())}")
     if todo:
         ts.make_agent(a.model)()  # fail now if the model can't be set up
+        problems = preflight([customer, *([] if a.no_judges else judge_models())])
+        if problems:
+            print("   ⛔ not started; a test call failed:")
+            for p in problems:
+                print(f"      {p}")
+            return 1
 
     with out.open("a") as f, ThreadPoolExecutor(a.workers) as pool:
         futures = {pool.submit(ts.run_one, a.model, d, t, temperature=TEMPERATURES[min(i, 3) - 1],
-                               judges=not a.no_judges, provider=a.provider): (d, t, i)
+                               judges=not a.no_judges, provider=a.provider,
+                               user_llm=customer): (d, t, i)
                    for d, t, i in todo}
         for n, fut in enumerate(as_completed(futures), 1):
             d, t, i = futures[fut]
