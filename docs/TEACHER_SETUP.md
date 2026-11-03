@@ -71,3 +71,13 @@ Cohere's docs don't say whether Aya Expanse supports native tool calling. Its mo
 | One 4-arm pass on the test split (100 tasks × 4 arms × 3 samples), customer only | ~$60 |
 
 SEL-37 replaces these with numbers measured on 3 tasks: cost, latency and calls per conversation.
+
+## Commands
+
+| Command | What it does | Cohere calls |
+|---|---|---|
+| `just teacher-probe` | Checks the key and model ID, whether native tool calling works, and whether prompted JSON calls parse. Ends with a recommended `mode`. | 3 |
+| `just teacher-check` | Teacher on one train task per domain (prompted mode). Reports cost, latency and score, then the budget estimate. `just teacher-check native` if the probe says native works. | ~30–60 |
+
+- **Rate:** set `TEACHER_RPM` in `.env` to the production key's limit. It defaults to 20 (the trial limit), which keeps a 3-task check to a few minutes.
+- **Code:** `reflexive.teacher.TeacherClient`, used as the agent in `reflexive.episode.Tau2Episode`.
