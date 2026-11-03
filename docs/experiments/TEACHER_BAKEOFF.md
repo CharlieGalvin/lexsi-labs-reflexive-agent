@@ -98,3 +98,5 @@ just teacher-sample aya bakeoff                                         # phase 
 python scripts/teacher_sample.py --models aya bakeoff --json results/bakeoff.json
 python scripts/teacher_sample.py --models or:moonshotai/kimi-k2.6       # any other OpenRouter model
 ```
+
+**Phase 1 results:** [`TEACHER_BAKEOFF_RESULTS.md`](TEACHER_BAKEOFF_RESULTS.md) (3 Nov).
