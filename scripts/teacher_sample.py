@@ -86,7 +86,7 @@ SLATE = {
     "gptoss": "openai/gpt-oss-120b",          # 65.2%
     # closed weights
     "haiku": "anthropic/claude-haiku-5.5",    # 72.8%
-    "gflite": "google/gemini-3.5-flash-lite", # 78.3%
+    # gflite (google/gemini-3.5-flash-lite) dropped 3 Nov at Charlie's request; or:<slug> still runs it
     "sonnet": "anthropic/claude-sonnet-5.5",  # 78.8%
     "gpt51": "openai/gpt-5.1",                # 80.0%, the ceiling
     "gem38f": "google/gemini-3.8-flash",      # 71.3%, added 3 Nov at Charlie's request

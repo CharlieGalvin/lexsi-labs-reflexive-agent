@@ -21,12 +21,12 @@ or closed.
 
 - **Tasks:** the same fixed 30 (20 retail, 10 airline, seed 0). Comparisons are paired: every
   model sees the same tasks.
-- **Models (`--models bakeoff`):** 13 picked from OpenRouter's τ²-bench airline board to span
+- **Models (`--models bakeoff`):** 12 picked from OpenRouter's τ²-bench airline board to span
   open vs closed weights and cheap vs strong (board score in brackets):
   - open: GLM-4.7-Flash (66.7%), GLM-5.3-Flash (75.6%), DeepSeek V4 Flash (73.9%),
     MiMo-V2.6-Flash (77.9%), Qwen3.8 27B (77.5%), Gemma 4 31B (75.3%), gpt-oss-120b (65.2%)
-  - closed: Claude Haiku 5.5 (72.8%), Gemini 3.5 Flash Lite (78.3%), Claude Sonnet 5.5
-    (78.8%), GPT-5.1 (80.0%, the ceiling), Gemini 3.8 Flash (71.3%), Claude Opus 5.5 (75.3%)
+  - closed: Claude Haiku 5.5 (72.8%), Claude Sonnet 5.5
+    (78.8%), GPT-5.1 (80.0%, the ceiling), Gemini 3.8 Flash (71.3%), Claude Opus 5.5 (75.3%). Gemini 3.5 Flash Lite was dropped on 3 Nov
 - **Fixed for every model:** native tool calling through OpenRouter, with providers that
   support every parameter we send (`require_parameters`); temperature 0; the providers' default
   thinking settings; GPT-4.1 as the simulated customer; the same policy prompt and tools.
