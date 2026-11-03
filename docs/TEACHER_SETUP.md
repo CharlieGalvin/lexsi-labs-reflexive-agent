@@ -170,6 +170,30 @@ uses it:
     them to reject fixes.
   - Replies that mention `tool_name` but don't parse are now counted as `unparsed`.
 
+## Is Aya a usable teacher? (`just teacher-sample`)
+
+A fixed test to settle it, agreed 3 Nov:
+
+- **Tasks:** 30 *train* tasks whose correct answer changes the database (20 retail, 10 airline,
+  sampled with seed 0, the same every run), so doing nothing can't pass.
+- **Scoring:** τ²-bench's database checks only. That is a **best case**: a fail is certain, a
+  pass may still fail the judged checks. No OpenAI key needed.
+- **Models:** Aya Expanse 32B (our teacher, prompted in its own format) against **Qwen3 32B**
+  (`qwen/qwen3-32b` on OpenRouter, ~$0.08 / $0.28 per 1M tokens), a same-size model trained for
+  tool use, with native tool calling and thinking off. That separates "Aya is weak" from "32B is
+  too small". Add `gpt` for GPT-4.1, to show the tasks are solvable.
+- **Also counted** per conversation: invented IDs, calls to tools the agent doesn't have, and
+  identical retries of a failed call. Broken runs (API failures) are reported separately; redo
+  them with `python scripts/teacher_sample.py --retry-broken`.
+- **95% ranges for 30 tasks:** 0 wins → 0–11%; 3 → 3–26%; 6 → 10–37%; 9 → 17–48%.
+- **Decision rule:**
+  - **Aya ≤ 3/30 while the reference ≥ ~15/30:** unaided Aya is a poor teacher. Test hints
+    next; if they don't rescue it, make the teacher-free variant (B′) the main path.
+  - **Aya ≥ ~9/30 with few invented IDs:** a usable teacher.
+  - **In between:** add ~20 tasks, or go to the hinted test.
+- **Cost:** ~$3 for Aya plus the customer, ~$2 for Qwen plus the customer, +$4 with GPT-4.1.
+  It runs 4 conversations at a time and resumes if interrupted.
+
 ## Commands
 
 | Command | What it does | Cohere calls |

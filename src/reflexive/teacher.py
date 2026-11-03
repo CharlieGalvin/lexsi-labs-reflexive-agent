@@ -484,6 +484,39 @@ def unseen_arguments(messages: list[dict]) -> list[str]:
     return unseen
 
 
+def tool_errors(messages: list[dict]) -> dict:
+    """Counts of two other tool hallucinations in a conversation (agent calls only).
+
+    - ``unknown_tools``: calls to a tool the agent doesn't have (τ²-bench answers
+      "Error: Tool '<name>' not found."), e.g. the customer-side telecom tools.
+    - ``repeated_failures``: a call identical (same tool and arguments) to an earlier call that
+      returned an error, i.e. retrying something that already failed (a loop).
+    """
+    results = {m.get("tool_call_id"): m.get("content") or "" for m in messages if m["role"] == "tool"}
+    unknown = repeated = 0
+    failed: set[str] = set()
+    for m in messages:
+        if m["role"] != "assistant":
+            continue
+        for tc in m.get("tool_calls") or []:
+            fn = tc.get("function", tc)
+            args = fn.get("arguments") or {}
+            if isinstance(args, str):
+                try:
+                    args = json.loads(args) if args.strip() else {}
+                except ValueError:
+                    args = {"_raw": args}
+            key = f"{fn['name']}:{json.dumps(args, sort_keys=True)}"
+            out = results.get(tc.get("id"), "")
+            if out.startswith("Error: Tool '") and "not found" in out:
+                unknown += 1
+            if key in failed:
+                repeated += 1
+            if out.startswith("Error"):
+                failed.add(key)
+    return {"unknown_tools": unknown, "repeated_failures": repeated}
+
+
 def _strip_results(text: str) -> str:
     """``text`` cut at the first thing that looks like an invented tool result."""
     cut = min((i for i in (text.find(s) for s in STOP_SEQUENCES) if i >= 0), default=len(text))

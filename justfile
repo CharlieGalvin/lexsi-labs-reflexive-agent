@@ -93,4 +93,8 @@ teacher-probe:
 teacher-check style="cohere" hints="none":
     python scripts/teacher_check.py --style {{style}} --hints {{hints}}
 
+# Is Aya a usable teacher? Same 30 train tasks for Aya and a reference (default: Qwen3 32B). ~$5
+teacher-sample *models="aya qwen":
+    python scripts/teacher_sample.py --models {{models}}
+
 # Experiment commands (train, baseline, evaluate…) are added by the Architect and Trainer.
