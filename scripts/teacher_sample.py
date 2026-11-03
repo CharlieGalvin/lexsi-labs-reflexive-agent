@@ -173,6 +173,28 @@ class ModelError(RuntimeError):
     """The provider failed mid-reply (finish_reason 'error'), even after retries."""
 
 
+class OutOfCredits(RuntimeError):
+    """OpenRouter refused for lack of credits (HTTP 402): stop the whole run."""
+
+
+def openrouter_credits() -> float | None:
+    """Credits left on the OpenRouter account in USD, or None if it can't be checked."""
+    import os
+
+    import httpx
+
+    try:
+        r = httpx.get("https://openrouter.ai/api/v1/credits", timeout=20,
+                      headers={"Authorization": f"Bearer {os.environ['OPENROUTER_API_KEY']}"})
+        d = r.json()["data"]
+        return float(d["total_credits"]) - float(d["total_usage"])
+    except Exception:  # noqa: BLE001 - no key, offline, or the endpoint changed: don't block the run
+        return None
+
+
+MIN_CREDITS = 2.0  # USD; below this a model's 30 conversations can run dry halfway
+
+
 class OpenRouterAgent(NativeAgent):
     """A bake-off model, called on OpenRouter's chat API directly rather than through LiteLLM.
 
@@ -217,6 +239,8 @@ class OpenRouterAgent(NativeAgent):
             except httpx.HTTPError as e:  # network blip or timeout: retry
                 last = f"{type(e).__name__}: {e}"
                 continue
+            if r.status_code == 402:  # out of credits: nothing will work until topped up
+                raise OutOfCredits(f"OpenRouter 402: {r.text[:200]}")
             if r.status_code == 404 or (r.status_code == 400 and "No endpoints" in r.text):
                 raise ModelUnavailable(f"NotFoundError: {r.text[:300]}")
             if r.status_code in (408, 429) or r.status_code >= 500:
@@ -510,6 +534,11 @@ def _open_weights(model: str) -> bool | None:
             "gpt": False}.get(model)
 
 
+def _no_credits(rec: dict) -> bool:
+    err = rec.get("error") or ""
+    return "OutOfCredits" in err or "402" in err or "available credits" in err
+
+
 def _gone(rec: dict) -> bool:
     err = rec.get("error") or ""
     return "NotFoundError" in err or "was removed" in err or "ModelUnavailable" in err
@@ -564,7 +593,10 @@ def main() -> int:
         return 0
     rows = []
     passed_by: dict[str, set] = {}
+    stop_all = False
     for model in a.models:
+        if stop_all:
+            break
         out = pathlib.Path(f"results/episodes/sample-{_file_name(model)}.jsonl")
         if model in SLATE or model.startswith("or:"):
             info = openrouter_info(SLATE.get(model) or model[3:])
@@ -583,6 +615,14 @@ def main() -> int:
         print(f"\n== {model}: {len(tasks)} tasks ({len(done)} already done) → {out}")
         if a.retry_broken and not a.fresh:
             out.write_text("".join(json.dumps(r) + "\n" for r in done.values()))
+        uses_openrouter = model in SLATE or model.startswith("or:") or model in ("qwen", "gpt")
+        left = openrouter_credits() if todo and uses_openrouter else None
+        if left is not None:
+            print(f"   OpenRouter credits left: ${left:.2f}")
+            if left < MIN_CREDITS:
+                print(f"   ⛔ under ${MIN_CREDITS:.0f}: add credits at "
+                      "https://openrouter.ai/settings/credits, then run the same command again")
+                break
         try:
             if todo:
                 make_agent(model)()  # fail now, not 30 times, if the model can't be set up
@@ -594,6 +634,13 @@ def main() -> int:
             for fut in as_completed(futures):
                 d, t = futures[fut]
                 rec = fut.result()
+                if _no_credits(rec):  # every other call would fail too, for every model
+                    for other in futures:
+                        other.cancel()
+                    print("   ⛔ OpenRouter is out of credits: stopping. Add credits, then run the same "
+                          "command with --retry-broken (finished tasks are kept)")
+                    stop_all = True
+                    break
                 if _gone(rec):  # removed model / wrong ID: every other task would fail the same way
                     for other in futures:
                         other.cancel()

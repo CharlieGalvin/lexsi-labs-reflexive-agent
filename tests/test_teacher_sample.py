@@ -234,3 +234,10 @@ def test_openrouter_agent_hands_reasoning_back_and_retries_provider_errors(monke
                 {"role": "tool", "tool_call_id": "c1", "content": "{}"}], [])
     assert bodies[-1]["messages"][1]["reasoning_details"][0]["data"] == "sig"
     assert agent.usage_dict()["est_cost"] == 0.001 and agent.usage["providers"] == {"Google": 2}
+
+
+def test_out_of_credits_is_recognised():
+    ts = load()
+    assert ts._no_credits({"error": "OutOfCredits: OpenRouter 402: ..."})
+    assert ts._no_credits({"error": "HTTPStatusError: Client error '402 Payment Required'"})
+    assert not ts._no_credits({"error": "RateLimitError"}) and not ts._no_credits({})
