@@ -10,6 +10,25 @@ Design: [`TEACHER_BAKEOFF.md`](TEACHER_BAKEOFF.md). Reproduce with
 
 ![Teacher bake-off: quality vs cost](img/bakeoff_cost_vs_pass.png)
 
+## Check it yourself
+
+Four levels, from free to a full re-run. You only need an `OPENROUTER_API_KEY` in `.env`
+(the simulated customer and the teacher both go through it).
+
+| Level | What it shows | Command | Cost / time |
+|---|---|---|---|
+| 0 | The code and statistics are right | `just check` | free, ~2 min |
+| 1 | A finalist runs end to end | `python scripts/teacher_sample.py --models glm53f --limit 2` | ~$0.05, ~2 min |
+| 2 | Reproduce the finalists' rows | `just teacher-sample glm53f qwen38` | ~$1, ~15 min |
+| 3 | Recompute every number in this write-up | put Charlie's `results/episodes/` files in place, then `just bakeoff-report` | free, seconds |
+
+- **Setup:** `just setup-dev` once, which installs τ²-bench and its data.
+- **Expect some movement on a re-run.** The simulated customer is itself an LLM, so a model's
+  score can move by a task or two. That's within the 95% intervals below. Rows that moved by
+  more would be worth flagging.
+- **The raw runs aren't in git.** `results/` is ignored. Ask Charlie for the
+  `sample-*.jsonl` files, about 8 MB.
+
 ## Setup
 
 - **Tasks:** the same fixed 30 τ²-bench v2.0 *train* tasks for every model: 20 retail and

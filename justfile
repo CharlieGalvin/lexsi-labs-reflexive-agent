@@ -97,4 +97,8 @@ teacher-check style="cohere" hints="none":
 teacher-sample *models="aya qwen":
     python scripts/teacher_sample.py --models {{models}}
 
+# Bake-off statistics and projected cost from the saved runs in results/episodes (no API calls)
+bakeoff-report:
+    python scripts/bakeoff_report.py
+
 # Experiment commands (train, baseline, evaluate…) are added by the Architect and Trainer.
