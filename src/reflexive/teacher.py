@@ -108,33 +108,12 @@ def to_prompted(messages: list[dict], tool_schemas: list[dict]) -> list[dict]:
 _FENCE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE)
 
 
-def _first_json(text: str) -> Any:
-    """The first JSON list or object in ``text`` (fences allowed), or None."""
-    text = _FENCE.sub("", text.strip())
-    decoder = json.JSONDecoder()
-    for i, ch in enumerate(text):
-        if ch in "[{":
-            try:
-                value, _ = decoder.raw_decode(text[i:])
-                return value
-            except ValueError:
-                continue
-    return None
+def _calls_from(value: Any, id_prefix: str, strict: bool) -> list[dict] | None:
+    """OpenAI-style tool_calls from a parsed JSON value, or None if it isn't a tool call.
 
-
-def parse_prompted(text: str, id_prefix: str = "call") -> list[dict] | None:
-    """Tool calls from a prompted reply, as OpenAI-style ``tool_calls``; None if it isn't one.
-
-    Accepts the requested ``[{"tool_name", "parameters"}]`` list, a single object, and the
-    common near-misses ``name`` / ``arguments``. A reply is only treated as a tool call if it
-    *starts* with the JSON (after optional fences), so a message to the customer that merely
-    mentions JSON stays a message. A well-formed call to a tool that doesn't exist is kept as a
-    call: τ²-bench then records it, and it is exactly the Tool hallucination we want to detect.
+    ``strict`` (used for JSON found *inside* prose) only accepts the requested ``tool_name`` key,
+    so an unrelated JSON snippet in a message to the customer isn't mistaken for a call.
     """
-    stripped = _FENCE.sub("", text.strip())
-    if not stripped.startswith(("[", "{")):
-        return None
-    value = _first_json(stripped)
     items = value if isinstance(value, list) else [value] if isinstance(value, dict) else None
     if not items:
         return None
@@ -142,13 +121,63 @@ def parse_prompted(text: str, id_prefix: str = "call") -> list[dict] | None:
     for i, item in enumerate(items):
         if not isinstance(item, dict):
             return None
-        name = item.get("tool_name") or item.get("name")
+        name = item.get("tool_name") if strict else item.get("tool_name") or item.get("name")
         args = item.get("parameters", item.get("arguments", {}))
         if not isinstance(name, str) or not isinstance(args, dict):
             return None
         calls.append({"id": f"{id_prefix}_{i}", "type": "function",
                       "function": {"name": name, "arguments": json.dumps(args)}})
     return calls
+
+
+def _json_values(text: str):
+    """Every JSON list or object that starts somewhere in ``text``, in order."""
+    decoder = json.JSONDecoder()
+    i = 0
+    while i < len(text):
+        if text[i] in "[{":
+            try:
+                value, end = decoder.raw_decode(text[i:])
+                yield value
+                i += end
+                continue
+            except ValueError:
+                pass
+        i += 1
+
+
+def find_prompted_calls(text: str, id_prefix: str = "call") -> tuple[list[dict] | None, bool]:
+    """Tool calls in a prompted reply, and whether they were embedded in other text.
+
+    Returns ``(calls, embedded)``; ``calls`` is None if the reply isn't a tool call.
+
+    - **Reply is the JSON** (as asked, optionally fenced): the requested
+      ``[{"tool_name", "parameters"}]`` list, a single object, or the near-misses
+      ``name`` / ``arguments``.
+    - **JSON inside prose** (``embedded=True``): Aya Expanse often writes "I'll now call the
+      tool: ```json [...]``` Please confirm", sometimes followed by a made-up "Tool result".
+      The first JSON value using the requested ``tool_name`` key is taken as the call, and
+      **everything else in the reply is dropped**, including any invented result after it.
+      τ²-bench's rule is a message *or* a tool call, so the turn becomes the tool call.
+    - A well-formed call to a tool that doesn't exist is kept: τ²-bench records it, and it is
+      exactly the Tool hallucination we want to detect.
+    """
+    stripped = _FENCE.sub("", text.strip())
+    if stripped.startswith(("[", "{")):
+        first = next(_json_values(stripped), None)
+        calls = _calls_from(first, id_prefix, strict=False)
+        if calls:
+            return calls, False
+    for value in _json_values(text):
+        calls = _calls_from(value, id_prefix, strict=True)
+        if calls:
+            return calls, True
+    return None, False
+
+
+def parse_prompted(text: str, id_prefix: str = "call") -> list[dict] | None:
+    """Tool calls from a prompted reply (see `find_prompted_calls`), or None."""
+    return find_prompted_calls(text, id_prefix)[0]
 
 
 # --- Client ----------------------------------------------------------------------------------
@@ -181,6 +210,7 @@ class Usage:
     seconds: float = 0.0
     errors: int = 0
     unparsed: int = 0  # prompted replies that looked like a tool call but didn't parse
+    embedded: int = 0  # prompted tool calls written inside prose (the prose was dropped)
     per_call: list[dict] = field(default_factory=list)
 
     @property
@@ -191,7 +221,8 @@ class Usage:
     def as_dict(self) -> dict:
         return {"calls": self.calls, "prompt_tokens": self.prompt_tokens,
                 "completion_tokens": self.completion_tokens, "seconds": round(self.seconds, 2),
-                "errors": self.errors, "unparsed": self.unparsed, "est_cost": round(self.cost, 4)}
+                "errors": self.errors, "unparsed": self.unparsed, "embedded": self.embedded,
+                "est_cost": round(self.cost, 4)}
 
 
 _RETRYABLE = ("RateLimitError", "InternalServerError", "ServiceUnavailableError",
@@ -279,8 +310,9 @@ class TeacherClient:
 
         msg = self._call(to_prompted(messages, tool_schemas), None).choices[0].message
         text = msg.content or ""
-        calls = parse_prompted(text, id_prefix=f"t{self.usage.calls}")
+        calls, embedded = find_prompted_calls(text, id_prefix=f"t{self.usage.calls}")
         if calls:
+            self.usage.embedded += embedded
             return {"role": "assistant", "content": None, "tool_calls": calls}
         if text.strip().startswith(("[", "{")):
             self.usage.unparsed += 1  # looked like a call but wasn't valid: sent as a message

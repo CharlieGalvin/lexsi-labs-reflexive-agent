@@ -5,8 +5,9 @@
 Runs the teacher (Aya Expanse 32B via Cohere) as the agent through `Tau2Episode`, one train
 task per domain by default, with GPT-4.1 as the simulated customer (as in every run). For each
 conversation it reports how it ended, the score, the teacher's calls / tokens / estimated cost,
-the customer's cost and the wall time. It then projects the SEL-37 budget. Conversations are
-saved to `results/episodes/teacher-check.jsonl`.
+the customer's cost and the wall time. "turns" are teacher API calls; "tools" are the agent tool
+calls τ²-bench actually ran (a turn can make several, and a message makes none). It then
+projects the SEL-37 budget. Conversations are saved to `results/episodes/teacher-check.jsonl`.
 
 Scoring: telecom needs no judge. Retail and airline are scored with judges only when
 OPENAI_API_KEY is set; otherwise their deterministic checks only (marked "no judge").
@@ -71,7 +72,7 @@ def main() -> int:
 
     rpm = os.environ.get("TEACHER_RPM") or "no limit"
     print(f"teacher=c4ai-aya-expanse-32b ({a.mode})  rpm={rpm}  → {out}")
-    print(f"{'task':<46} {'ended':<14} {'reward':>6} {'calls':>5} {'tok in/out':>14} "
+    print(f"{'task':<40} {'ended':<14} {'reward':>6} {'turns':>5} {'tools':>5} {'tok in/out':>14} "
           f"{'teacher$':>8} {'cust$':>6} {'time':>6}")
     rows = []
     with out.open("w") as f:
@@ -82,12 +83,18 @@ def main() -> int:
             rows.append(rec)
             u = rec["teacher_usage"]
             tag = "" if rec["outcome"]["judged"] or domain == "telecom" else " (no judge)"
-            print(f"{(domain + ':' + tid)[:46]:<46} {rec['termination'][:14]:<14} "
-                  f"{rec['outcome']['reward']:>6.1f} {u['calls']:>5} "
+            tools = sum(len(m.get("tool_calls") or []) for m in rec["messages"]
+                        if m["role"] == "assistant")  # agent tool calls τ²-bench actually ran
+            print(f"{(domain + ':' + tid)[:40]:<40} {rec['termination'][:14]:<14} "
+                  f"{rec['outcome']['reward']:>6.1f} {u['calls']:>5} {tools:>5} "
                   f"{u['prompt_tokens']:>7,}/{u['completion_tokens']:<6,} {u['est_cost']:>8.4f} "
                   f"{(rec['user_cost'] or 0):>6.3f} {rec['wall_s']:>5.0f}s{tag}")
             if u["unparsed"]:
                 print(f"   ⚠ {u['unparsed']} reply(ies) looked like a tool call but didn't parse")
+            if u.get("embedded"):
+                print(f"   ⚠ {u['embedded']} tool call(s) were written inside prose (prose dropped)")
+            if not tools:
+                print("   ⚠ no agent tool calls ran: a pass here can only mean 'leave the database as is'")
 
     n = len(rows)
     teacher_c = sum(r["teacher_usage"]["est_cost"] for r in rows) / n
