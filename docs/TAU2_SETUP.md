@@ -92,3 +92,55 @@ v2.0.0's English retail and telecom tasks differ from v1.0.1, so v2.0 scores are
 comparable with the 1.x leaderboard. Our headline comparison is between our own four arms on
 the same test split, so this doesn't affect the experiment. If we want a leaderboard reference
 point for Arm A, use the v2.0 text leaderboard.
+
+## Outcome checker (SEL-39)
+
+Pass/fail for any trajectory comes from τ²-bench's own scoring, through one function:
+
+```python
+from reflexive.outcome import score
+out = score("telecom", task_id, messages, termination="user_stop")   # judges=True by default
+out.passed, out.reward, out.checks, out.skipped
+```
+
+- **No grading code of our own.** `score` wraps the trajectory as a τ²-bench `SimulationRun` and
+  calls `tau2.evaluator.evaluate_simulation` with the same task definitions, language-pack
+  database, policy and judge settings that `tau2 run` uses.
+- **Pass = reward 1.0.** This is τ²-bench's rule: the reward is the product of the checks in the
+  task's `reward_basis`. A conversation that ends any way other than the agent or the customer
+  stopping (step limit, too many errors, our context guard) scores 0.
+- **Message format.** Takes τ²-bench messages or OpenAI-style chat dicts (`assistant` / `user` /
+  `tool`, with `tool_calls`). **The customer's tool calls must be kept:** in telecom, 393 of 516
+  expected actions are the customer's (e.g. toggling airplane mode on their phone), and they go
+  on `user` messages. This matters for the data contract (SEL-35) and the harness (SEL-32).
+- **Judges.** `judges=False` scores only the deterministic checks (DB, ENV_ASSERTION, ACTION)
+  and lists what it left out in `out.skipped`. Use it wherever cost or repeatability matters,
+  e.g. training rewards. Telecom never uses a judge, so it is unaffected.
+
+| Domain | Graded by | Deterministic? |
+|---|---|---|
+| Telecom | ENV_ASSERTION (94 tasks), plus ACTION (20 tasks) | Yes |
+| Retail | DB + NL_ASSERTION (112 tasks), DB only (2 tasks) | DB part only |
+| Airline | DB + COMMUNICATE (all 50 tasks) | DB part only |
+
+**Checks.**
+
+| Command | What it shows | Cost |
+|---|---|---|
+| `just check` | 16 tests: correct actions pass and a missing change fails (one task per domain), premature stops score 0, both message formats agree | free |
+| `just tau2-check-gold` | Replays every task's correct actions (must pass) and the same with the last state-changing action removed (should fail) | free, ~10 min |
+| `just tau2-scorer-run` | Runs 5 fixed telecom tasks (3 state-check only, 2 that also check actions) and compares our score with the official one, in both message formats | ~$0.70 |
+| `just tau2-check-scorer <run>` | The same comparison on any saved run. Run it on every real run (e.g. Arm A). | free |
+
+Results of the full replay (2 Nov):
+
+| Domain | Correct actions pass | Last change removed → fail |
+|---|---|---|
+| Retail | 114/114 | 103/104 |
+| Airline | 50/50 | 26/26 |
+| Telecom | 114/114 | 94/94 |
+
+The one exception is **retail task 105**, and it's a τ²-bench data quirk. Its only expected
+action exchanges the same item twice, which errors inside τ²-bench, so the expected database
+never changes and "doing nothing" matches it. Its NL assertions (judged) still apply. Tasks
+without any state-changing action (10 retail, 24 airline, 20 telecom) can't be tested this way.

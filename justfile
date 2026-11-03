@@ -63,4 +63,20 @@ tau2-inspect:
 tau2-first-run domain="retail":
     DOMAIN={{domain}} bash scripts/tau2_first_run.sh
 
+# 5 fixed telecom tasks (3 state-check, 2 also check actions) with GPT-4.1, ~$0.70
+scorer_tasks := "[mobile_data_issue]airplane_mode_on|user_abroad_roaming_enabled_off[PERSONA:None] [mobile_data_issue]airplane_mode_on|data_mode_off[PERSONA:None] [mobile_data_issue]airplane_mode_on|bad_network_preference[PERSONA:Hard] [service_issue]lock_sim_card_pin|overdue_bill_suspension[PERSONA:Easy] [service_issue]contract_end_suspension|lock_sim_card_pin[PERSONA:Hard]"
+
+# SEL-39: run 5 telecom tasks (~$0.70), then check our scorer agrees with τ²-bench
+tau2-scorer-run:
+    DOMAIN=telecom TASK_IDS='{{scorer_tasks}}' OUT=tau2-scorer-check bash scripts/tau2_first_run.sh
+    python scripts/tau2_check_scorer.py run tau2-scorer-check
+
+# Re-score a saved run with our scorer and compare with the official score (free)
+tau2-check-scorer name="tau2-scorer-check":
+    python scripts/tau2_check_scorer.py run {{name}}
+
+# Replay every task's correct actions through our scorer: all must pass (no API, ~10 min)
+tau2-check-gold *domains:
+    python scripts/tau2_check_scorer.py gold {{domains}}
+
 # Experiment commands (train, baseline, evaluate…) are added by the Architect and Trainer.
