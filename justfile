@@ -85,9 +85,9 @@ tau2-check-gold *domains:
 
 # --- Teacher (Aya Expanse 32B via Cohere; needs COHERE_API_KEY) -----------------
 
-# Does the teacher do native tool calling? 3 API calls (SEL-37)
-teacher-probe:
-    python scripts/teacher_probe.py
+# Does a Cohere model do native tool calling? 3 API calls (default: the teacher; or tiny-aya-global)
+teacher-probe model="c4ai-aya-expanse-32b":
+    python scripts/teacher_probe.py --model {{model}}
 
 # Teacher on 3 tasks (one per domain). style: cohere (Aya's own) | agenttune; hints: none | steps | steps_with_args
 teacher-check style="cohere" hints="none":

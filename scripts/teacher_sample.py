@@ -16,6 +16,9 @@ judged checks would pass too. If even the best case is low, the model is a weak 
 - ``qwen``: Qwen3 32B via OpenRouter, native tool calling, thinking off (``/no_think``): a
   same-size model trained for tool use, so it separates "Aya is weak" from "32B is too small".
 - ``gpt``: GPT-4.1 via OpenRouter (or OpenAI), native tool calling: shows the tasks are solvable.
+- ``tiny``: Tiny Aya (``tiny-aya-global``) via Cohere, our *student*, prompted exactly like the
+  teacher, inside its real 8,192-token window (our context guard on; overflows are counted). Its
+  API price isn't published, so its cost line is the simulated customer only.
 
 **Per conversation** it also counts tool hallucinations: ID-like arguments never seen earlier
 (invented IDs), calls to tools the agent doesn't have, and identical retries of a failed call.
@@ -119,10 +122,10 @@ class NativeAgent:
 
 
 class AyaAgent:
-    """The teacher: Aya Expanse 32B via Cohere, prompted tool calls in Aya's own format."""
+    """A Cohere Aya model, prompted tool calls in Aya's own format (default: the 32B teacher)."""
 
-    def __init__(self):
-        self.client = TeacherClient("prompted", style="cohere")
+    def __init__(self, model: str = "c4ai-aya-expanse-32b", prices: tuple[float, float] | None = None):
+        self.client = TeacherClient("prompted", style="cohere", model=model, prices=prices)
         self.model = f"cohere/{self.client.model}"
 
     def turn(self, messages, tools):
@@ -141,7 +144,14 @@ def make_agent(name: str) -> Callable[[], Any]:
         return lambda: NativeAgent("openrouter/qwen/qwen3-32b", PRICES["qwen"], no_think=True)
     if name == "gpt":
         return lambda: NativeAgent(default_model(), PRICES["gpt"])
+    if name == "tiny":
+        return lambda: AyaAgent("tiny-aya-global", prices=(0.0, 0.0))  # price not published
     raise ValueError(name)
+
+
+# (max_context, reserve) per model: the student gets its real 8K window, the others don't need one
+CONTEXT = {"tiny": (8192, 1024)}
+MODELS = ["aya", "qwen", "gpt", "tiny"]
 
 
 # --- One conversation ---------------------------------------------------------------------------
@@ -149,7 +159,8 @@ def make_agent(name: str) -> Callable[[], Any]:
 
 def run_one(model: str, domain: str, task_id: str) -> dict:
     agent = make_agent(model)()
-    ep = Tau2Episode(domain, task_id, max_context=128_000, reserve=4_096)
+    max_context, reserve = CONTEXT.get(model, (128_000, 4_096))
+    ep = Tau2Episode(domain, task_id, max_context=max_context, reserve=reserve)
     start = time.monotonic()
     error = None
     try:
@@ -218,6 +229,7 @@ def summarise(model: str, recs: list[dict]) -> dict:
         "unknown_tools": sum(bool(x["unknown_tools"]) for x in diag),
         "repeated_failures": sum(bool(x["repeated_failures"]) for x in diag),
         "no_tools": sum(x["tools_ran"] == 0 for x in diag),
+        "overflow": sum(bool((r.get("flags") or {}).get("context_overflow")) for r in recs),
         "errors": sum(_broken(r) for r in recs),
         "cost": sum(r["agent_usage"]["est_cost"] + (r["user_cost"] or 0) for r in recs),
         "mean_s": sum(r["wall_s"] for r in recs) / n if n else 0.0,
@@ -228,7 +240,7 @@ def print_summary(rows: list[dict]) -> None:
     print("\n=== Summary: 30 train tasks that need a state change (DB checks only: a best case) ===")
     print(f"{'model':<6} {'passed':>9} {'95% range':>12} {'retail':>7} {'airline':>8} "
           f"{'invented IDs':>13} {'unknown tool':>13} {'retried fail':>13} {'no tools':>9} "
-          f"{'errors':>7} {'cost':>7}")
+          f"{'over 8K':>8} {'errors':>7} {'cost':>7}")
     for s in rows:
         lo, hi = s["ci"]
         dom = s["by_domain"]
@@ -237,8 +249,11 @@ def print_summary(rows: list[dict]) -> None:
               f"{dom['airline'][0]:>3}/{dom['airline'][1]:<4} "
               f"{s['invented_ids']:>9}/{s['n']:<3} {s['unknown_tools']:>9}/{s['n']:<3} "
               f"{s['repeated_failures']:>9}/{s['n']:<3} {s['no_tools']:>5}/{s['n']:<3} "
-              f"{s['errors']:>7} ${s['cost']:>6.2f}")
+              f"{s['overflow']:>4}/{s['n']:<3} {s['errors']:>7} ${s['cost']:>6.2f}")
     print("Counts in the hallucination columns are conversations with at least one such event.")
+    if any(s["model"] == "tiny" for s in rows):
+        print("tiny: cost is the simulated customer only (Tiny Aya's API price isn't published); "
+              "'over 8K' = ended by the context guard (estimated tokens).")
     if any(s["errors"] for s in rows):
         print("⚠ 'errors' are broken runs (API failures, crashes): they count as fails above but say "
               "nothing about the model. Fix the cause and re-run with --retry-broken.")
@@ -256,7 +271,7 @@ def print_summary(rows: list[dict]) -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--models", nargs="+", choices=["aya", "qwen", "gpt"], default=["aya", "qwen"])
+    ap.add_argument("--models", nargs="+", choices=MODELS, default=["aya", "qwen"])
     ap.add_argument("--workers", type=int, default=4, help="conversations run at once per model")
     ap.add_argument("--fresh", action="store_true", help="ignore earlier results and start again")
     ap.add_argument("--list", action="store_true", help="only print the task sample")
@@ -303,6 +318,7 @@ def main() -> int:
                                          ("unknown tool", x["unknown_tools"]),
                                          ("retried a failed call", x["repeated_failures"]),
                                          ("no tools ran", not x["tools_ran"]),
+                                         ("over 8K", (rec.get("flags") or {}).get("context_overflow")),
                                          (f"BROKEN RUN ({rec['termination']}): {rec.get('error') or ''}",
                                           _broken(rec))) if on]
                 print(f"   {'✅' if rec['outcome']['passed'] else '❌'} {d}:{t:<6} "

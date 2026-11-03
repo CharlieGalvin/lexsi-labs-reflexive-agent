@@ -100,3 +100,12 @@ def test_task_sample_is_fixed_train_only_and_needs_a_state_change():
     for d, t in tasks:
         assert t in registry.get_task_splits_loader(d)()["train"]
         assert scorer(d).write_action_indices(t)
+
+
+def test_tiny_uses_tiny_aya_prompted_inside_its_8k_window(monkeypatch):
+    monkeypatch.setenv("COHERE_API_KEY", "test-placeholder")
+    ts = load()
+    agent = ts.make_agent("tiny")()
+    assert agent.client.model == "tiny-aya-global" and agent.client.mode == "prompted"
+    assert agent.client.style == "cohere" and agent.usage_dict()["est_cost"] == 0.0
+    assert ts.CONTEXT["tiny"] == (8192, 1024) and "aya" not in ts.CONTEXT

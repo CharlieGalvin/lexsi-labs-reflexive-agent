@@ -1,6 +1,7 @@
 """Does the teacher (Aya Expanse 32B via Cohere) do native tool calling? 3 API calls (SEL-37).
 
-    python scripts/teacher_probe.py          # needs COHERE_API_KEY in .env
+    python scripts/teacher_probe.py                            # needs COHERE_API_KEY in .env
+    python scripts/teacher_probe.py --model tiny-aya-global    # the student instead
 
 1. Plain chat: is the key and model ID right? What latency?
 2. Native: the same question with ``tools=``. Do structured ``tool_calls`` come back?
@@ -32,9 +33,14 @@ ASK = [
 
 
 def main() -> int:
+    import argparse
+
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--model", default="c4ai-aya-expanse-32b", help="a Cohere model ID")
+    model = ap.parse_args().model
     results = {}
-    print("1. plain chat")
-    t = TeacherClient("native")
+    print(f"model={model}\n1. plain chat")
+    t = TeacherClient("native", model=model)
     start = time.monotonic()
     try:
         r = t._call([{"role": "user", "content": "Reply with the single word OK."}], None)
@@ -55,7 +61,7 @@ def main() -> int:
         print(f"   ✗ request failed: {type(e).__name__}: {str(e)[:300]}")
 
     print("3. prompted tool calling (Aya's own 'Action:' format)")
-    p = TeacherClient("prompted")
+    p = TeacherClient("prompted", model=model)
     try:
         turn = p.turn(ASK, TOOLS)
         results["prompted"] = bool(turn.get("tool_calls"))

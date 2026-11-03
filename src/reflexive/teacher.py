@@ -308,11 +308,12 @@ class Usage:
     directly_answer: int = 0  # "directly-answer" pseudo-calls turned into a message
     empty: int = 0  # empty replies (re-asked once without stop sequences)
     per_call: list[dict] = field(default_factory=list)
+    prices: tuple[float, float] = (PRICE_IN, PRICE_OUT)  # USD per input / output token
 
     @property
     def cost(self) -> float:
-        """Estimated USD at the listed prices (PRICE_IN / PRICE_OUT)."""
-        return self.prompt_tokens * PRICE_IN + self.completion_tokens * PRICE_OUT
+        """Estimated USD at ``prices`` (default: Aya Expanse's listed PRICE_IN / PRICE_OUT)."""
+        return self.prompt_tokens * self.prices[0] + self.completion_tokens * self.prices[1]
 
     def as_dict(self) -> dict:
         return {"calls": self.calls, "prompt_tokens": self.prompt_tokens,
@@ -343,6 +344,7 @@ class TeacherClient:
                  api_base: str = COHERE_COMPAT_BASE, api_key: str | None = None,
                  rpm: float | None = None, temperature: float = 0.0, max_tokens: int = 1024,
                  seed: int | None = None, num_retries: int = 3,
+                 prices: tuple[float, float] | None = None,
                  completion: Callable[..., Any] | None = None):
         if mode not in ("native", "prompted"):
             raise ValueError("mode must be 'native' or 'prompted'")
@@ -357,7 +359,7 @@ class TeacherClient:
         rpm = rpm if rpm is not None else float(os.environ.get("TEACHER_RPM") or 0)  # 0 = no limit
         self.limiter = RateLimiter(rpm)
         self._completion = completion
-        self.usage = Usage()
+        self.usage = Usage(prices=prices) if prices is not None else Usage()
 
     def _call(self, messages: list[dict], tools: list[dict] | None,
               stop: list[str] | None = None) -> Any:
