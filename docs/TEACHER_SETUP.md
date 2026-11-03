@@ -32,7 +32,7 @@ These are Cohere's documented facts as of 3 Nov 2026, plus what they mean for ou
 **What the limits mean for us**
 
 - **Each agent turn is one API call.** A teacher conversation is about 10–20 agent turns. The simulated customer runs on GPT-4.1 via OpenRouter, so its calls don't count against Cohere's limits.
-- **Rate:** 20/min allows about **1 teacher conversation per minute**, so 200 fixes need at least ~3½ hours of calls. The driver must throttle to under 20/min and retry on HTTP 429.
+- **Rate (trial key):** 20/min allows about **1 teacher conversation per minute**, so 200 fixes would need at least ~3½ hours of calls. **We use a production key instead (decided 3 Nov).** The driver doesn't throttle unless `TEACHER_RPM` is set, and it retries on HTTP 429.
 - **Monthly cap:** 1,000 calls is about **50–100 conversations**. That's enough to set up, measure 3 tasks (SEL-37) and run a small pilot, but **not ~200 fixes** (~3,000 calls). Options:
   1. **A production key** (pay-as-you-go). This is the simplest: at the prices above, 200 fixes cost roughly $10–15 of teacher tokens.
   2. **Self-host the open weights with vLLM** (`vllm serve CohereLabs/aya-expanse-32b`). This needs ~64 GB of GPU memory at 16-bit, or ~20 GB 4-bit compressed, and would compete with training for GPU time.
@@ -79,5 +79,5 @@ SEL-37 replaces these with numbers measured on 3 tasks: cost, latency and calls 
 | `just teacher-probe` | Checks the key and model ID, whether native tool calling works, and whether prompted JSON calls parse. Ends with a recommended `mode`. | 3 |
 | `just teacher-check` | Teacher on one train task per domain (prompted mode). Reports cost, latency and score, then the budget estimate. `just teacher-check native` if the probe says native works. | ~30–60 |
 
-- **Rate:** set `TEACHER_RPM` in `.env` to the production key's limit. It defaults to 20 (the trial limit), which keeps a 3-task check to a few minutes.
+- **Rate:** we use a **production key** (decided 3 Nov), so the driver doesn't throttle by default. If calls start failing with rate-limit errors (HTTP 429), they're retried; to space them out, set `TEACHER_RPM` in `.env` (e.g. `20` for a trial key).
 - **Code:** `reflexive.teacher.TeacherClient`, used as the agent in `reflexive.episode.Tau2Episode`.

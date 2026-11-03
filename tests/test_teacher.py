@@ -140,6 +140,14 @@ def test_rate_limiter_spaces_calls():
     assert slept == [pytest.approx(3.0), pytest.approx(3.0)]  # 60 / 20 = 3 s apart
 
 
+def test_no_rate_limit_by_default(monkeypatch):
+    monkeypatch.delenv("TEACHER_RPM", raising=False)
+    t = TeacherClient(completion=fake_completion([]))
+    assert t.limiter.interval == 0.0
+    monkeypatch.setenv("TEACHER_RPM", "20")
+    assert TeacherClient(completion=fake_completion([])).limiter.interval == pytest.approx(3.0)
+
+
 def test_missing_key_is_explained(monkeypatch):
     monkeypatch.delenv("COHERE_API_KEY", raising=False)
     with pytest.raises(RuntimeError, match="COHERE_API_KEY"):

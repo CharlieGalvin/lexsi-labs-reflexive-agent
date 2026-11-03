@@ -24,9 +24,9 @@ with LiteLLM. See docs/TEACHER_SETUP.md for limits and prices.
 Either way, `turn()` returns an OpenAI-style assistant dict that `Tau2Episode.step` accepts,
 and the saved trajectory is always OpenAI-style, whichever mode produced it.
 
-**Rate limiting.** Trial keys allow 20 requests/min (1,000 a month). `TeacherClient` spaces
-calls to stay under ``rpm`` (default 20, or the TEACHER_RPM environment variable) and retries
-rate-limit errors.
+**Rate limiting.** Off by default: we use a production key. If a key does have a per-minute
+cap (trial keys: 20/min and 1,000 calls a month), set ``rpm`` or the TEACHER_RPM environment
+variable and calls are spaced to stay under it. Rate-limit errors are retried either way.
 """
 
 from __future__ import annotations
@@ -207,7 +207,7 @@ class TeacherClient:
             raise RuntimeError("Set COHERE_API_KEY in .env (see docs/TEACHER_SETUP.md)")
         self.temperature, self.max_tokens, self.seed = temperature, max_tokens, seed
         self.num_retries = num_retries
-        rpm = rpm if rpm is not None else float(os.environ.get("TEACHER_RPM", 20))
+        rpm = rpm if rpm is not None else float(os.environ.get("TEACHER_RPM") or 0)  # 0 = no limit
         self.limiter = RateLimiter(rpm)
         self._completion = completion
         self.usage = Usage()

@@ -10,7 +10,7 @@ saved to `results/episodes/teacher-check.jsonl`.
 
 Scoring: telecom needs no judge. Retail and airline are scored with judges only when
 OPENAI_API_KEY is set; otherwise their deterministic checks only (marked "no judge").
-Trial keys allow 20 requests/min; set TEACHER_RPM higher for a production key.
+No client-side rate limit by default (production key); set TEACHER_RPM to add one (trial keys: 20).
 """
 
 from __future__ import annotations
@@ -69,7 +69,8 @@ def main() -> int:
     out = pathlib.Path(a.out)
     out.parent.mkdir(parents=True, exist_ok=True)
 
-    print(f"teacher=c4ai-aya-expanse-32b ({a.mode})  rpm={os.environ.get('TEACHER_RPM', 20)}  → {out}")
+    rpm = os.environ.get("TEACHER_RPM") or "no limit"
+    print(f"teacher=c4ai-aya-expanse-32b ({a.mode})  rpm={rpm}  → {out}")
     print(f"{'task':<46} {'ended':<14} {'reward':>6} {'calls':>5} {'tok in/out':>14} "
           f"{'teacher$':>8} {'cust$':>6} {'time':>6}")
     rows = []
@@ -97,7 +98,7 @@ def main() -> int:
           f"{calls:.0f} teacher calls · {secs:.0f}s")
     print("Budget estimate (SEL-37):")
     print(f"  {N_FIXES} teacher fixes:        ${N_FIXES * (teacher_c + cust_c):7.2f}  "
-          f"(~{N_FIXES * calls:,.0f} Cohere calls; at 20/min ≥ {N_FIXES * calls / 20 / 60:.1f} h)")
+          f"(~{N_FIXES * calls:,.0f} Cohere calls)")
     print(f"  Test pass, all arms ×3: ${TEST_ROLLOUTS * cust_c:7.2f}  "
           f"(customer only: {TEST_ROLLOUTS:,} conversations; the student runs on our GPU)")
     print("  Teacher prices are estimates (listed $0.50/$1.50 per 1M tokens); check the Cohere dashboard.")
