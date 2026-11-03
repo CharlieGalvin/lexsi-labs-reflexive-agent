@@ -127,6 +127,7 @@ class NativeAgent:
         # OpenRouter's list of parameters the model accepts. Some newer models (reasoning ones)
         # refuse `temperature`; with require_parameters on, sending it finds no endpoint at all.
         self.supported = supported
+        self.temperature = 0.0  # fix runs raise it for retries (scripts/teacher_fixes.py)
         self.usage = {"calls": 0, "prompt_tokens": 0, "completion_tokens": 0, "seconds": 0.0}
 
     def turn(self, messages: list[dict], tools: list[dict]) -> dict:
@@ -141,7 +142,7 @@ class NativeAgent:
             extra = ({"extra_body": {"provider": {"require_parameters": True}}}  # tools must work
                      if self.model.startswith("openrouter/") else {})
             if not self.supported or "temperature" in self.supported:
-                extra["temperature"] = 0.0
+                extra["temperature"] = self.temperature
             resp = litellm.completion(model=self.model, messages=messages, tools=tools,
                                       num_retries=3, **extra)
             self.usage["seconds"] += time.monotonic() - start
@@ -215,6 +216,7 @@ class OpenRouterAgent(NativeAgent):
         super().__init__(f"openrouter/{slug}", prices, supported=supported)
         self.slug = slug
         self.reasoning: dict[str, Any] = {}  # first tool-call id or reply text -> reasoning_details
+        self.provider: str | None = None
         self.usage.update(billed_cost=0.0, providers={})
 
     def _with_reasoning(self, messages: list[dict]) -> list[dict]:
@@ -263,7 +265,10 @@ class OpenRouterAgent(NativeAgent):
                                 "provider": {"require_parameters": True},
                                 "usage": {"include": True}}
         if not self.supported or "temperature" in self.supported:
-            body["temperature"] = 0.0
+            body["temperature"] = self.temperature
+        if self.provider:  # pin one provider (and its quantisation) so the run is reproducible
+            body["provider"] = {"require_parameters": True, "order": [self.provider],
+                                "allow_fallbacks": False}
         msgs = self._with_reasoning(messages)
         for _attempt in range(2):  # an empty reply: ask once more
             start = time.monotonic()
@@ -405,8 +410,13 @@ def _file_name(model: str) -> str:
 # --- One conversation ---------------------------------------------------------------------------
 
 
-def run_one(model: str, domain: str, task_id: str) -> dict:
+def run_one(model: str, domain: str, task_id: str, *, temperature: float = 0.0,
+            judges: bool = False, provider: str | None = None) -> dict:
     agent = make_agent(model)()
+    if hasattr(agent, "temperature"):
+        agent.temperature = temperature
+    if provider:
+        agent.provider = provider
     max_context, reserve = CONTEXT.get(model, (128_000, 4_096))
     ep = Tau2Episode(domain, task_id, max_context=max_context, reserve=reserve,
                      count_tokens=COUNT.get(model, estimate_tokens), hints=HINTS.get(model, "none"))
@@ -433,8 +443,14 @@ def run_one(model: str, domain: str, task_id: str) -> dict:
                "sample_model": model, "agent_llm": agent.model,
                "agent_usage": agent.usage_dict(), "error": error}
     else:
-        rec = ep.record(judges=False, sample_model=model, agent_llm=agent.model,
-                        agent_usage=agent.usage_dict(), error=error)
+        meta = {"sample_model": model, "agent_llm": agent.model, "agent_usage": agent.usage_dict(),
+                "error": error, "temperature": temperature, "pinned_provider": provider}
+        try:
+            rec = ep.record(judges=judges, **meta)
+        except Exception as e:  # noqa: BLE001 - a judge call failed: keep the run, re-judge later
+            if not judges:
+                raise
+            rec = ep.record(judges=False, **meta, judge_error=f"{type(e).__name__}: {str(e)[:300]}")
     msgs = rec["messages"]
     rec["diagnostics"] = {
         "tools_ran": sum(len(m.get("tool_calls") or []) for m in msgs if m["role"] == "assistant"),

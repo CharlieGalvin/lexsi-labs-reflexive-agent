@@ -97,6 +97,11 @@ teacher-check style="cohere" hints="none":
 teacher-sample *models="aya qwen":
     python scripts/teacher_sample.py --models {{models}}
 
+# Fix run: the teacher (default GLM-5.3-Flash) on the 148 train tasks phase 1 didn't use, 3 attempts,
+# judges on. ~$13. Try `just teacher-fixes --limit 2` first; `--report` summarises what's saved.
+teacher-fixes *args:
+    python scripts/teacher_fixes.py {{args}}
+
 # Bake-off statistics and projected cost from the saved runs in results/episodes (no API calls)
 bakeoff-report:
     python scripts/bakeoff_report.py
