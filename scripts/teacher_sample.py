@@ -241,15 +241,22 @@ class OpenRouterAgent(NativeAgent):
         import httpx
 
         headers = {"Authorization": f"Bearer {os.environ['OPENROUTER_API_KEY']}"}
-        last = None
-        for attempt in range(4):
-            if attempt:
-                time.sleep(2 ** attempt)
+        last, waits = None, 0
+        for attempt in range(4 + 6):
+            if attempt and waits == 0:
+                time.sleep(2 ** min(attempt, 4))
             try:
                 r = httpx.post(self.URL, json=body, headers=headers, timeout=300)
             except httpx.HTTPError as e:  # network blip or timeout: retry
                 last = f"{type(e).__name__}: {e}"
                 continue
+            if r.status_code == 402 and "in_flight" in r.text and waits < 6:
+                # Not empty: too much spend reserved by requests already running. Wait and retry.
+                waits += 1
+                time.sleep(20)
+                last = "OpenRouter in-flight budget"
+                continue
+            waits = 0
             if r.status_code == 402:  # out of credits: nothing will work until topped up
                 raise OutOfCredits(f"OpenRouter 402: {r.text[:200]}")
             if r.status_code == 404 or (r.status_code == 400 and "No endpoints" in r.text):
@@ -269,7 +276,10 @@ class OpenRouterAgent(NativeAgent):
     def turn(self, messages: list[dict], tools: list[dict]) -> dict:
         body: dict[str, Any] = {"model": self.slug, "tools": tools,
                                 "provider": {"require_parameters": True},
-                                "usage": {"include": True}}
+                                "usage": {"include": True},
+                                # a cap keeps OpenRouter's per-request reservation small (it holds
+                                # max_tokens × price while a request runs); turns are far shorter
+                                "max_tokens": 8192}
         if not self.supported or "temperature" in self.supported:
             body["temperature"] = self.temperature
         if self.provider:  # pin one provider (and its quantisation) so the run is reproducible
@@ -428,14 +438,16 @@ def _file_name(model: str) -> str:
 
 
 def run_one(model: str, domain: str, task_id: str, *, temperature: float = 0.0,
-            judges: bool = False, provider: str | None = None, user_llm: str | None = None) -> dict:
+            judges: bool = False, provider: str | None = None, user_llm: str | None = None,
+            user_llm_args: dict | None = None) -> dict:
     agent = make_agent(model)()
     if hasattr(agent, "temperature"):
         agent.temperature = temperature
     if provider:
         agent.provider = provider
     max_context, reserve = CONTEXT.get(model, (128_000, 4_096))
-    ep = Tau2Episode(domain, task_id, user_llm=user_llm, max_context=max_context, reserve=reserve,
+    ep = Tau2Episode(domain, task_id, user_llm=user_llm, user_llm_args=user_llm_args,
+                     max_context=max_context, reserve=reserve,
                      count_tokens=COUNT.get(model, estimate_tokens), hints=HINTS.get(model, "none"))
     start = time.monotonic()
     error = None
@@ -573,7 +585,11 @@ def _open_weights(model: str) -> bool | None:
 
 
 def _no_credits(rec: dict) -> bool:
+    """Truly out of credits. OpenRouter's in-flight budget (too much reserved by requests
+    already running) is temporary, so it doesn't count: those conversations are retried."""
     err = rec.get("error") or ""
+    if "in_flight" in err or "in-flight" in err:
+        return False
     return "OutOfCredits" in err or "402" in err or "available credits" in err
 
 

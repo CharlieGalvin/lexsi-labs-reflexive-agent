@@ -259,3 +259,10 @@ def test_qwen_thinking_off_variant_sends_reasoning_disabled(monkeypatch):
     agent = ts.make_agent("qwen38nt")()
     assert agent.slug == "qwen/qwen3.8-27b" and agent.extra_body == {"reasoning": {"enabled": False}}
     assert "qwen38nt" not in ts.resolve_models(["bakeoff"])
+
+
+def test_in_flight_budget_is_not_out_of_credits():
+    ts = load()
+    busy = 'OutOfCredits: OpenRouter 402: {"reason":"in_flight_budget_exhausted"}'
+    assert not ts._no_credits({"error": busy})
+    assert ts._no_credits({"error": "OutOfCredits: OpenRouter 402: insufficient credits"})

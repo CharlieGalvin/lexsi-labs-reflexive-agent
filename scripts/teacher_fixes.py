@@ -41,6 +41,10 @@ ts = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(ts)
 
 TEMPERATURES = [0.0, 0.7, 0.7]  # attempt 1, 2, 3
+# The customer's replies are a few sentences. Without a cap, OpenRouter reserves GPT-4.1's full
+# 32K-token output price for every request in flight, and 8 long telecom chats at once use up a
+# small balance's in-flight budget (HTTP 402 "in_flight_budget_exhausted").
+CUSTOMER_ARGS = {"temperature": 0.0, "max_tokens": 2048}
 CUSTOMER = {"openai": "gpt-4.1-2025-04-14",       # the snapshot τ²-bench pins (needs OPENAI_API_KEY)
             "openrouter": "openrouter/openai/gpt-4.1"}
 
@@ -219,7 +223,7 @@ def main() -> int:
     ap.add_argument("--attempts", type=int, default=3, help="most attempts per task (default 3)")
     ap.add_argument("--all-attempts", action="store_true",
                     help="run every attempt even after a pass (gives pass^3; ~2.5x the cost)")
-    ap.add_argument("--workers", type=int, default=8, help="conversations at once (default 8)")
+    ap.add_argument("--workers", type=int, default=6, help="conversations at once (default 6)")
     ap.add_argument("--provider", help="pin one OpenRouter provider, e.g. 'z-ai' (default: any)")
     ap.add_argument("--no-judges", action="store_true", help="database checks only (no OpenAI key)")
     ap.add_argument("--customer", choices=sorted(CUSTOMER), default=None,
@@ -314,7 +318,8 @@ def main() -> int:
             print(f"-- attempt {i} (temperature {TEMPERATURES[min(i, 3) - 1]}): {len(round_todo)} tasks")
             futures = {pool.submit(ts.run_one, a.model, d, t, temperature=TEMPERATURES[min(i, 3) - 1],
                                    judges=not a.no_judges, provider=a.provider,
-                                   user_llm=customer): (d, t) for d, t in round_todo}
+                                   user_llm=customer, user_llm_args=CUSTOMER_ARGS):
+                           (d, t) for d, t in round_todo}
             for fut in as_completed(futures):
                 d, t = futures[fut]
                 rec = fut.result()
