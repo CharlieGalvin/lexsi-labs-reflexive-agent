@@ -96,6 +96,11 @@ SLATE = {
     "opus": "anthropic/claude-opus-5.5",      # 75.3%, added 3 Nov; the priciest (~$0.34/task)
 }
 
+# Request-setting variants of slate models (not part of --models bakeoff)
+VARIANTS = {
+    "qwen38nt": ("qwen/qwen3.8-27b", {"reasoning": {"enabled": False}}),  # Qwen3.8 27B, thinking off
+}
+
 
 # --- Task sample --------------------------------------------------------------------------------
 
@@ -217,6 +222,7 @@ class OpenRouterAgent(NativeAgent):
         self.slug = slug
         self.reasoning: dict[str, Any] = {}  # first tool-call id or reply text -> reasoning_details
         self.provider: str | None = None
+        self.extra_body: dict[str, Any] = {}  # added to every request (VARIANTS)
         self.usage.update(billed_cost=0.0, providers={})
 
     def _with_reasoning(self, messages: list[dict]) -> list[dict]:
@@ -269,6 +275,7 @@ class OpenRouterAgent(NativeAgent):
         if self.provider:  # pin one provider (and its quantisation) so the run is reproducible
             body["provider"] = {"require_parameters": True, "order": [self.provider],
                                 "allow_fallbacks": False}
+        body.update(self.extra_body)
         msgs = self._with_reasoning(messages)
         for _attempt in range(2):  # an empty reply: ask once more
             start = time.monotonic()
@@ -335,6 +342,16 @@ def make_agent(name: str) -> Callable[[], Any]:
         return lambda: AyaAgent("tiny-aya-global", prices=(0.0, 0.0))  # price not published
     if name == "aya-steps":
         return AyaAgent
+    if name in VARIANTS:  # a slate model with a different request setting, e.g. thinking off
+        slug, extra = VARIANTS[name]
+        info = openrouter_info(slug)
+
+        def variant():
+            agent = OpenRouterAgent(slug, info["prices"], supported=info["supported"])
+            agent.extra_body = dict(extra)
+            return agent
+
+        return variant
     if name in SLATE or name.startswith("or:"):
         slug = SLATE.get(name) or name[3:]
         info = openrouter_info(slug)
@@ -366,7 +383,7 @@ COUNT = {"tiny": lambda msgs: int(estimate_tokens(msgs) * 1.15),
          "aya8": lambda msgs: int(estimate_tokens(msgs) * 1.15)}
 # τ²-bench resolution-step hints (train tasks only; see Tau2Episode(hints=...))
 HINTS = {"aya-steps": "steps"}
-MODELS = ["aya", "qwen", "gpt", "tiny", "aya8", "aya-steps", *SLATE]
+MODELS = ["aya", "qwen", "gpt", "tiny", "aya8", "aya-steps", *SLATE, *VARIANTS]
 
 
 @functools.cache
@@ -547,6 +564,8 @@ STUDENTS = ("aya", "aya8", "tiny")  # candidate students; every other model is a
 
 
 def _open_weights(model: str) -> bool | None:
+    if model in VARIANTS:
+        return openrouter_info(VARIANTS[model][0])["open_weights"]
     if model in SLATE or model.startswith("or:"):
         return openrouter_info(SLATE.get(model) or model[3:])["open_weights"]
     return {"aya": True, "aya-steps": True, "tiny": True, "aya8": True, "qwen": True,
