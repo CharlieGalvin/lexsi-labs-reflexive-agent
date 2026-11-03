@@ -8,9 +8,9 @@
 **Tasks.** Every τ²-bench *train* task in retail, airline and telecom that phase 1 didn't use:
 54 retail + 20 airline + 74 telecom = 148. Train tasks only, so every verified pass is a real fix.
 
-**Attempts.** 3 per task: attempt 1 at temperature 0, attempts 2-3 at 0.7 so retries actually
-differ. All 3 always run, which gives pass@3 (at least one pass: a fix exists) and pass^3
-(all three pass: the teacher is consistent), plus up to 3 different fixes per task.
+**Attempts.** Up to 3 per task, stopping at the first pass: attempt 1 at temperature 0, retries
+at 0.7 so they actually differ. pass@3 = a fix exists. ``--all-attempts`` runs all 3 even after
+a pass (~2.5x the cost), which also gives pass^3 (consistency) and up to 3 fixes per task.
 
 **Scoring.** τ²-bench's full evaluator, judges on: retail's NL assertions and airline's
 communicate check need ``OPENAI_API_KEY``. Telecom needs no judges. The database-only result is
@@ -109,12 +109,15 @@ def report(recs: list[dict], attempts: int = 3) -> dict:
         if not tasks:
             continue
         convs = [r for v in tasks.values() for r in v]
-        complete = {k: v for k, v in tasks.items() if len(v) >= attempts}
+        finished = {k: v for k, v in tasks.items()
+                    if len(v) >= attempts or any(r["outcome"]["passed"] for r in v)}
+        complete = {k: v for k, v in tasks.items() if len(v) >= attempts
+                    and all(r.get("attempt_mode", "all") == "all" for r in v)}
         rows[d] = {
             "tasks": len(tasks), "complete_tasks": len(complete), "conversations": len(convs),
             "pass1": _rate([r["outcome"]["passed"] for k, v in tasks.items()
                             for r in v if r.get("attempt") == 1]),
-            "pass_at_3": _rate([any(r["outcome"]["passed"] for r in v) for v in complete.values()]),
+            "pass_at_3": _rate([any(r["outcome"]["passed"] for r in v) for v in finished.values()]),
             "pass_all_3": _rate([all(r["outcome"]["passed"] for r in v) for v in complete.values()]),
             "db_only_pass1": _rate([db_only_pass(r) for v in tasks.values() for r in v
                                     if r.get("attempt") == 1]),
@@ -213,7 +216,9 @@ def print_report(model: str, rows: dict) -> None:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--model", default="glm53f", help="a teacher_sample model name (default glm53f)")
-    ap.add_argument("--attempts", type=int, default=3)
+    ap.add_argument("--attempts", type=int, default=3, help="most attempts per task (default 3)")
+    ap.add_argument("--all-attempts", action="store_true",
+                    help="run every attempt even after a pass (gives pass^3; ~2.5x the cost)")
     ap.add_argument("--workers", type=int, default=8, help="conversations at once (default 8)")
     ap.add_argument("--provider", help="pin one OpenRouter provider, e.g. 'z-ai' (default: any)")
     ap.add_argument("--no-judges", action="store_true", help="database checks only (no OpenAI key)")
@@ -270,6 +275,9 @@ def main() -> int:
         if a.retry_broken:
             out.write_text("".join(json.dumps(r) + "\n" for r in done.values()))
     todo = [(d, t, i) for d, t in tasks for i in range(1, a.attempts + 1) if (d, t, i) not in done]
+    if not a.all_attempts:  # the most it could be; retries only run for tasks without a pass
+        todo = [(d, t, i) for d, t, i in todo if i == 1 or not any(
+            r["outcome"]["passed"] for (dd, tt, _), r in done.items() if (dd, tt) == (d, t))]
     print(f"== {a.model}: {len(tasks)} tasks × {a.attempts} attempts; {len(done)} done, {len(todo)} to run "
           f"→ {out}")
     left = ts.openrouter_credits()
@@ -290,31 +298,45 @@ def main() -> int:
                 print(f"      {p}")
             return 1
 
+    def passed(d: str, t: str) -> bool:
+        return any(r["outcome"]["passed"] for (dd, tt, _), r in done.items() if (dd, tt) == (d, t))
+
+    mode = "all" if a.all_attempts else "until_pass"
+    n, stop = 0, False
     with out.open("a") as f, ThreadPoolExecutor(a.workers) as pool:
-        futures = {pool.submit(ts.run_one, a.model, d, t, temperature=TEMPERATURES[min(i, 3) - 1],
-                               judges=not a.no_judges, provider=a.provider,
-                               user_llm=customer): (d, t, i)
-                   for d, t, i in todo}
-        for n, fut in enumerate(as_completed(futures), 1):
-            d, t, i = futures[fut]
-            rec = fut.result()
-            if ts._no_credits(rec) or ts._gone(rec):
-                for other in futures:
-                    other.cancel()
-                print(f"   ⛔ stopping: {rec['error'][:200]}. Fix it, then run the same command again.")
+        for i in range(1, a.attempts + 1):  # one round per attempt number
+            if stop:
                 break
-            rec["attempt"] = i
-            f.write(json.dumps(rec) + "\n")
-            f.flush()
-            done[(d, t, i)] = rec
-            o, judged = rec["outcome"], rec["outcome"].get("judged")
-            note = "; ".join(s for s, on in (
-                ("judge error", rec.get("judge_error")),
-                (f"BROKEN ({rec.get('error') or rec['termination']})"[:120], ts._broken(rec)),
-                ("DB ok, judge failed", judged and not o["passed"] and db_only_pass(rec))) if on)
-            short = t if len(t) <= 40 else t[:37] + "..."  # telecom IDs are long
-            print(f"   [{n:>3}/{len(todo)}] {'✅' if o['passed'] else '❌'} {d}:{short:<5} #{i}  "
-                  f"{rec['diagnostics']['tools_ran']:>2} tools {rec['wall_s']:>5.0f}s  {note}")
+            round_todo = [(d, t) for d, t in tasks if (d, t, i) not in done
+                          and (a.all_attempts or not passed(d, t))]
+            if not round_todo:
+                continue
+            print(f"-- attempt {i} (temperature {TEMPERATURES[min(i, 3) - 1]}): {len(round_todo)} tasks")
+            futures = {pool.submit(ts.run_one, a.model, d, t, temperature=TEMPERATURES[min(i, 3) - 1],
+                                   judges=not a.no_judges, provider=a.provider,
+                                   user_llm=customer): (d, t) for d, t in round_todo}
+            for fut in as_completed(futures):
+                d, t = futures[fut]
+                rec = fut.result()
+                if ts._no_credits(rec) or ts._gone(rec):
+                    for other in futures:
+                        other.cancel()
+                    print(f"   ⛔ stopping: {rec['error'][:200]}. Fix it, then run the same command again.")
+                    stop = True
+                    break
+                n += 1
+                rec["attempt"], rec["attempt_mode"] = i, mode
+                f.write(json.dumps(rec) + "\n")
+                f.flush()
+                done[(d, t, i)] = rec
+                o, judged = rec["outcome"], rec["outcome"].get("judged")
+                note = "; ".join(s for s, on in (
+                    ("judge error", rec.get("judge_error")),
+                    (f"BROKEN ({rec.get('error') or rec['termination']})"[:120], ts._broken(rec)),
+                    ("DB ok, judge failed", judged and not o["passed"] and db_only_pass(rec))) if on)
+                short = t if len(t) <= 40 else t[:37] + "..."  # telecom IDs are long
+                print(f"   [{n:>3}] {'✅' if o['passed'] else '❌'} {d}:{short:<5} #{i}  "
+                      f"{rec['diagnostics']['tools_ran']:>2} tools {rec['wall_s']:>5.0f}s  {note}")
     print_report(a.model, report(list(done.values()), a.attempts))
     return 0
 

@@ -86,3 +86,13 @@ def test_needs_judging_picks_failed_or_skipped_judges():
     failed = {**rec("retail", "3", 1, True), "judge_error": "RateLimitError"}
     broken = rec("retail", "4", 1, False, broken=True)
     assert [fx.needs_judging(r) for r in (ok, skipped, failed, broken)] == [False, True, True, False]
+
+
+def test_pass_at_3_counts_tasks_that_stopped_at_their_first_pass():
+    fx = load()
+    recs = [{**rec("retail", "1", 1, True), "attempt_mode": "until_pass"},
+            *({**rec("retail", "2", i, i == 2), "attempt_mode": "until_pass"} for i in (1, 2)),
+            *({**rec("retail", "3", i, False), "attempt_mode": "until_pass"} for i in (1, 2, 3))]
+    r = fx.report(recs)["retail"]
+    assert r["pass1"] == (1, 3) and r["pass_at_3"] == (2, 3)
+    assert r["pass_all_3"] == (0, 0)  # not measured when retries stop at a pass
