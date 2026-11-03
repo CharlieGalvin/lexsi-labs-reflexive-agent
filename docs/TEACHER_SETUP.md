@@ -63,16 +63,33 @@ parsed. So the teacher runs in **prompted mode** (`TeacherClient("prompted")`, t
 
 - **Prompted JSON tool calls.** Describe the tools in the prompt and ask for a JSON tool call, then parse it. This is the same approach Tiny Aya needs (AgentTune's JSON fallback prompt), so **the teacher and the student should share one tool-call format and parser.** Agree it with the Architect (data contract, SEL-35), so the teacher's fixes are directly usable as training data.
 
-## Cost and budget (to be measured in SEL-37)
+## Cost and budget (measured 3 Nov, `just teacher-check`, prompted mode)
 
-| Item | Estimate before measuring |
-|---|---|
-| Teacher, per conversation | ~100K input tokens (as GPT-4.1 used on telecom) → ~$0.05–0.07 |
-| Simulated customer (GPT-4.1, OpenRouter), per conversation | ~$0.05 (measured in SEL-31) |
-| 200 teacher fixes, plus retries for failed attempts | ~$20–30 |
-| One 4-arm pass on the test split (100 tasks × 4 arms × 3 samples), customer only | ~$60 |
+| Task (first train task) | Result | Teacher calls | Teacher cost | Customer cost | Time |
+|---|---|---:|---:|---:|---:|
+| Retail | ❌ (DB check only, no judge) | 6 | $0.017 | $0.018 | 34 s |
+| Airline | ✅ (DB check only, no judge) | 7 | $0.019 | $0.016 | 36 s |
+| Telecom | ❌ | 19 (182K input tokens) | $0.097 | $0.129 | 138 s |
 
-SEL-37 replaces these with numbers measured on 3 tasks: cost, latency and calls per conversation.
+**Mean per conversation:** teacher $0.044 + customer $0.054, ~70 s. No malformed tool calls.
+
+**Budget**
+
+| Item | Estimate |
+|---|---:|
+| ~200 verified fixes (~600 attempts at the 1/3 pass rate seen here) | ~$60 |
+| Test pass, all 4 arms × 3 samples (1,200 conversations, customer only) | ~$65 |
+| Arm A baseline on train × 3 samples (customer only) | ~$30 |
+| **Total** | **~$155** |
+
+The teacher's pass rate drives the first line, and 3 tasks is too few to know it; SEL-45
+measures it properly. ~600 attempts at ~70 s is ~11 h one after another, so run several at once.
+
+**Backup teacher:** Cohere's Command models support native tool calling, including parallel
+calls, multi-step calls and `tool_choice` ([tool-use usage patterns](https://docs.cohere.com/v2/docs/tool-use-usage-patterns),
+examples with `command-a-plus-05-2026`). `TeacherClient("native", model=...)` already
+supports this. Switching would depart from the proposal's teacher (Aya Expanse 32B), so it's a
+team decision if Aya's pass rate turns out too low.
 
 ## Commands
 
