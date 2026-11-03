@@ -65,19 +65,41 @@ parsed. So the teacher runs in **prompted mode** (`TeacherClient("prompted")`, t
 
 ## Cost and budget (measured 3 Nov, `just teacher-check`, prompted mode)
 
-| Task (first train task) | Result | Teacher calls | Teacher cost | Customer cost | Time |
+| Task (first train task) | Result | Teacher turns | Teacher cost | Customer cost | Time |
 |---|---|---:|---:|---:|---:|
 | Retail | ❌ (DB check only, no judge) | 6 | $0.017 | $0.018 | 34 s |
-| Airline | ✅ (DB check only, no judge) | 7 | $0.019 | $0.016 | 36 s |
+| Airline | ⚠️ "passed" the DB check, but see below | 7 | $0.019 | $0.016 | 36 s |
 | Telecom | ❌ | 19 (182K input tokens) | $0.097 | $0.129 | 138 s |
 
-**Mean per conversation:** teacher $0.044 + customer $0.054, ~70 s. No malformed tool calls.
+**Mean per conversation:** teacher $0.044 + customer $0.054, ~70 s.
+
+**Correction (after reading the transcripts):** these outcomes don't reflect the teacher's
+ability, because of a parser bug, now fixed.
+
+- **Tool calls inside prose were missed.** Aya Expanse wrote its JSON tool calls *inside*
+  normal replies ("I will now call the tool: ```json [...]``` Please confirm"). The parser then
+  only accepted replies that *start* with the JSON, so these went to the customer as text. **No
+  agent tool ran in retail or airline.**
+- **The teacher also hallucinated.** It invented IDs (a user ID and item IDs), wrote its own
+  "Tool result: ...", and confirmed actions that never happened.
+- **The airline "pass" is false.** Nothing changed in the database, and this task's expected
+  end state evidently matches the unchanged database. Its judged check (COMMUNICATE), which
+  needs an OpenAI key, wasn't run.
+- **Telecom's first turn did call tools, with real hallucinations:** a placeholder argument
+  (`"user's phone number"`, an Arg error) and 4 customer-side tools the agent doesn't have
+  (Tool errors).
+- **The fix** (`find_prompted_calls`) takes a tool call written anywhere in the reply, keeps only
+  the call, and drops the prose, including any invented result. `teacher-check` now reports
+  how many agent tool calls actually ran, and warns when none did.
+
+**Re-measure before relying on the pass rate.** Verifying teacher fixes (SEL-9) needs the
+judges (an OpenAI key): database-only scoring can pass a conversation in which nothing happened.
 
 **Budget**
 
 | Item | Estimate |
 |---|---:|
-| ~200 verified fixes (~600 attempts at the 1/3 pass rate seen here) | ~$60 |
+| ~200 verified fixes (~600 attempts if ~1/3 pass; the real rate is still to be measured) | ~$60 |
 | Test pass, all 4 arms × 3 samples (1,200 conversations, customer only) | ~$65 |
 | Arm A baseline on train × 3 samples (customer only) | ~$30 |
 | **Total** | **~$155** |
