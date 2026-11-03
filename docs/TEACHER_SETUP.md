@@ -220,6 +220,10 @@ Same 30 train tasks, database checks only (a best case):
   ~$0.07 / $0.40 per 1M tokens, native tools, thinking on, MIT-licensed weights) and **Aya
   Expanse 32B** as student. The summary prints a fix-pool line per teacher → student pair
   (e.g. `glm → aya`): the tasks the teacher solves and the student doesn't.
+- **GLM-4.7-Flash result (3 Nov): 17/30 (39–73%)**, 3 conversations with invented IDs, $0.66 for
+  all 30. That's 17 possible fixes for Aya 32B (Qwen3 32B: 14). The unaided-Aya problem is solved
+  by changing the teacher. Which teacher, open or closed, is the **teacher bake-off** (SEL-58,
+  `docs/experiments/TEACHER_BAKEOFF.md`, `just teacher-sample aya bakeoff`).
 - **Aya Expanse 8B is no longer on Cohere's API** (`c4ai-aya-expanse-8b` removed 4 Apr 2026;
   [deprecations](https://docs.cohere.com/docs/deprecations)). To test it, serve the open weights
   (`CohereLabs/aya-expanse-8b` on Hugging Face, CC-BY-NC) on any OpenAI-compatible server and

@@ -17,7 +17,11 @@ judged checks would pass too. If even the best case is low, the model is a weak 
   same-size model trained for tool use, so it separates "Aya is weak" from "32B is too small".
 - ``gpt``: GPT-4.1 via OpenRouter (or OpenAI), native tool calling: shows the tasks are solvable.
 - ``glm``: GLM-4.7-Flash (``z-ai/glm-4.7-flash``) via OpenRouter, native tool calling, thinking
-  left on: the candidate *teacher* (MIT-licensed weights, so its outputs can be trained on).
+  left on: the candidate *teacher*.
+- The **teacher bake-off** slate (``--models bakeoff``, see ``SLATE``): open-weight and closed
+  API models from the τ²-bench airline leaderboard, all via OpenRouter with native tools. Any
+  other OpenRouter model works as ``or:<slug>``, e.g. ``or:moonshotai/kimi-k2.6``. Prices and
+  whether the weights are open come live from OpenRouter's public model list.
 - ``aya-steps``: the teacher again, with τ²-bench's resolution steps (tool names in order, no
   IDs) added to its prompt, the hinted test from the decision rule. Train tasks only.
 - ``aya8``: Aya Expanse 8B, a candidate student, prompted like the others inside its real 8K
@@ -38,6 +42,7 @@ stopped (finished tasks are skipped). Prints pass rates with 95% confidence rang
 from __future__ import annotations
 
 import argparse
+import functools
 import json
 import pathlib
 import random
@@ -67,6 +72,24 @@ SAMPLE = {"retail": 20, "airline": 10}
 SEED = 0
 # USD per token, for models whose cost LiteLLM doesn't report (listed prices, 3 Nov 2026)
 PRICES = {"qwen": (0.08e-6, 0.28e-6), "gpt": (2.0e-6, 8.0e-6), "glm": (0.07e-6, 0.40e-6)}
+
+# Teacher bake-off (SEL-58): OpenRouter slugs. Picked from OpenRouter's τ²-bench airline board
+# (3 Nov 2026) to span open vs closed weights and cheap vs strong; scores are that board's.
+SLATE = {
+    # open weights (expected; the run checks OpenRouter's Hugging Face link)
+    "glm": "z-ai/glm-4.7-flash",              # 66.7%, our first pick
+    "glm53f": "z-ai/glm-5.3-flash",           # 75.6%
+    "dsv4f": "deepseek/deepseek-v4-flash",    # 73.9%
+    "mimo": "xiaomi/mimo-v2.6-flash",         # 77.9%
+    "qwen38": "qwen/qwen3.8-27b",             # 77.5%, dense 27B
+    "gemma4": "google/gemma-4-31b-it",        # 75.3%, dense 31B
+    "gptoss": "openai/gpt-oss-120b",          # 65.2%
+    # closed weights
+    "haiku": "anthropic/claude-haiku-5.5",    # 72.8%
+    "gflite": "google/gemini-3.5-flash-lite", # 78.3%
+    "sonnet": "anthropic/claude-sonnet-5.5",  # 78.8%
+    "gpt51": "openai/gpt-5.1",                # 80.0%, the ceiling
+}
 
 
 # --- Task sample --------------------------------------------------------------------------------
@@ -106,8 +129,10 @@ class NativeAgent:
                         *messages[1:]]
         for _attempt in range(2):  # Qwen3 sometimes returns an empty reply: ask once more
             start = time.monotonic()
+            extra = ({"extra_body": {"provider": {"require_parameters": True}}}  # tools must work
+                     if self.model.startswith("openrouter/") else {})
             resp = litellm.completion(model=self.model, messages=messages, tools=tools,
-                                      temperature=0.0, num_retries=3)
+                                      temperature=0.0, num_retries=3, **extra)
             self.usage["seconds"] += time.monotonic() - start
             self.usage["calls"] += 1
             u = getattr(resp, "usage", None)
@@ -164,8 +189,9 @@ def make_agent(name: str) -> Callable[[], Any]:
         return lambda: AyaAgent("tiny-aya-global", prices=(0.0, 0.0))  # price not published
     if name == "aya-steps":
         return AyaAgent
-    if name == "glm":
-        return lambda: NativeAgent("openrouter/z-ai/glm-4.7-flash", PRICES["glm"])
+    if name in SLATE or name.startswith("or:"):
+        slug = SLATE.get(name) or name[3:]
+        return lambda: NativeAgent(f"openrouter/{slug}", openrouter_info(slug)["prices"])
     if name == "aya8":  # self-hosted: Cohere retired c4ai-aya-expanse-8b on 4 Apr 2026
         return _self_hosted_aya8
     raise ValueError(name)
@@ -193,7 +219,44 @@ COUNT = {"tiny": lambda msgs: int(estimate_tokens(msgs) * 1.15),
          "aya8": lambda msgs: int(estimate_tokens(msgs) * 1.15)}
 # τ²-bench resolution-step hints (train tasks only; see Tau2Episode(hints=...))
 HINTS = {"aya-steps": "steps"}
-MODELS = ["aya", "qwen", "gpt", "glm", "tiny", "aya8", "aya-steps"]
+MODELS = ["aya", "qwen", "gpt", "tiny", "aya8", "aya-steps", *SLATE]
+
+
+@functools.cache
+def _openrouter_models() -> dict[str, dict]:
+    """OpenRouter's public model list (no key needed), cached in results/ for a day."""
+    cache = pathlib.Path("results/openrouter_models.json")
+    if not cache.exists() or time.time() - cache.stat().st_mtime > 86_400:
+        try:
+            import httpx
+
+            data = httpx.get("https://openrouter.ai/api/v1/models", timeout=30).json()["data"]
+            cache.parent.mkdir(parents=True, exist_ok=True)
+            cache.write_text(json.dumps(data))
+        except Exception as e:  # noqa: BLE001 - offline: fall back to the cache or fixed prices
+            print(f"   (couldn't fetch OpenRouter's model list: {type(e).__name__})")
+    return {m["id"]: m for m in json.loads(cache.read_text())} if cache.exists() else {}
+
+
+def openrouter_info(slug: str) -> dict:
+    """Listed price per token, open weights or not (has a Hugging Face link), context length."""
+    m = _openrouter_models().get(slug, {})
+    p = m.get("pricing") or {}
+    fixed = next((PRICES[k] for k, v in SLATE.items() if v == slug and k in PRICES), (0.0, 0.0))
+    prices = (float(p["prompt"]), float(p["completion"])) if "prompt" in p else fixed
+    return {"prices": prices, "open_weights": bool(m.get("hugging_face_id")) if m else None,
+            "hf": m.get("hugging_face_id"), "context": m.get("context_length"), "listed": bool(m)}
+
+
+def resolve_models(names: list[str]) -> list[str]:
+    out = []
+    for n in names:
+        out += list(SLATE) if n == "bakeoff" else [n]
+    return list(dict.fromkeys(out))
+
+
+def _file_name(model: str) -> str:
+    return model.replace("or:", "or-").replace("/", "__")
 
 
 # --- One conversation ---------------------------------------------------------------------------
@@ -278,25 +341,31 @@ def summarise(model: str, recs: list[dict]) -> dict:
         "overflow": sum(bool((r.get("flags") or {}).get("context_overflow")) for r in recs),
         "errors": sum(_broken(r) for r in recs),
         "cost": sum(r["agent_usage"]["est_cost"] + (r["user_cost"] or 0) for r in recs),
+        "agent_cost": sum(r["agent_usage"]["est_cost"] for r in recs),
+        "open_weights": _open_weights(model),
         "mean_s": sum(r["wall_s"] for r in recs) / n if n else 0.0,
     }
 
 
 def print_summary(rows: list[dict]) -> None:
     print("\n=== Summary: 30 train tasks that need a state change (DB checks only: a best case) ===")
-    print(f"{'model':<6} {'passed':>9} {'95% range':>12} {'retail':>7} {'airline':>8} "
+    print(f"{'model':<9} {'open':>4} {'passed':>9} {'95% range':>12} {'retail':>7} {'airline':>8} "
           f"{'invented IDs':>13} {'unknown tool':>13} {'retried fail':>13} {'no tools':>9} "
-          f"{'over 8K':>8} {'errors':>7} {'cost':>7}")
+          f"{'over 8K':>8} {'errors':>7} {'cost':>7} {'$/pass':>7}")
     for s in rows:
         lo, hi = s["ci"]
         dom = s["by_domain"]
-        print(f"{s['model']:<6} {s['passed']:>3}/{s['n']:<3} ({s['rate']:>4.0%}) "
+        ow = {True: "yes", False: "no", None: "?"}[s["open_weights"]]
+        per = f"${s['agent_cost'] / s['passed']:.3f}" if s["passed"] else "-"
+        print(f"{s['model'][:9]:<9} {ow:>4} {s['passed']:>3}/{s['n']:<3} ({s['rate']:>4.0%}) "
               f"{lo:>4.0%}–{hi:<4.0%} {dom['retail'][0]:>3}/{dom['retail'][1]:<3} "
               f"{dom['airline'][0]:>3}/{dom['airline'][1]:<4} "
               f"{s['invented_ids']:>9}/{s['n']:<3} {s['unknown_tools']:>9}/{s['n']:<3} "
               f"{s['repeated_failures']:>9}/{s['n']:<3} {s['no_tools']:>5}/{s['n']:<3} "
-              f"{s['overflow']:>4}/{s['n']:<3} {s['errors']:>7} ${s['cost']:>6.2f}")
+              f"{s['overflow']:>4}/{s['n']:<3} {s['errors']:>7} ${s['cost']:>6.2f} {per:>7}")
     print("Counts in the hallucination columns are conversations with at least one such event.")
+    print("open = weights published (OpenRouter links them on Hugging Face); $/pass = the agent's "
+          "own cost per passed task (customer excluded).")
     if any(s["model"] == "tiny" for s in rows):
         print("tiny: cost is the simulated customer only (Tiny Aya's API price isn't published); "
               "'over 8K' = ended by the context guard (estimated tokens).")
@@ -312,8 +381,14 @@ def print_summary(rows: list[dict]) -> None:
         print("  In between                             → add ~20 tasks, or go straight to the hinted test.")
 
 
-TEACHERS = ("gpt", "glm", "qwen", "aya-steps", "aya")  # candidate teachers, strongest first
-STUDENTS = ("aya", "aya8", "tiny")              # candidate students
+STUDENTS = ("aya", "aya8", "tiny")  # candidate students; every other model is a candidate teacher
+
+
+def _open_weights(model: str) -> bool | None:
+    if model in SLATE or model.startswith("or:"):
+        return openrouter_info(SLATE.get(model) or model[3:])["open_weights"]
+    return {"aya": True, "aya-steps": True, "tiny": True, "aya8": True, "qwen": True,
+            "gpt": False}.get(model)
 
 
 def _gone(rec: dict) -> bool:
@@ -323,14 +398,16 @@ def _gone(rec: dict) -> bool:
 
 def print_overlap(passed_by: dict[str, set]) -> None:
     """Teacher vs student: the tasks only the teacher solves are the possible fixes."""
-    pairs = [(t, s) for t in TEACHERS for s in STUDENTS if t != s and t in passed_by and s in passed_by]
+    teachers = sorted((m for m in passed_by if m not in STUDENTS or m == "aya"),
+                      key=lambda m: -len(passed_by[m]))
+    pairs = [(t, s) for t in teachers for s in STUDENTS if t != s and t in passed_by and s in passed_by]
     if not pairs:
         return
     print("\nPossible teacher fixes (tasks the teacher solves and the student doesn't):")
     for t, s in pairs:
         teacher, student = passed_by[t], passed_by[s]
         fix = sorted(teacher - student)
-        print(f"  {t:>9} → {s:<5} {len(fix):>2}   ({len(student - teacher)} the other way, "
+        print(f"  {t[:9]:>9} → {s:<5} {len(fix):>2}   ({len(student - teacher)} the other way, "
               f"{len(teacher & student)} both)  {', '.join(f'{d}:{i}' for d, i in fix) or '-'}")
 
 
@@ -339,7 +416,9 @@ def print_overlap(passed_by: dict[str, set]) -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--models", nargs="+", choices=MODELS, default=["aya", "qwen"])
+    ap.add_argument("--models", nargs="+", default=["aya", "qwen"],
+                    help=f"any of {', '.join(MODELS)}; 'bakeoff' for the whole slate; or:<openrouter slug>")
+    ap.add_argument("--json", type=pathlib.Path, help="also write the summary rows to this file")
     ap.add_argument("--workers", type=int, default=4, help="conversations run at once per model")
     ap.add_argument("--fresh", action="store_true", help="ignore earlier results and start again")
     ap.add_argument("--list", action="store_true", help="only print the task sample")
@@ -347,6 +426,10 @@ def main() -> int:
     ap.add_argument("--retry-broken", action="store_true",
                     help="re-run conversations that broke (API failures, crashes)")
     a = ap.parse_args()
+    a.models = resolve_models(a.models)
+    bad = [m for m in a.models if m not in MODELS and not m.startswith("or:")]
+    if bad:
+        ap.error(f"unknown model(s) {bad}; choose from {MODELS}, 'bakeoff' or or:<slug>")
 
     tasks = sample_tasks()  # also loads each domain's tasks once, before the worker threads
     tasks = tasks[:a.limit] if a.limit else tasks
@@ -363,7 +446,12 @@ def main() -> int:
     rows = []
     passed_by: dict[str, set] = {}
     for model in a.models:
-        out = pathlib.Path(f"results/episodes/sample-{model}.jsonl")
+        out = pathlib.Path(f"results/episodes/sample-{_file_name(model)}.jsonl")
+        if model in SLATE or model.startswith("or:"):
+            info = openrouter_info(SLATE.get(model) or model[3:])
+            if info["listed"] is False and _openrouter_models():
+                print(f"\n== {model}: ⛔ not on OpenRouter's model list, skipped")
+                continue
         out.parent.mkdir(parents=True, exist_ok=True)
         done: dict[tuple[str, str], dict] = {}
         if out.exists() and not a.fresh:
@@ -409,6 +497,9 @@ def main() -> int:
         passed_by[model] = {t for t in tasks if t in done and done[t]["outcome"]["passed"]}
     print_summary(rows)
     print_overlap(passed_by)
+    if a.json:
+        a.json.parent.mkdir(parents=True, exist_ok=True)
+        a.json.write_text(json.dumps(rows, indent=1))
     return 0
 
 

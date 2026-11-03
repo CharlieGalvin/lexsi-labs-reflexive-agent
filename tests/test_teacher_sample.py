@@ -156,8 +156,26 @@ def test_aya8_is_self_hosted_inside_its_8k_window(monkeypatch):
     assert ts.CONTEXT["aya8"] == (8192, 1024)
 
 
-def test_glm_is_a_native_teacher_and_removed_models_stop_the_run():
+FAKE_LIST = {
+    "z-ai/glm-4.7-flash": {"id": "z-ai/glm-4.7-flash", "hugging_face_id": "zai-org/GLM-4.7-Flash",
+                           "pricing": {"prompt": "0.00000007", "completion": "0.0000004"}},
+    "anthropic/claude-haiku-5.5": {"id": "anthropic/claude-haiku-5.5", "hugging_face_id": "",
+                                   "pricing": {"prompt": "0.000001", "completion": "0.000005"}},
+}
+
+
+def test_bakeoff_slate_prices_and_open_weights_come_from_openrouter(monkeypatch):
     ts = load()
-    assert ts.make_agent("glm")().model == "openrouter/z-ai/glm-4.7-flash" and "glm" in ts.TEACHERS
+    monkeypatch.setattr(ts, "_openrouter_models", lambda: FAKE_LIST)
+    glm = ts.make_agent("glm")()
+    assert glm.model == "openrouter/z-ai/glm-4.7-flash" and glm.prices == (7e-8, 4e-7)
+    assert ts._open_weights("glm") is True and ts._open_weights("haiku") is False
+    assert ts.make_agent("or:anthropic/claude-haiku-5.5")().prices == (1e-6, 5e-6)
+    assert ts.resolve_models(["aya", "bakeoff", "glm"])[:3] == ["aya", "glm", "glm53f"]
+    assert ts._file_name("or:moonshotai/kimi-k2.6") == "or-moonshotai__kimi-k2.6"
+
+
+def test_removed_models_stop_the_run():
+    ts = load()
     assert ts._gone({"error": "NotFoundError: model 'x' was removed on April 4, 2026"})
     assert not ts._gone({"error": "RateLimitError"}) and not ts._gone({})
