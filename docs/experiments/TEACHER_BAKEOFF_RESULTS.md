@@ -1,5 +1,9 @@
 # Teacher bake-off, phase 1: results (3 Nov 2026, SEL-58)
 
+> **Status: final for phase 1.** The "next steps" planned at the end were changed before
+> phase 2 ran; see [What happened next](#what-happened-next) and the
+> [phase 2 results](TEACHER_PHASE2_RESULTS.md).
+
 > **Update (3 Nov, phase 2):** the full train split settled it: **GLM-5.3-Flash is the teacher**. See [`TEACHER_PHASE2_RESULTS.md`](TEACHER_PHASE2_RESULTS.md).
 
 **Recommendation:** use an **open-weight teacher**, either **GLM-5.3-Flash** or **Qwen3.8 27B**,
@@ -186,12 +190,16 @@ invented IDs for the top tier: **0**. The check should ignore dates (follow-up).
 - **Third-party providers.** Open models were served by OpenRouter's providers, which can differ
   in quantisation. Phase 2 should pin the provider.
 
-## Next steps (phase 2)
+## What happened next
 
-- **Shortlist under the pre-agreed rule:** GLM-5.3-Flash (cheapest open model in the top tier),
-  Claude Sonnet 5.5 (only closed model in the top tier) and GLM-4.7-Flash (baseline).
-- **Proposed addition:** Qwen3.8 27B (top scorer, ~$28 total). This is a deviation from the
-  rule, recorded here.
-- **Run:** 70 new tasks including 10 telecom, 3 attempts each, judges on (needs an OpenAI key),
-  providers pinned.
-- **Decide on:** clean fixes per dollar, with the licence check.
+The plan at the time was a phase 2 with GLM-5.3-Flash, Claude Sonnet 5.5, GLM-4.7-Flash and
+Qwen3.8 27B on 70 new tasks, 3 attempts each, providers pinned. What actually ran (3 Nov):
+
+- **Two finalists, both open-weight:** GLM-5.3-Flash and Qwen3.8 27B. The cost-performance
+  analysis above put them ahead. Sonnet was within the statistical tie but closed and
+  ~6–15× the cost, so it was dropped; GLM-4.7-Flash was no longer needed as a baseline.
+- **Qwen with thinking turned off,** to test whether its wins survive without hidden
+  reasoning, which the student never sees.
+- **Every train task, with telecom back in,** 1 attempt each, judges on, providers not pinned.
+- **Result:** GLM-5.3-Flash 88% vs Qwen 68% on 138 paired tasks; tied on retail and airline,
+  89% vs 49% on telecom. [Phase 2 results](TEACHER_PHASE2_RESULTS.md).

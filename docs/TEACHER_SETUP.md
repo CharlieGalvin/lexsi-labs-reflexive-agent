@@ -1,4 +1,26 @@
-# Teacher setup: Aya Expanse 32B via the Cohere API (SEL-37)
+# Teacher setup (SEL-37, SEL-8)
+
+**Current setup (decided 3 Nov): the teacher is GLM-5.3-Flash** (`z-ai/glm-5.3-flash`, MIT
+licence) via OpenRouter, with native tool calling. The student is **Aya Expanse 32B**.
+
+| What | How |
+|---|---|
+| Teacher | `openrouter/z-ai/glm-5.3-flash`, native tool calls, temperature 0 (then 0.7 for retries) |
+| Simulated customer | `openrouter/openai/gpt-4.1`, replies capped at 2,048 tokens |
+| Judges | τ²-bench's own: retail `gpt-5.4-mini`, airline `gpt-5.5`, via OpenAI |
+| Keys (`.env`) | `OPENROUTER_API_KEY` (teacher + customer), `OPENAI_API_KEY` (judges) |
+| Run | `just teacher-fixes` (see `--help`); `--report` summarises what's saved, for free |
+| Cost | ~$11 for all 178 train tasks, mostly the telecom customer |
+| Why GLM | [`experiments/TEACHER_PHASE2_RESULTS.md`](experiments/TEACHER_PHASE2_RESULTS.md) |
+
+**The rest of this page is the 3 Nov record of Aya Expanse 32B as the teacher**, before it
+became the student. It's still the reference for **how Aya is prompted**: Cohere's `Action:`
+tool-call format (`teacher.to_prompted`, `style="cohere"`) is the format the student is
+evaluated and trained in (data contract, 4 Nov).
+
+---
+
+# History: Aya Expanse 32B via the Cohere API
 
 The teacher model (Role 1, Curator) takes the agent seat in τ²-bench conversations on tasks the
 student failed. Its verified wins become golden-fix training data (SEL-8, SEL-45, SEL-9).

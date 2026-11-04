@@ -1,5 +1,8 @@
 # Teacher bake-off, phase 2: GLM-5.3-Flash is the teacher (3 Nov 2026, SEL-58)
 
+> **Status: final.** The fixes became the golden trajectories v1 dataset on 4 Nov:
+> [`GOLDEN_TRAJECTORIES_V1.md`](GOLDEN_TRAJECTORIES_V1.md).
+
 **Decision: GLM-5.3-Flash.** On the full τ²-bench train split (178 tasks across retail, airline
 and telecom, with judges on), it passes **88% on the first try** and produces a verified fix for
 **158 of the 178 tasks**. That cost **$11** in total. On a paired comparison over the same 138
@@ -129,7 +132,8 @@ failed-call retries and no unknown tools.
 - **The fixes exist already:** 193 clean fixes for 158 of the 178 train tasks, in
   `results/fixes/glm53f.jsonl`. The other 20 tasks (10 retail, 8 telecom, 2 airline) have no
   fix yet. They're the hard subset's core (SEL-7), and could get retries at temperature 0.7.
-- **Before hand-over:**
-  1. Freeze the dev split (SEL-36) and drop dev tasks' fixes.
-  2. Convert the fixes to Aya's format and re-score them (SEL-35, SEL-9).
-  3. Package the dataset for the Architect and Trainer.
+- **After this (4 Nov), all done:**
+  1. Dev split frozen (SEL-36): `configs/splits.json`, 36 dev tasks.
+  2. Fixes converted to Aya's Cohere format and checked (SEL-9): `just golden`.
+  3. Packaged as **127 training + 31 dev reference records**, ready for a private upload
+     (SEL-48): `just golden-publish`. See [`GOLDEN_TRAJECTORIES_V1.md`](GOLDEN_TRAJECTORIES_V1.md).
