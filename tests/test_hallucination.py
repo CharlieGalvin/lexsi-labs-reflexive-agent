@@ -267,3 +267,13 @@ def test_chat_after_a_real_hand_off_is_not_a_loop():
     assert classify(chat, termination="max_steps").failure is FailureType.NONE
     claimed = [SYS] + chat[4:]  # says a human is coming, but never handed off
     assert {"repeated_message", "step_limit"} <= kinds(classify(claimed, termination="max_steps"))
+
+
+def test_example_dot_com_email_is_not_a_placeholder():
+    # τ²-bench's retail and airline customers all have @example.com addresses
+    msgs = [
+        SYS,
+        user("My email is yusuf.rossi7301@example.com"),
+        call("find_user_id_by_email", {"email": "yusuf.rossi7301@example.com"}),
+    ]
+    assert classify(msgs, RETAIL).failure is FailureType.NONE

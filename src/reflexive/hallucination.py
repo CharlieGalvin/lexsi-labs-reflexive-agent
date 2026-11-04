@@ -125,7 +125,8 @@ _FREE_TEXT = {"summary", "reason", "expression", "app_name"}
 _PLACEHOLDER = re.compile(
     r"[<>{}]|\b(?:from (?:the )?(?:previous|prior|above|last|earlier|search|results?|lookup|tool|"
     r"customer|data|response|output)|not provided|placeholder|insert|replace|"
-    r"goes here|your[_ ]|customer'?s|user'?s|the customer|the user|unknown|e\.g\.|example|tbd|n/a|x{3,})\b"
+    r"goes here|your[_ ]|customer'?s|user'?s|the customer|the user|unknown|"
+    r"e\.g\.|for example|tbd|n/a|x{3,})\b"
     r"|_here\b|\byyyy\b|\bmm-dd\b|^(?:id|line[_ ]id|customer[_ ]id|user[_ ]id|order[_ ]id|"
     r"reservation[_ ]id|phone[_ ]number)$",
     re.I,
