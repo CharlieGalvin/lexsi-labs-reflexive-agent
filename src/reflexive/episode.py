@@ -35,6 +35,11 @@ fewer tokens, which matters with Tiny Aya's 8,192-token window.
 which actions the task needs. Allowed on train-split tasks only, and recorded in `record()`.
 The student is trained on the conversation, not on this prompt.
 
+**Prompt variants (the arms).** ``prompt_variant`` picks what goes in the agent's instructions:
+``"default"`` is τ²-bench's prompt unchanged (Arm A); ``"careful"`` adds the fixed
+anti-hallucination instruction `CAREFUL_INSTRUCTION` (Arm C, the prompt-only control). The
+variant and its version are recorded in `record()`. See `reflexive.arms`.
+
 **Context guard.** `prompt()` keeps the prompt (conversation plus tool definitions) within
 ``max_context - reserve`` tokens, where ``reserve`` is room left for the model's reply, by
 replacing the oldest tool results with a short placeholder (in what the model sees only: the
@@ -57,6 +62,20 @@ from reflexive.outcome import from_openai, scorer, to_openai
 
 TRUNCATED = "[older tool result removed to fit the context window]"
 HINTS = ("none", "steps", "steps_with_args")
+
+# Arm C's fixed instruction (SEL-41). It names the three failure types we heal (Tool / Arg / Loop)
+# plus ungrounded claims, so Arm C is a fair test of "just tell the model". Never edit it in place:
+# a change makes earlier Arm C runs incomparable. Write a new version and bump CAREFUL_VERSION.
+CAREFUL_VERSION = "careful/v1"
+CAREFUL_INSTRUCTION = """Be careful not to hallucinate:
+- Only call tools you have been given. Never invent a tool or a tool name.
+- Only use argument values (IDs, names, dates, amounts) that the user gave you or that a tool \
+returned earlier in this conversation. If you don't have a value, ask the user or look it up \
+first. Never guess or make one up.
+- If a tool call returns an error, read it and change something before trying again. Never \
+repeat the same call with the same arguments.
+- Only tell the user things that the policy or a tool result supports. If you don't know, say so."""
+PROMPT_VARIANTS = {"default": None, "careful": CAREFUL_INSTRUCTION}
 DEFAULT_MAX_STEPS = 200  # same as `tau2 run`
 DEFAULT_MAX_ERRORS = 10
 
@@ -114,11 +133,15 @@ class Tau2Episode:
                  user_llm_args: dict | None = None, max_steps: int = DEFAULT_MAX_STEPS,
                  max_context: int = 8192, reserve: int = 1024,
                  count_tokens: Callable[[list[dict]], int] = estimate_tokens,
-                 language: str = "en", seed: int | None = None, hints: str = "none"):
+                 language: str = "en", seed: int | None = None, hints: str = "none",
+                 prompt_variant: str = "default"):
         from reflexive.llm import default_model, register_openrouter_prices
 
         if hints not in HINTS:
             raise ValueError(f"hints must be one of {HINTS}")
+        if prompt_variant not in PROMPT_VARIANTS:
+            raise ValueError(f"prompt_variant must be one of {tuple(PROMPT_VARIANTS)}")
+        self.prompt_variant = prompt_variant
 
         register_openrouter_prices()
         self.domain, self.task_id, self.language, self.seed = domain, task_id, language, seed
@@ -184,6 +207,10 @@ class Tau2Episode:
             self.done = True
             self.ended = time.time()
         obs = self._env._agent.observation
+        if len(obs) < len(self._view):
+            # τ²-bench clears the agent's observation when the run ends. Keep what the agent saw,
+            # or `messages()` (the agent's view) would be only the system prompt afterwards.
+            return []
         new = obs[len(self._view):]
         self._view = list(obs)
         return [self._for_model(m) for m in to_openai(new)]
@@ -205,19 +232,19 @@ class Tau2Episode:
         actions, worded by τ²-bench itself (``steps``: tool names only; ``steps_with_args``:
         with the exact arguments). We keep the standard agent instructions rather than
         τ²-bench's GT wording ("You are testing that our user simulator is working correctly").
+
+        With ``prompt_variant="careful"`` (Arm C), `CAREFUL_INSTRUCTION` is added at the end of
+        the ``<instructions>`` block; nothing else changes.
         """
         from tau2.agent.llm_agent import AGENT_INSTRUCTION, SYSTEM_PROMPT, SYSTEM_PROMPT_GT
-        if len(obs) < len(self._view):
-            # τ²-bench clears the agent's observation when the run ends. Keep what the agent saw,
-            # or `messages()` (the agent's view) would be only the system prompt afterwards.
-            return []
 
+        extra = PROMPT_VARIANTS[self.prompt_variant]
+        instruction = f"{AGENT_INSTRUCTION}\n\n{extra}" if extra else AGENT_INSTRUCTION
         steps = self.resolution_steps()
         if steps:
-            return SYSTEM_PROMPT_GT.format(agent_instruction=AGENT_INSTRUCTION,
+            return SYSTEM_PROMPT_GT.format(agent_instruction=instruction,
                                            domain_policy=self.policy, resolution_steps=steps)
-        return SYSTEM_PROMPT.format(agent_instruction=AGENT_INSTRUCTION,
-                                    domain_policy=self.policy)
+        return SYSTEM_PROMPT.format(agent_instruction=instruction, domain_policy=self.policy)
 
     def resolution_steps(self) -> str:
         """τ²-bench's resolution steps for this task ("" without hints or expected actions)."""
@@ -357,6 +384,8 @@ class Tau2Episode:
             "format": "reagent.tau2.episode/v0",
             "domain": self.domain, "task_id": self.task_id, "language": self.language,
             "hints": self.hints, "hinted": bool(self.resolution_steps()),
+            "prompt_variant": self.prompt_variant,
+            "prompt_version": CAREFUL_VERSION if self.prompt_variant == "careful" else "tau2/default",
             "termination": self.termination,
             "outcome": {"passed": outcome.passed, "reward": outcome.reward,
                         "checks": outcome.checks, "judged": outcome.judged,

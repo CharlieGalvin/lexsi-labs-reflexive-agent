@@ -101,4 +101,10 @@ teacher-sample *models="aya qwen":
 bakeoff-report:
     python scripts/bakeoff_report.py
 
-# Experiment commands (train, baseline, evaluate…) are added by the Architect and Trainer.
+# --- Experiment arms (configs/arms.yaml) ----------------------------------------
+
+# Run an arm on a domain's split, e.g. `just rollout A retail --limit 5` or `just rollout C telecom`
+rollout arm domain *args:
+    python scripts/rollout.py {{arm}} {{domain}} {{args}}
+
+# Experiment commands (train, evaluate…) are added by the Architect and Trainer.
