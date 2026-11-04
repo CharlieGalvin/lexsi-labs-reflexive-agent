@@ -16,7 +16,7 @@ dependencies = [
 [project.optional-dependencies]
 # AgentTune is installed from source by `just setup`; it pins torch + transformers.
 train = ["datasets", "peft", "wandb"]
-dev = ["pytest>=8", "ruff>=0.6"]
+dev = ["pytest>=8", "ruff>=0.6", "huggingface_hub>=0.24"]   # huggingface_hub: just golden-publish
 # τ²-bench itself is NOT installed from here: a pip install from git leaves out its data/ folder
 # (tasks, databases, language packs). `just setup-dev` clones v2.0.0 into third_party/ and
 # installs it editable instead. This extra only adds what τ²-bench needs on top.
