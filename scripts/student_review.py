@@ -175,8 +175,8 @@ def print_summary(name: str, s: dict) -> None:
         print(f"Tools called that the agent doesn't have ({sum(s['unknown_tools'].values())} calls; "
               "8 commonest):", dict(s["unknown_tools"].most_common(8)))
     if s["failed_lookups"]:
-        print("Lookups that came back 'not found' (usually a wrong or invented ID):",
-              dict(s["failed_lookups"].most_common(8)))
+        print(f"Lookups that came back 'not found' ({sum(s['failed_lookups'].values())} calls; 8 commonest; "
+              "usually a wrong or invented ID):", dict(s["failed_lookups"].most_common(8)))
 
 
 # --- HTML log page -------------------------------------------------------------------------------
