@@ -7,6 +7,7 @@ Read these in order. Each page says at the top whether it's final, and what supe
 | 1 | [`TEACHER_BAKEOFF.md`](TEACHER_BAKEOFF.md) | 3 Nov | How should we pick the teacher? | The pre-registered design: phases, shortlist rule, measures | Design; phase 2 ran differently (noted at the top) |
 | 2 | [`TEACHER_BAKEOFF_RESULTS.md`](TEACHER_BAKEOFF_RESULTS.md) | 3 Nov | Which of 12 models are good enough, and at what cost? | A statistical tie at the top; GLM-5.3-Flash and Qwen3.8 27B are the cheapest there | Final |
 | 3 | [`TEACHER_PHASE2_RESULTS.md`](TEACHER_PHASE2_RESULTS.md) | 3 Nov | GLM-5.3-Flash or Qwen3.8 27B (thinking off), on every train task? | **GLM-5.3-Flash**: 88% vs 68%, decided by telecom (89% vs 49%); 158 of 178 tasks solved for $11 | Final |
+| 3b | [`STUDENT_REVIEW_AYA.md`](STUDENT_REVIEW_AYA.md) ([log page](reports/aya_student_review.html)) | 4 Nov | Where does the student, Aya Expanse 32B, go wrong? Is it the format? | 7/30 passed; 0 unreadable calls. It's behaviour: phone tools, batching, invented IDs, retries | Final (30-task sample) |
 | 4 | [`GOLDEN_TRAJECTORIES_V1.md`](GOLDEN_TRAJECTORIES_V1.md) | 4 Nov | What exactly does the Trainer get? | **127 training + 31 dev reference records**, checked end to end | Final; private upload pending |
 
 **Decisions along the way**, and where each is recorded:

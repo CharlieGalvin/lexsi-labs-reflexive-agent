@@ -85,6 +85,20 @@ roughly 11–13K tokens. Everything fits a 16K context.
 4. Every record opens with the agent's fixed greeting before any customer message. Aya's
    baseline sees the same, but some chat templates expect a user turn first.
 
+## To do: back up the raw run files
+
+The raw teacher and student runs exist only on Charlie's laptop (`results/`, gitignored):
+
+| File | Why it matters |
+|---|---|
+| `results/fixes/glm53f.jsonl` | The source of this dataset: `just golden` rebuilds everything from it |
+| `results/fixes/aya.jsonl` | The 30/30 agent's-view check, and the [student review](STUDENT_REVIEW_AYA.md) |
+| `results/fixes/qwen38nt.jsonl` | The phase 2 comparison behind choosing GLM |
+| `results/episodes/sample-*.jsonl` | Phase 1 bake-off |
+
+**Plan:** upload them to the same private HF dataset under `raw/`, so Chiara and Katie can
+re-run `just golden` and the reports (SEL-48).
+
 ## Limitations
 
 - **One teacher**, at temperature 0 for 156 of the 158 tasks. The records carry GLM's style,
