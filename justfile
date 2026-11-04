@@ -55,6 +55,10 @@ check: lint test
 
 # --- τ²-bench ----------------------------------------------------------------
 
+# Confirm configs/splits.json matches a rebuild from its seed (SEL-36)
+splits-check:
+    python scripts/make_splits.py --check
+
 # Splits, prompt sizes and context fit per domain (no API calls)
 tau2-inspect:
     python scripts/tau2_inspect.py
