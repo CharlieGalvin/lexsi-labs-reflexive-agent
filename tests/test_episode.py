@@ -126,3 +126,54 @@ def test_tool_functions_match_the_tools_and_run_in_the_conversation():
 def test_unknown_task_fails_fast():
     with pytest.raises(KeyError):
         Tau2Episode("retail", "no-such-task", **CUSTOMER)
+
+
+def test_empty_agent_turn_is_refused_and_the_conversation_carries_on():
+    ep = Tau2Episode("retail", "0", **CUSTOMER)
+    ep.reset()
+    with pytest.raises(ValueError, match="message or at least one tool call"):
+        ep.step({"role": "assistant", "content": "   "})
+    assert not ep.done
+    new = ep.step({"role": "assistant", "content": "How can I help with your order?"})
+    assert new and new[0]["role"] == "user"
+    ep.finish()
+    assert ep.record(judges=False)["termination"] == "agent_stop"
+
+
+def test_hints_add_taus_resolution_steps_without_ids():
+    ep = Tau2Episode("retail", "0", **CUSTOMER, hints="steps")
+    ep.reset()
+    assert "<resolution_steps>" in ep.system_prompt
+    assert "[Step 1] Assistant action: find_user_id_by_name_zip." in ep.system_prompt
+    assert "#W2378156" not in ep.resolution_steps()  # names only: the IDs must be looked up
+    ep.finish()
+    rec = ep.record(judges=False)
+    assert rec["hints"] == "steps" and rec["hinted"]
+
+
+def test_hints_with_args_include_the_exact_call():
+    ep = Tau2Episode("retail", "0", **CUSTOMER, hints="steps_with_args")
+    assert "exchange_delivered_order_items(order_id=#W2378156" in ep.resolution_steps()
+
+
+def test_hints_are_refused_on_test_split_tasks():
+    from tau2.registry import registry
+
+    test_task = registry.get_task_splits_loader("retail")()["test"][0]
+    with pytest.raises(ValueError, match="only allowed on train-split"):
+        Tau2Episode("retail", test_task, **CUSTOMER, hints="steps")
+
+
+def test_tasks_without_expected_actions_get_no_hints():
+    ep = Tau2Episode("airline", "0", **CUSTOMER, hints="steps")  # a "refuse the request" task
+    assert ep.resolution_steps() == ""
+    ep.reset()
+    assert "<resolution_steps>" not in ep.system_prompt
+    ep.finish()
+
+
+def test_default_prompt_has_no_hints():
+    ep = Tau2Episode("retail", "0", **CUSTOMER)
+    ep.reset()
+    assert "<resolution_steps>" not in ep.system_prompt
+    ep.finish()

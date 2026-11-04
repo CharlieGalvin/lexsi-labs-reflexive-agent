@@ -100,3 +100,14 @@ def test_unknown_task_and_role_raise():
         scorer("telecom").task("nope")
     with pytest.raises(ValueError, match="Unknown message role"):
         from_openai([{"role": "narrator", "content": "x"}])
+
+
+def test_to_openai_expands_a_bundle_of_tool_results():
+    # τ²-bench bundles several results into a MultiToolMessage (seen 3 Nov, ending a run)
+    from tau2.data_model.message import MultiToolMessage, ToolMessage
+
+    bundle = MultiToolMessage(role="tool", tool_messages=[
+        ToolMessage(id="a", role="tool", content="1", requestor="assistant"),
+        ToolMessage(id="b", role="tool", content="2", requestor="assistant")])
+    assert to_openai([bundle]) == [{"role": "tool", "tool_call_id": "a", "content": "1"},
+                                   {"role": "tool", "tool_call_id": "b", "content": "2"}]

@@ -30,6 +30,11 @@ a turn with both is passed through as it is, as in an official run.
 **Tool results** go back to the model as compact JSON (no indentation): it's the same data in
 fewer tokens, which matters with Tiny Aya's 8,192-token window.
 
+**Hints (teacher only).** ``hints="steps"`` adds τ²-bench's own resolution steps for the task
+(its `llm_agent_gt` setting) to the system prompt, so a teacher producing training data knows
+which actions the task needs. Allowed on train-split tasks only, and recorded in `record()`.
+The student is trained on the conversation, not on this prompt.
+
 **Context guard.** `prompt()` keeps the prompt (conversation plus tool definitions) within
 ``max_context - reserve`` tokens, where ``reserve`` is room left for the model's reply, by
 replacing the oldest tool results with a short placeholder (in what the model sees only: the
@@ -51,6 +56,7 @@ from typing import Any
 from reflexive.outcome import from_openai, scorer, to_openai
 
 TRUNCATED = "[older tool result removed to fit the context window]"
+HINTS = ("none", "steps", "steps_with_args")
 DEFAULT_MAX_STEPS = 200  # same as `tau2 run`
 DEFAULT_MAX_ERRORS = 10
 
@@ -95,6 +101,12 @@ def fit_context(messages: list[dict], budget: int,
     return out, trimmed, count_tokens(out) <= budget
 
 
+def _split(domain: str, name: str) -> set[str]:
+    from tau2.registry import registry
+
+    return set(registry.get_task_splits_loader(domain)()[name])
+
+
 class Tau2Episode:
     """One τ²-bench conversation: our code plays the agent, τ²-bench plays everything else."""
 
@@ -102,8 +114,11 @@ class Tau2Episode:
                  user_llm_args: dict | None = None, max_steps: int = DEFAULT_MAX_STEPS,
                  max_context: int = 8192, reserve: int = 1024,
                  count_tokens: Callable[[list[dict]], int] = estimate_tokens,
-                 language: str = "en", seed: int | None = None):
+                 language: str = "en", seed: int | None = None, hints: str = "none"):
         from reflexive.llm import default_model, register_openrouter_prices
+
+        if hints not in HINTS:
+            raise ValueError(f"hints must be one of {HINTS}")
 
         register_openrouter_prices()
         self.domain, self.task_id, self.language, self.seed = domain, task_id, language, seed
@@ -112,6 +127,11 @@ class Tau2Episode:
         self.max_steps, self.max_context, self.reserve = max_steps, max_context, reserve
         self.count_tokens = count_tokens
         scorer(domain, language).task(task_id)  # fail fast on an unknown task id
+        self.hints = hints
+        if hints != "none" and task_id not in _split(domain, "train"):
+            # Hints come from the task's answer key: allowed only for producing training data,
+            # never for anything that is evaluated (test split, the four arms).
+            raise ValueError(f"hints are only allowed on train-split tasks ({domain} {task_id!r})")
         self._env = None
         self._view: list[Any] = []  # what the agent has seen so far (τ²-bench messages)
         self.flags: dict[str, Any] = {"context_overflow": False, "tool_results_trimmed": 0,
@@ -142,6 +162,9 @@ class Tau2Episode:
             raise RuntimeError("The conversation has ended")
         if reply.get("role", "assistant") != "assistant":
             raise ValueError("An agent turn must have role 'assistant'")
+        if not reply.get("tool_calls") and not (reply.get("content") or "").strip():
+            # τ²-bench rejects this and the whole run crashes, losing the conversation
+            raise ValueError("An agent turn needs a message or at least one tool call (got neither)")
         (msg,) = from_openai([{**reply, "role": "assistant"}])
         self._env._agent.set_action(msg)
         self._wait_for_turn()
@@ -175,11 +198,37 @@ class Tau2Episode:
 
     @property
     def system_prompt(self) -> str:
-        """Exactly τ²-bench's agent prompt: its instructions + this domain's policy."""
-        from tau2.agent.llm_agent import AGENT_INSTRUCTION, SYSTEM_PROMPT
+        """Exactly τ²-bench's agent prompt: its instructions + this domain's policy.
 
+        With ``hints``, τ²-bench's ground-truth layout (`llm_agent_gt`) is used instead: the
+        same instructions and policy plus ``<resolution_steps>`` from the task's expected
+        actions, worded by τ²-bench itself (``steps``: tool names only; ``steps_with_args``:
+        with the exact arguments). We keep the standard agent instructions rather than
+        τ²-bench's GT wording ("You are testing that our user simulator is working correctly").
+        """
+        from tau2.agent.llm_agent import AGENT_INSTRUCTION, SYSTEM_PROMPT, SYSTEM_PROMPT_GT
+
+        steps = self.resolution_steps()
+        if steps:
+            return SYSTEM_PROMPT_GT.format(agent_instruction=AGENT_INSTRUCTION,
+                                           domain_policy=self.policy, resolution_steps=steps)
         return SYSTEM_PROMPT.format(agent_instruction=AGENT_INSTRUCTION,
                                     domain_policy=self.policy)
+
+    def resolution_steps(self) -> str:
+        """τ²-bench's resolution steps for this task ("" without hints or expected actions)."""
+        from tau2.agent.llm_agent import LLMGTAgent
+
+        if self.hints == "none":
+            return ""
+        task = scorer(self.domain, self.language).task(self.task_id)
+        if not (task.evaluation_criteria and task.evaluation_criteria.actions):
+            return ""  # e.g. "refuse the request" tasks: nothing to hint
+        with_args = self.hints == "steps_with_args"
+        return "\n".join(
+            f"[Step {i + 1}] "
+            f"{LLMGTAgent.make_agent_instructions_from_action(a, include_function_args=with_args)}"
+            for i, a in enumerate(task.evaluation_criteria.actions))
 
     @property
     def tool_schemas(self) -> list[dict]:
@@ -277,9 +326,17 @@ class Tau2Episode:
         return run.termination_reason.value
 
     def trajectory(self) -> list[dict]:
-        """The full conversation, including the customer's own tool calls, as OpenAI-style dicts."""
+        """The full conversation, including the customer's own tool calls, as OpenAI-style dicts.
+
+        If τ²-bench's run crashed, this is the conversation up to the crash.
+        """
         run = self._env._simulation_run
-        return to_openai(run.messages) if run is not None and run.messages else []
+        if run is not None and run.messages:
+            return to_openai(run.messages)
+        try:  # crashed run: recover what the orchestrator had so far
+            return to_openai(self._env._orchestrator.get_messages())
+        except Exception:  # noqa: BLE001 - best effort; an empty trajectory is still valid
+            return []
 
     def record(self, judges: bool = True, **extra: Any) -> dict:
         """Everything about this conversation, ready to save as one JSON line.
@@ -295,6 +352,7 @@ class Tau2Episode:
         return {
             "format": "reagent.tau2.episode/v0",
             "domain": self.domain, "task_id": self.task_id, "language": self.language,
+            "hints": self.hints, "hinted": bool(self.resolution_steps()),
             "termination": self.termination,
             "outcome": {"passed": outcome.passed, "reward": outcome.reward,
                         "checks": outcome.checks, "judged": outcome.judged,

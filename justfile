@@ -83,4 +83,22 @@ tau2-episode-check:
 tau2-check-gold *domains:
     python scripts/tau2_check_scorer.py gold {{domains}}
 
+# --- Teacher (Aya Expanse 32B via Cohere; needs COHERE_API_KEY) -----------------
+
+# Does a Cohere model do native tool calling? 3 API calls (default: the teacher; or tiny-aya-global)
+teacher-probe model="c4ai-aya-expanse-32b":
+    python scripts/teacher_probe.py --model {{model}}
+
+# Teacher on 3 tasks (one per domain). style: cohere (Aya's own) | agenttune; hints: none | steps | steps_with_args
+teacher-check style="cohere" hints="none":
+    python scripts/teacher_check.py --style {{style}} --hints {{hints}}
+
+# Is Aya a usable teacher? Same 30 train tasks for Aya and a reference (default: Qwen3 32B). ~$5
+teacher-sample *models="aya qwen":
+    python scripts/teacher_sample.py --models {{models}}
+
+# Bake-off statistics and projected cost from the saved runs in results/episodes (no API calls)
+bakeoff-report:
+    python scripts/bakeoff_report.py
+
 # Experiment commands (train, baseline, evaluate…) are added by the Architect and Trainer.
