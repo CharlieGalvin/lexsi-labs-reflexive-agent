@@ -486,6 +486,11 @@ def run_one(model: str, domain: str, task_id: str, *, temperature: float = 0.0,
         "unseen_arguments": unseen_arguments(msgs),
         **tool_errors(msgs),
     }
+    if ep._env is not None:  # what the agent was actually shown (system prompt included)
+        try:
+            rec["agent_view"] = ep.messages()
+        except Exception:  # noqa: BLE001 - never lose a conversation over this extra
+            pass
     raw = getattr(getattr(agent, "client", None), "raw_turns", None)
     if raw:  # prompted models (Aya): the raw replies, to review how calls were written and read
         rec["raw_turns"] = raw

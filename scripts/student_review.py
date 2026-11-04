@@ -136,6 +136,27 @@ def summarise(recs: list[dict]) -> dict:
     return out
 
 
+def view_check(recs: list[dict]) -> tuple[int, int, int]:
+    """Did the agent see the customer's own phone actions? (telecom, records with agent_view)
+
+    Returns (records checked, records whose full conversation has customer tool calls,
+    records where any of those calls also appear in what the agent was shown).
+    """
+    checked = with_user_calls = leaked = 0
+    for r in recs:
+        view = r.get("agent_view")
+        if view is None or r["domain"] != "telecom":
+            continue
+        checked += 1
+        ids = {tc.get("id") for m in r["messages"] if m["role"] == "user" for tc in (m.get("tool_calls") or [])}
+        if ids:
+            with_user_calls += 1
+            seen = {tc.get("id") for m in view for tc in (m.get("tool_calls") or [])}
+            seen |= {m.get("tool_call_id") for m in view if m["role"] == "tool"}
+            leaked += bool(ids & seen)
+    return checked, with_user_calls, leaked
+
+
 def print_summary(name: str, s: dict) -> None:
     print(f"\n=== {name}: {s['passed']}/{s['n']} passed "
           + " · ".join(f"{d} {k}/{n}" for d, (k, n) in s["by_domain"].items()) + " ===")
@@ -239,6 +260,12 @@ def main() -> int:
     name = a.path.stem.removeprefix("sample-")
     s = summarise(recs)
     print_summary(name, s)
+    checked, with_calls, leaked = view_check(recs)
+    if checked:
+        print(f"\nAgent's view check (telecom): {checked} conversations, {with_calls} with customer phone "
+              f"actions; the agent was shown them in {leaked}. "
+              + ("✅ the agent never sees them: train on agent_view, not messages."
+                 if not leaked else "⚠ the agent does see them: check before converting."))
     dst = a.html or pathlib.Path(f"results/reports/{name}_review.html")
     write_html(name, recs, s, dst)
     print(f"\nLog page: {dst}")

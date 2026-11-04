@@ -96,3 +96,17 @@ def test_pass_at_3_counts_tasks_that_stopped_at_their_first_pass():
     r = fx.report(recs)["retail"]
     assert r["pass1"] == (1, 3) and r["pass_at_3"] == (2, 3)
     assert r["pass_all_3"] == (0, 0)  # not measured when retries stop at a pass
+
+
+def test_view_check_spots_customer_actions_shown_to_the_agent():
+    spec = importlib.util.spec_from_file_location(
+        "student_review", pathlib.Path(__file__).parents[1] / "scripts" / "student_review.py")
+    sr = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(sr)
+    call = {"id": "u1", "function": {"name": "check_status_bar"}}
+    full = [{"role": "user", "content": None, "tool_calls": [call]},
+            {"role": "tool", "tool_call_id": "u1", "content": "No signal"},
+            {"role": "user", "content": "It says no signal."}]
+    hidden = {"domain": "telecom", "messages": full, "agent_view": [full[2]]}
+    shown = {"domain": "telecom", "messages": full, "agent_view": full}
+    assert sr.view_check([hidden]) == (1, 1, 0) and sr.view_check([shown]) == (1, 1, 1)

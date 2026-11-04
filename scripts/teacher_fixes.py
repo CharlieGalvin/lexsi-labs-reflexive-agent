@@ -230,6 +230,8 @@ def main() -> int:
                     help="where the simulated customer (GPT-4.1) runs: openrouter (default) or "
                          "openai (the exact pinned snapshot; needs a high OpenAI rate limit)")
     ap.add_argument("--limit", type=int, help="only the first N tasks (smoke test)")
+    ap.add_argument("--sample", type=int,
+                    help="a random N tasks per domain (seed 0), e.g. a cheap student check")
     ap.add_argument("--domains", nargs="+", choices=DOMAINS, default=list(DOMAINS))
     ap.add_argument("--tasks", choices=("rest", "phase1", "all"), default="rest",
                     help="rest = the 148 phase 1 didn't use (default); phase1 = its 30; all = 178")
@@ -255,6 +257,11 @@ def main() -> int:
     pool_ = {"rest": remaining_train_tasks, "phase1": ts.sample_tasks,
              "all": lambda: ts.sample_tasks() + remaining_train_tasks()}[a.tasks]()
     tasks = [t for t in pool_ if t[0] in a.domains]
+    if a.sample:
+        import random
+
+        tasks = [t for d in DOMAINS for t in random.Random(0).sample(
+            [x for x in tasks if x[0] == d], min(a.sample, sum(x[0] == d for x in tasks)))]
     tasks = tasks[:a.limit] if a.limit else tasks
     if a.list:
         for d in DOMAINS:
