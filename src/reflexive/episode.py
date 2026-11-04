@@ -207,6 +207,10 @@ class Tau2Episode:
         τ²-bench's GT wording ("You are testing that our user simulator is working correctly").
         """
         from tau2.agent.llm_agent import AGENT_INSTRUCTION, SYSTEM_PROMPT, SYSTEM_PROMPT_GT
+        if len(obs) < len(self._view):
+            # τ²-bench clears the agent's observation when the run ends. Keep what the agent saw,
+            # or `messages()` (the agent's view) would be only the system prompt afterwards.
+            return []
 
         steps = self.resolution_steps()
         if steps:
