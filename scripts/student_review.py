@@ -172,7 +172,8 @@ def print_summary(name: str, s: dict) -> None:
     if s["invented_examples"]:
         print("\nExamples of invented IDs:", ", ".join(f"{d}:{t[:20]} → {v}" for d, t, v in s["invented_examples"]))
     if s["unknown_tools"]:
-        print("Tools called that the agent doesn't have:", dict(s["unknown_tools"].most_common(8)))
+        print(f"Tools called that the agent doesn't have ({sum(s['unknown_tools'].values())} calls; "
+              "8 commonest):", dict(s["unknown_tools"].most_common(8)))
     if s["failed_lookups"]:
         print("Lookups that came back 'not found' (usually a wrong or invented ID):",
               dict(s["failed_lookups"].most_common(8)))
