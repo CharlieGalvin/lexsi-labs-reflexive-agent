@@ -60,9 +60,24 @@ The spot check changed the classifier twice before these numbers:
 
 ## Limitations
 
-- **Telecom only, one student.** Only Aya's telecom rollouts exist so far. Retail and airline
-  are covered by built test cases, not by real transcripts. Re-run the spot check when Arm A
-  covers them.
+- **Telecom only, one student; retail and airline only partly tested.** Only Aya's telecom
+  rollouts exist so far. Retail and airline are covered by built test cases, not by real
+  transcripts.
+  - TOOL, the schema checks, placeholders and LOOP don't depend on the domain, so they should
+    carry over.
+  - The risk is `ungrounded`: retail and airline IDs (orders, items, products, payment
+    methods, flights) all come from tool results, and no real retail or airline conversation
+    has been checked.
+  - Replaying τ²-bench's correct actions doesn't settle it. The gold action lists leave out
+    the lookups (airline task 14 is only `cancel_reservation` + `book_reservation`), so IDs
+    look invented in the replay although a real agent would have looked them up first.
+  - **The decisive test:** the golden v1 retail and airline records (clean teacher passes,
+    so any `ungrounded` finding is a false positive) and `results/fixes/aya.jsonl` (real
+    student failures). Both are only on Charlie's laptop for now. Re-run the spot check when
+    Arm A covers retail and airline too.
+- **Fixed while checking retail:** every τ²-bench retail and airline customer has an
+  `@example.com` email, and "example" was a placeholder word, so every email lookup was
+  flagged. Now only "for example" counts, with a regression test.
 - **Precision only.** Recall (failures it misses) isn't measured. Reading the 30 samples turned
   up the misses listed above.
 - **Small sample.** 10 per type gives a 95% lower bound of 72%.
