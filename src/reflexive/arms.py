@@ -27,11 +27,17 @@ from pathlib import Path
 from typing import Any
 
 from reflexive.episode import Tau2Episode
-from reflexive.teacher import ContextTooLong, TeacherClient, tool_errors, unseen_arguments
+from reflexive.teacher import (
+    ContextTooLong,
+    RateLimiter,
+    TeacherClient,
+    tool_errors,
+    unseen_arguments,
+)
 
 CONFIG_PATH = Path(__file__).resolve().parents[2] / "configs" / "arms.yaml"
 STUDENT_KEYS = {"name", "model", "api_base", "api_key_env", "mode", "style", "temperature",
-                "max_tokens", "max_context", "reserve"}
+                "max_tokens", "max_context", "reserve", "rpm"}
 
 
 @dataclass(frozen=True)
@@ -65,17 +71,25 @@ def get_arm(key: str, path: str | Path | None = None) -> Arm:
                description=a.get("description", ""))
 
 
-def make_student(student: dict, **kwargs: Any) -> TeacherClient:
-    """The student model as an agent (`turn(messages, tool_schemas)`). Same client as the teacher."""
+def make_student(student: dict, *, limiter: RateLimiter | None = None, **kwargs: Any) -> TeacherClient:
+    """The student model as an agent (`turn(messages, tool_schemas)`). Same client as the teacher.
+
+    ``limiter``: share one `RateLimiter` between conversations run at once, so the student's
+    ``rpm`` cap holds for the whole run (each client otherwise spaces only its own calls).
+    """
     key_env = student.get("api_key_env")
     api_key = os.environ.get(key_env) if key_env else None
     if key_env and not api_key and "completion" not in kwargs:
         raise RuntimeError(f"Set {key_env} in .env for the student ({student['model']})")
-    return TeacherClient(
+    client = TeacherClient(
         student.get("mode", "prompted"), style=student.get("style", "cohere"),
         model=student["model"], api_base=student["api_base"], api_key=api_key or "none",
         temperature=student.get("temperature", 0.0), max_tokens=student.get("max_tokens", 1024),
+        rpm=student.get("rpm") or 0,  # not TEACHER_RPM: the teacher's cap isn't the student's
         prices=(0.0, 0.0) if not key_env else None, **kwargs)
+    if limiter is not None:
+        client.limiter = limiter
+    return client
 
 
 def make_episode(arm: Arm, domain: str, task_id: str, **kwargs: Any) -> Tau2Episode:

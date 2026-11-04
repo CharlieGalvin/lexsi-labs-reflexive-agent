@@ -157,3 +157,56 @@ def test_a_crashing_agent_is_recorded_not_raised(tau2):
 
     rec = run_episode(get_arm("A"), Broken(), "retail", "0", judges=False, **CUSTOMER)
     assert "server down" in rec["error"] and not rec["outcome"]["passed"]
+
+
+# --- Rate limits and crashed conversations (no τ²-bench needed) -------------------------------
+
+
+def test_student_rpm_comes_from_the_config_not_teacher_rpm_and_can_be_shared(monkeypatch):
+    from reflexive.teacher import RateLimiter
+
+    monkeypatch.setenv("TEACHER_RPM", "5")  # the teacher's cap must not apply to the student
+    student = {**get_arm("A").student, "api_key_env": None, "rpm": 20}
+    assert make_student(student).limiter.interval == pytest.approx(3.0)
+    shared = RateLimiter(20)
+    a, b = make_student(student, limiter=shared), make_student(student, limiter=shared)
+    assert a.limiter is b.limiter is shared  # one cap for every worker in a run
+
+
+def _load_rollout_script():
+    import importlib.util
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[1] / "scripts" / "rollout.py"
+    spec = importlib.util.spec_from_file_location("rollout_script", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_rollout_reruns_crashed_conversations_and_counts_them_apart(tmp_path, monkeypatch, capsys):
+    mod = _load_rollout_script()
+    out = tmp_path / "A.jsonl"
+
+    def rec(task_id, passed=False, error=None):
+        return {"task_id": task_id, "sample": 0, "termination": "agent_stop", "error": error,
+                "outcome": {"passed": passed}, "flags": {"context_overflow": False}, "wall_s": 1.0}
+
+    out.write_text("".join(json.dumps(r) + "\n" for r in [
+        rec("t1", passed=True), rec("t2", error="RateLimitError: trial key")]))
+    calls = []
+
+    def fake_run(arm, agent, domain, task_id, **kw):
+        calls.append(task_id)
+        return rec(task_id, error="RateLimitError: again" if task_id == "t3" else None)
+
+    monkeypatch.setattr(mod, "_split", lambda domain, split: {"t1", "t2", "t3"})
+    monkeypatch.setattr(mod, "make_student", lambda student, **kw: object())
+    monkeypatch.setattr(mod, "run_episode", fake_run)
+    monkeypatch.setattr("sys.argv", ["rollout.py", "A", "telecom", "--out", str(out), "--workers", "1"])
+    assert mod.main() == 1  # a conversation crashed: non-zero exit
+    assert sorted(calls) == ["t2", "t3"]  # t1 was clean and kept; t2 crashed before, so re-run
+    saved = [json.loads(line) for line in out.read_text().splitlines()]
+    assert sorted(r["task_id"] for r in saved) == ["t1", "t2", "t3"]  # the old crash was replaced
+    printed = capsys.readouterr().out
+    assert "0/1 passed" in printed and "1 crashed" in printed
