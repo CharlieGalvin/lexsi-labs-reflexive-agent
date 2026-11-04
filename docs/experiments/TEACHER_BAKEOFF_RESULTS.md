@@ -1,5 +1,7 @@
 # Teacher bake-off, phase 1: results (3 Nov 2026, SEL-58)
 
+> **Update (3 Nov, phase 2):** the full train split settled it: **GLM-5.3-Flash is the teacher**. See [`TEACHER_PHASE2_RESULTS.md`](TEACHER_PHASE2_RESULTS.md).
+
 **Recommendation:** use an **open-weight teacher**, either **GLM-5.3-Flash** or **Qwen3.8 27B**,
 and confirm the choice in phase 2. Both are statistically indistinguishable from the best closed
 model (Claude Sonnet 5.5). They cost $12–28 for the whole project against Sonnet's ~$182, and

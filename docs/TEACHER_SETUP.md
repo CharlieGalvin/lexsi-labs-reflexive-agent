@@ -235,6 +235,18 @@ Same 30 train tasks, database checks only (a best case):
 - **Tiny Aya's probe:** no native tool calling (it answered in prose). Prompted, it wrote
   `Action: get_order_details({...})` in function-call style, which the parser now also reads.
 
+## Decision (3 Nov): the teacher is GLM-5.3-Flash
+
+- **Teacher:** `z-ai/glm-5.3-flash` via OpenRouter, native tool calling, MIT licence.
+- **Performance:** on the whole τ²-bench train split (178 tasks, judges on), 88% on the first
+  try, with a fix for 158 tasks. Against Qwen3.8 27B (thinking off) on the same 138 tasks, it
+  ties on retail and airline and wins telecom 89% to 49%. Details:
+  [`experiments/TEACHER_PHASE2_RESULTS.md`](experiments/TEACHER_PHASE2_RESULTS.md).
+- **Fix run commands:** `just teacher-fixes` (148 unused tasks), `--tasks phase1` / `--tasks all`,
+  `--attempts N`, `--report`, `--rejudge`. Results go to `results/fixes/<model>.jsonl`.
+- **Accounts:** the teacher and the simulated customer go through OpenRouter, the judges
+  through OpenAI. A full 178-task run costs ~$11, mostly the telecom customer.
+
 ## Commands
 
 | Command | What it does | Cohere calls |

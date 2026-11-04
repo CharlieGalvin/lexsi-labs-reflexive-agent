@@ -404,6 +404,8 @@ class TeacherClient:
         self.limiter = RateLimiter(rpm)
         self._completion = completion
         self.usage = Usage(prices=prices) if prices is not None else Usage()
+        # Prompted mode: each raw reply and how it was read, for reviewing the model's mistakes
+        self.raw_turns: list[dict] = []
 
     def _call(self, messages: list[dict], tools: list[dict] | None,
               stop: list[str] | None = None) -> Any:
@@ -476,14 +478,23 @@ class TeacherClient:
             if not text.strip():
                 raise EmptyTeacherReply("The teacher returned an empty reply twice")
         calls, embedded = find_prompted_calls(text, id_prefix=f"t{self.usage.calls}")
+
+        def note(kind: str) -> None:
+            self.raw_turns.append({"turn": len(self.raw_turns) + 1, "kind": kind, "reply": text[:4000]})
+
         if calls and all(c["function"]["name"] in DIRECTLY_ANSWER for c in calls):
+            note("directly_answer")
             return self._directly_answer(prompt, text)
         if calls:
             calls = [c for c in calls if c["function"]["name"] not in DIRECTLY_ANSWER]
             self.usage.embedded += embedded
+            note("tool_call_in_prose" if embedded else "tool_call")
             return {"role": "assistant", "content": None, "tool_calls": calls}
         if text.strip().startswith(("[", "{")) or "tool_name" in text:
             self.usage.unparsed += 1  # looked like a call but wasn't valid: sent as a message
+            note("unparsed_call")
+        else:
+            note("message")
         message = _strip_results(text)
         if not message:
             raise EmptyTeacherReply("The teacher's reply had no message and no tool call")
@@ -505,6 +516,9 @@ class TeacherClient:
 
 
 _ID_LIKE = re.compile(r"^(?=.*\d)[\w#@.\-]{4,}$")
+# Dates and times are worked out from the conversation ("next Friday"), not looked up, so they
+# aren't treated as invented IDs (3 Nov: every flag for the top teachers was a flight date).
+_DATE_LIKE = re.compile(r"^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}(:\d{2})?)?$|^\d{1,2}:\d{2}$")
 
 
 def unseen_arguments(messages: list[dict]) -> list[str]:
@@ -529,6 +543,7 @@ def unseen_arguments(messages: list[dict]) -> list[str]:
                 for v in args.values():
                     values += v if isinstance(v, list) else [v]
                 unseen += [v for v in values if isinstance(v, str) and _ID_LIKE.match(v)
+                           and not _DATE_LIKE.match(v)
                            and v.lstrip("#") not in seen and v not in unseen]
         seen += " " + (m.get("content") or "")
     return unseen

@@ -251,3 +251,18 @@ def test_out_of_credits_is_recognised():
     assert ts._no_credits({"error": "OutOfCredits: OpenRouter 402: ..."})
     assert ts._no_credits({"error": "HTTPStatusError: Client error '402 Payment Required'"})
     assert not ts._no_credits({"error": "RateLimitError"}) and not ts._no_credits({})
+
+
+def test_qwen_thinking_off_variant_sends_reasoning_disabled(monkeypatch):
+    ts = load()
+    monkeypatch.setattr(ts, "_openrouter_models", lambda: {})
+    agent = ts.make_agent("qwen38nt")()
+    assert agent.slug == "qwen/qwen3.8-27b" and agent.extra_body == {"reasoning": {"enabled": False}}
+    assert "qwen38nt" not in ts.resolve_models(["bakeoff"])
+
+
+def test_in_flight_budget_is_not_out_of_credits():
+    ts = load()
+    busy = 'OutOfCredits: OpenRouter 402: {"reason":"in_flight_budget_exhausted"}'
+    assert not ts._no_credits({"error": busy})
+    assert ts._no_credits({"error": "OutOfCredits: OpenRouter 402: insufficient credits"})
