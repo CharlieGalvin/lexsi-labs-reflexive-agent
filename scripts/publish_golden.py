@@ -29,8 +29,6 @@ from reflexive import golden, splits  # noqa: E402
 DIR = ROOT / "data" / "golden" / "v1"
 REPO = "reagent-lexsi/tau2-golden-trajectories"
 FILES = {"train": "golden_train.jsonl", "dev": "golden_dev_reference.jsonl"}
-CONTRACT = "https://claude.ai/artifact/Ew1amyTBrTHbdiW92DQzNw"
-
 
 def load(path: Path) -> list[dict]:
     return [json.loads(x) for x in path.read_text().splitlines() if x.strip()]
@@ -124,7 +122,6 @@ plus {n_dev} dev conversations for reference, in which a teacher model solved a
 [τ²-bench](https://github.com/sierra-research/tau2-bench) v2.0.0 **train** task, verified by
 τ²-bench's own evaluator. They're formatted for fine-tuning **Aya Expanse 32B** in Cohere's
 `Action:` tool-call format. The format is set by the
-[ReAgent data contract v1]({CONTRACT}), agreed 4 Nov 2026.
 
 ## Load it
 
