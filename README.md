@@ -53,6 +53,11 @@ comparable with published results; see the [dataset options doc](https://claude.
 - **[τ²-bench](https://github.com/sierra-research/tau2-bench)** (MIT): retail, airline and telecom
   customer-service tasks with database write tools and an LLM-simulated user, scored by final database
   state. We heal on the train split and report all arms on the official test split.
+  **Splits are frozen in [`configs/splits.json`](configs/splits.json)** (SEL-36): train 142, dev 36
+  (15 retail, 6 airline, 15 telecom, carved from τ²-bench's train by task), test 100.
+  **Rule: test task IDs are never used for healing, teacher fixes, DSPy or choosing anything;**
+  **dev tasks are never trained on.** Code that builds training data calls
+  `reflexive.splits.assert_not_test`.
 - **[BFCL v3 multi-turn](https://gorilla.cs.berkeley.edu/blogs/13_bfcl_v3_multi_turn.html)** (Apache-2.0):
   state-scored multi-turn function calling. Generalisation test only, never trained on; its
   missing-parameter and missing-function sets map onto Arg and Tool hallucination.
@@ -165,6 +170,7 @@ Run `just` on its own to list every command. Python must be **3.12 or 3.13** (τ
 
 ```
 configs/                 one YAML per experiment / arm (copy, don't edit in place)
+  splits.json            frozen τ²-bench train / dev / test task IDs (SEL-36; never regenerate)
 src/reflexive/           Python package: each role adds its modules here
   outcome.py             pass/fail for any τ²-bench trajectory via τ²-bench's own scoring (Curator)
   episode.py             one τ²-bench conversation our code drives: tools, customer, context guard (Curator)

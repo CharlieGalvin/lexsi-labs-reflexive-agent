@@ -96,6 +96,11 @@ SLATE = {
     "opus": "anthropic/claude-opus-5.5",      # 75.3%, added 3 Nov; the priciest (~$0.34/task)
 }
 
+# Request-setting variants of slate models (not part of --models bakeoff)
+VARIANTS = {
+    "qwen38nt": ("qwen/qwen3.8-27b", {"reasoning": {"enabled": False}}),  # Qwen3.8 27B, thinking off
+}
+
 
 # --- Task sample --------------------------------------------------------------------------------
 
@@ -127,6 +132,7 @@ class NativeAgent:
         # OpenRouter's list of parameters the model accepts. Some newer models (reasoning ones)
         # refuse `temperature`; with require_parameters on, sending it finds no endpoint at all.
         self.supported = supported
+        self.temperature = 0.0  # fix runs raise it for retries (scripts/teacher_fixes.py)
         self.usage = {"calls": 0, "prompt_tokens": 0, "completion_tokens": 0, "seconds": 0.0}
 
     def turn(self, messages: list[dict], tools: list[dict]) -> dict:
@@ -141,7 +147,7 @@ class NativeAgent:
             extra = ({"extra_body": {"provider": {"require_parameters": True}}}  # tools must work
                      if self.model.startswith("openrouter/") else {})
             if not self.supported or "temperature" in self.supported:
-                extra["temperature"] = 0.0
+                extra["temperature"] = self.temperature
             resp = litellm.completion(model=self.model, messages=messages, tools=tools,
                                       num_retries=3, **extra)
             self.usage["seconds"] += time.monotonic() - start
@@ -215,6 +221,8 @@ class OpenRouterAgent(NativeAgent):
         super().__init__(f"openrouter/{slug}", prices, supported=supported)
         self.slug = slug
         self.reasoning: dict[str, Any] = {}  # first tool-call id or reply text -> reasoning_details
+        self.provider: str | None = None
+        self.extra_body: dict[str, Any] = {}  # added to every request (VARIANTS)
         self.usage.update(billed_cost=0.0, providers={})
 
     def _with_reasoning(self, messages: list[dict]) -> list[dict]:
@@ -233,15 +241,22 @@ class OpenRouterAgent(NativeAgent):
         import httpx
 
         headers = {"Authorization": f"Bearer {os.environ['OPENROUTER_API_KEY']}"}
-        last = None
-        for attempt in range(4):
-            if attempt:
-                time.sleep(2 ** attempt)
+        last, waits = None, 0
+        for attempt in range(4 + 6):
+            if attempt and waits == 0:
+                time.sleep(2 ** min(attempt, 4))
             try:
                 r = httpx.post(self.URL, json=body, headers=headers, timeout=300)
             except httpx.HTTPError as e:  # network blip or timeout: retry
                 last = f"{type(e).__name__}: {e}"
                 continue
+            if r.status_code == 402 and "in_flight" in r.text and waits < 6:
+                # Not empty: too much spend reserved by requests already running. Wait and retry.
+                waits += 1
+                time.sleep(20)
+                last = "OpenRouter in-flight budget"
+                continue
+            waits = 0
             if r.status_code == 402:  # out of credits: nothing will work until topped up
                 raise OutOfCredits(f"OpenRouter 402: {r.text[:200]}")
             if r.status_code == 404 or (r.status_code == 400 and "No endpoints" in r.text):
@@ -261,9 +276,16 @@ class OpenRouterAgent(NativeAgent):
     def turn(self, messages: list[dict], tools: list[dict]) -> dict:
         body: dict[str, Any] = {"model": self.slug, "tools": tools,
                                 "provider": {"require_parameters": True},
-                                "usage": {"include": True}}
+                                "usage": {"include": True},
+                                # a cap keeps OpenRouter's per-request reservation small (it holds
+                                # max_tokens × price while a request runs); turns are far shorter
+                                "max_tokens": 8192}
         if not self.supported or "temperature" in self.supported:
-            body["temperature"] = 0.0
+            body["temperature"] = self.temperature
+        if self.provider:  # pin one provider (and its quantisation) so the run is reproducible
+            body["provider"] = {"require_parameters": True, "order": [self.provider],
+                                "allow_fallbacks": False}
+        body.update(self.extra_body)
         msgs = self._with_reasoning(messages)
         for _attempt in range(2):  # an empty reply: ask once more
             start = time.monotonic()
@@ -330,6 +352,16 @@ def make_agent(name: str) -> Callable[[], Any]:
         return lambda: AyaAgent("tiny-aya-global", prices=(0.0, 0.0))  # price not published
     if name == "aya-steps":
         return AyaAgent
+    if name in VARIANTS:  # a slate model with a different request setting, e.g. thinking off
+        slug, extra = VARIANTS[name]
+        info = openrouter_info(slug)
+
+        def variant():
+            agent = OpenRouterAgent(slug, info["prices"], supported=info["supported"])
+            agent.extra_body = dict(extra)
+            return agent
+
+        return variant
     if name in SLATE or name.startswith("or:"):
         slug = SLATE.get(name) or name[3:]
         info = openrouter_info(slug)
@@ -361,7 +393,7 @@ COUNT = {"tiny": lambda msgs: int(estimate_tokens(msgs) * 1.15),
          "aya8": lambda msgs: int(estimate_tokens(msgs) * 1.15)}
 # τ²-bench resolution-step hints (train tasks only; see Tau2Episode(hints=...))
 HINTS = {"aya-steps": "steps"}
-MODELS = ["aya", "qwen", "gpt", "tiny", "aya8", "aya-steps", *SLATE]
+MODELS = ["aya", "qwen", "gpt", "tiny", "aya8", "aya-steps", *SLATE, *VARIANTS]
 
 
 @functools.cache
@@ -405,10 +437,17 @@ def _file_name(model: str) -> str:
 # --- One conversation ---------------------------------------------------------------------------
 
 
-def run_one(model: str, domain: str, task_id: str) -> dict:
+def run_one(model: str, domain: str, task_id: str, *, temperature: float = 0.0,
+            judges: bool = False, provider: str | None = None, user_llm: str | None = None,
+            user_llm_args: dict | None = None) -> dict:
     agent = make_agent(model)()
+    if hasattr(agent, "temperature"):
+        agent.temperature = temperature
+    if provider:
+        agent.provider = provider
     max_context, reserve = CONTEXT.get(model, (128_000, 4_096))
-    ep = Tau2Episode(domain, task_id, max_context=max_context, reserve=reserve,
+    ep = Tau2Episode(domain, task_id, user_llm=user_llm, user_llm_args=user_llm_args,
+                     max_context=max_context, reserve=reserve,
                      count_tokens=COUNT.get(model, estimate_tokens), hints=HINTS.get(model, "none"))
     start = time.monotonic()
     error = None
@@ -433,14 +472,28 @@ def run_one(model: str, domain: str, task_id: str) -> dict:
                "sample_model": model, "agent_llm": agent.model,
                "agent_usage": agent.usage_dict(), "error": error}
     else:
-        rec = ep.record(judges=False, sample_model=model, agent_llm=agent.model,
-                        agent_usage=agent.usage_dict(), error=error)
+        meta = {"sample_model": model, "agent_llm": agent.model, "agent_usage": agent.usage_dict(),
+                "error": error, "temperature": temperature, "pinned_provider": provider}
+        try:
+            rec = ep.record(judges=judges, **meta)
+        except Exception as e:  # noqa: BLE001 - a judge call failed: keep the run, re-judge later
+            if not judges:
+                raise
+            rec = ep.record(judges=False, **meta, judge_error=f"{type(e).__name__}: {str(e)[:300]}")
     msgs = rec["messages"]
     rec["diagnostics"] = {
         "tools_ran": sum(len(m.get("tool_calls") or []) for m in msgs if m["role"] == "assistant"),
         "unseen_arguments": unseen_arguments(msgs),
         **tool_errors(msgs),
     }
+    if ep._env is not None:  # what the agent was actually shown (system prompt included)
+        try:
+            rec["agent_view"] = ep.messages()
+        except Exception:  # noqa: BLE001 - never lose a conversation over this extra
+            pass
+    raw = getattr(getattr(agent, "client", None), "raw_turns", None)
+    if raw:  # prompted models (Aya): the raw replies, to review how calls were written and read
+        rec["raw_turns"] = raw
     rec["wall_s"] = round(time.monotonic() - start, 1)
     return rec
 
@@ -531,6 +584,8 @@ STUDENTS = ("aya", "aya8", "tiny")  # candidate students; every other model is a
 
 
 def _open_weights(model: str) -> bool | None:
+    if model in VARIANTS:
+        return openrouter_info(VARIANTS[model][0])["open_weights"]
     if model in SLATE or model.startswith("or:"):
         return openrouter_info(SLATE.get(model) or model[3:])["open_weights"]
     return {"aya": True, "aya-steps": True, "tiny": True, "aya8": True, "qwen": True,
@@ -538,7 +593,11 @@ def _open_weights(model: str) -> bool | None:
 
 
 def _no_credits(rec: dict) -> bool:
+    """Truly out of credits. OpenRouter's in-flight budget (too much reserved by requests
+    already running) is temporary, so it doesn't count: those conversations are retried."""
     err = rec.get("error") or ""
+    if "in_flight" in err or "in-flight" in err:
+        return False
     return "OutOfCredits" in err or "402" in err or "available credits" in err
 
 

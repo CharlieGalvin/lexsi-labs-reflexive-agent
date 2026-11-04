@@ -55,6 +55,14 @@ check: lint test
 
 # --- τ²-bench ----------------------------------------------------------------
 
+# Build golden trajectories v1 from the teacher's fix run (SEL-9; no API calls)
+golden *args:
+    python scripts/build_golden.py {{args}}
+
+# Confirm configs/splits.json matches a rebuild from its seed (SEL-36)
+splits-check:
+    python scripts/make_splits.py --check
+
 # Splits, prompt sizes and context fit per domain (no API calls)
 tau2-inspect:
     python scripts/tau2_inspect.py
@@ -96,6 +104,15 @@ teacher-check style="cohere" hints="none":
 # Is Aya a usable teacher? Same 30 train tasks for Aya and a reference (default: Qwen3 32B). ~$5
 teacher-sample *models="aya qwen":
     python scripts/teacher_sample.py --models {{models}}
+
+# Fix run: the teacher (default GLM-5.3-Flash) on the 148 train tasks phase 1 didn't use, 3 attempts,
+# judges on. ~$13. Try `just teacher-fixes --limit 2` first; `--report` summarises what's saved.
+teacher-fixes *args:
+    python scripts/teacher_fixes.py {{args}}
+
+# Where does a model go wrong? Failure categories + a browsable log page (results/reports/)
+student-review path="results/fixes/aya.jsonl":
+    python scripts/student_review.py {{path}}
 
 # Bake-off statistics and projected cost from the saved runs in results/episodes (no API calls)
 bakeoff-report:

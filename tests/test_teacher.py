@@ -456,3 +456,13 @@ def test_prompted_teacher_solves_a_task_through_the_episode():
     assert teacher.usage.calls == len(replies)
     names = [tc["function"]["name"] for m in rec["messages"] for tc in m.get("tool_calls") or []]
     assert names == [tc["name"] for m in gold for tc in m["tool_calls"]]
+
+
+def test_dates_are_not_invented_ids():
+    from reflexive.teacher import unseen_arguments
+
+    msgs = [{"role": "user", "content": "I want to fly next Friday"},
+            {"role": "assistant", "content": None, "tool_calls": [{"id": "a", "type": "function",
+             "function": {"name": "search_direct_flight",
+                          "arguments": '{"date": "2024-05-24", "user_id": "mia_li_3668"}'}}]}]
+    assert unseen_arguments(msgs) == ["mia_li_3668"]
