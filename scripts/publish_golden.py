@@ -7,7 +7,9 @@
 
 Uses your own Hugging Face token: ``HF_TOKEN`` in ``.env``, or ``hf auth login``. Before uploading
 it re-checks every record (unique IDs, format, no test task, each file holds only its split, no
-task in both files, counts match the build report) and refuses to upload to a public repo.
+task in both files, counts match the build report), checks the files are byte-for-byte the ones
+`just golden` verified, and refuses to upload to a public repo. If tag v1 already exists it
+stops, unless you pass ``--retag`` to move v1 to the new upload.
 """
 
 from __future__ import annotations
@@ -15,7 +17,6 @@ from __future__ import annotations
 import argparse
 import collections
 import datetime as dt
-import hashlib
 import json
 import subprocess
 import sys
@@ -23,19 +24,16 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "scripts"))
+
+from build_golden import load, sha256  # noqa: E402
 
 from reflexive import golden, splits  # noqa: E402
 
 DIR = ROOT / "data" / "golden" / "v1"
 REPO = "reagent-lexsi/tau2-golden-trajectories"
 FILES = {"train": "golden_train.jsonl", "dev": "golden_dev_reference.jsonl"}
-
-def load(path: Path) -> list[dict]:
-    return [json.loads(x) for x in path.read_text().splitlines() if x.strip()]
-
-
-def sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+TAG = "v1"
 
 
 def validate(rows: dict[str, list[dict]], report: dict) -> list[str]:
@@ -43,23 +41,48 @@ def validate(rows: dict[str, list[dict]], report: dict) -> list[str]:
     problems, ids, tasks = [], collections.Counter(), {}
     for split, recs in rows.items():
         tasks[split] = {(r["domain"], r["task_id"]) for r in recs}
-        for r in recs:
-            ids[r["id"]] += 1
-            if r["format"] != golden.FORMAT:
-                problems.append(f"{r['id']}: format {r['format']}")
-            if r["split"] != split or splits.split_of(r["domain"], r["task_id"]) != split:
-                problems.append(f"{r['id']}: in the {split} file but belongs to {r['split']}")
-            if r["outcome"]["reward"] != 1.0:
-                problems.append(f"{r['id']}: reward {r['outcome']['reward']}")
-            if r["train_on"] != [i for i, m in enumerate(r["messages"]) if m["role"] == "assistant"]:
-                problems.append(f"{r['id']}: train_on")
+        for n, r in enumerate(recs):
+            try:
+                ids[r["id"]] += 1
+                if r["format"] != golden.FORMAT:
+                    problems.append(f"{r['id']}: format {r['format']}")
+                try:
+                    belongs = splits.split_of(r["domain"], r["task_id"])
+                except KeyError:
+                    belongs = "no split"
+                if r["split"] != split or belongs != split:
+                    problems.append(f"{r['id']}: in the {split} file but belongs to {belongs}")
+                if r["outcome"]["reward"] != 1.0:
+                    problems.append(f"{r['id']}: reward {r['outcome']['reward']}")
+                if r["train_on"] != [i for i, m in enumerate(r["messages"]) if m["role"] == "assistant"]:
+                    problems.append(f"{r['id']}: train_on")
+            except (KeyError, TypeError, AttributeError) as e:
+                problems.append(f"{split} record {n + 1}: malformed ({type(e).__name__}: {e})")
     problems += [f"{i}: duplicated {n} times" for i, n in ids.items() if n > 1]
     if tasks["train"] & tasks["dev"]:
         problems.append(f"{len(tasks['train'] & tasks['dev'])} tasks in both files")
     for split, recs in rows.items():
-        want = sum(v[split]["trajectories"] for v in report["domains"].values())
+        try:
+            want = sum(v[split]["trajectories"] for v in report["domains"].values())
+        except (KeyError, TypeError):
+            problems.append(f"{split}: the build report has no trajectory count")
+            continue
         if len(recs) != want:
             problems.append(f"{split}: {len(recs)} records, build report says {want}")
+    return problems
+
+
+def check_files(folder: Path, report: dict) -> list[str]:
+    """The files must be the ones `just golden` built and round-trip checked, and splits.json the live one."""
+    problems = []
+    built = report.get("files")
+    if not built:
+        return ["the build report has no file checksums: rebuild with `just golden`"]
+    for name in [*FILES.values(), "splits.json"]:
+        if built.get(name) != sha256(folder / name):
+            problems.append(f"{name} changed since `just golden` checked it: rebuild")
+    if sha256(folder / "splits.json") != sha256(splits.SPLITS_PATH):
+        problems.append(f"splits.json differs from {_rel(splits.SPLITS_PATH)}: rebuild with `just golden`")
     return problems
 
 
@@ -68,9 +91,16 @@ def _rel(path: Path) -> str:
 
 
 def splits_order(domain: str, ids: list[str]) -> list[str]:
-    """Task IDs in the frozen file's order (numeric for retail and airline)."""
-    order = {t: i for s in splits.SPLITS for i, t in enumerate(splits.task_ids(domain, s))}
-    return sorted(ids, key=lambda t: (int(t) if t.isdigit() else 0, order.get(t, 0), t))
+    """Task IDs numerically (retail, airline), else in the frozen file's order (train, dev, test)."""
+    file_order = [t for s in splits.SPLITS for t in splits.task_ids(domain, s)]
+    order = {t: i for i, t in enumerate(file_order)}
+    return sorted(ids, key=lambda t: (0, int(t), t) if t.isdigit() else (1, order.get(t, len(order)), t))
+
+
+def _ids_md(by_domain: dict[str, list[str]]) -> str:
+    return "\n".join(
+        f"  - {k} ({len(v)}): " + (", ".join(v) if k != "telecom" else
+                                   "".join(f"\n    - `{t}`" for t in v)) for k, v in by_domain.items() if v)
 
 
 def git_commit() -> str | None:
@@ -86,11 +116,22 @@ def card(rows: dict[str, list[dict]], report: dict, repo: str, shas: dict[str, s
     sizes = report["train_sizes"]
     providers = collections.Counter(r["teacher"]["provider"] for rs in rows.values() for r in rs)
     customers = collections.Counter(r["customer"] for rs in rows.values() for r in rs)
-    tau2_commit = json.loads(splits.SPLITS_PATH.read_text())["source"].get("commit")
-    unsolved = {k: splits_order(k, v["train"]["unsolved"] + v["dev"]["unsolved"]) for k, v in d.items()}
-    unsolved_md = "\n".join(
-        f"  - {k} ({len(v)}): " + (", ".join(v) if k != "telecom" else
-                                   "".join(f"\n    - `{t}`" for t in v)) for k, v in unsolved.items())
+    meta = splits.load()  # check_files has made sure it's the same file as the uploaded splits.json
+    tau2_commit = meta["source"].get("commit")
+    split_sizes = {s: sum(len(v[s]) for v in meta["domains"].values()) for s in splits.SPLITS}
+    seed = meta.get("dev_method", {}).get("seed")
+    unsolved = {k: splits_order(k, v["train"]["unsolved"]) for k, v in d.items()}
+    unsolved_dev = {k: splits_order(k, v["dev"]["unsolved"]) for k, v in d.items()}
+    n_unsolved, n_unsolved_dev = sum(map(len, unsolved.values())), sum(map(len, unsolved_dev.values()))
+    unsolved_md = _ids_md(unsolved)
+    unsolved_dev_md = (f"- **{n_unsolved_dev} dev tasks have no reference trajectory either:**\n"
+                       f"{_ids_md(unsolved_dev)}\n") if n_unsolved_dev else ""
+    tasks_train = sum(v["train"]["tasks"] for v in d.values())
+    tasks_dev = sum(v["dev"]["tasks"] for v in d.values())
+    max_chars = sizes["chars"]["max"]
+    tok_lo, tok_hi = round(max_chars / 4 / 1000), round(max_chars / 3.5 / 1000)  # 3.5–4 chars per token
+    fits = ("Everything fits a 16K context." if max_chars / 3.5 < 16_000 else
+            "**The longest records may not fit a 16K context:** check token counts before choosing a max length.")
     temps = collections.Counter((r["teacher"]["attempt"], r["teacher"]["temperature"])
                                 for rs in rows.values() for r in rs)
     attempts_md = "; ".join(f"{n} from attempt {a} (temperature {t})" for (a, t), n in sorted(temps.items()))
@@ -121,15 +162,16 @@ configs:
 plus {n_dev} dev conversations for reference, in which a teacher model solved a
 [τ²-bench](https://github.com/sierra-research/tau2-bench) v2.0.0 **train** task, verified by
 τ²-bench's own evaluator. They're formatted for fine-tuning **Aya Expanse 32B** in Cohere's
-`Action:` tool-call format. The format is set by the
+`Action:` tool-call format. The format is set by the same prompt builder Aya's baseline was
+measured with, so training and evaluation prompts are identical.
 
 ## Load it
 
 ```python
 from datasets import load_dataset
 
-train = load_dataset("{repo}", split="train", revision="v1")              # {n_train} records: train on these
-dev = load_dataset("{repo}", split="dev_reference", revision="v1")        # {n_dev} records: NEVER train on these
+train = load_dataset("{repo}", split="train", revision="{TAG}")              # {n_train} records: train on these
+dev = load_dataset("{repo}", split="dev_reference", revision="{TAG}")        # {n_dev} records: NEVER train on these
 rec = train[0]
 rec["messages"]   # [{{"role": "system" | "user" | "assistant", "content": str}}, ...]
 rec["train_on"]   # indexes of the assistant turns: the learning targets
@@ -146,14 +188,14 @@ marks assistant turns.
 |---|---:|---|
 | `{FILES['train']}` | {n_train} | One golden trajectory per solved **train** task. Train on these. |
 | `{FILES['dev']}` | {n_dev} | Trajectories for **dev** tasks: for reference and comparison, **never trained on** |
-| `splits.json` | | The frozen task IDs: train 142, dev 36, test 100 (seed `reagent-dev-v1`) |
+| `splits.json` | | The frozen task IDs: train {split_sizes['train']}, dev {split_sizes['dev']}, test {split_sizes['test']} (seed `{seed}`) |
 
 | Domain | Train: tasks with a trajectory | Dev: tasks with a trajectory |
 |---|---:|---:|
 {count_rows}
-| **Total** | **{n_train} of 142** | **{n_dev} of 36** |
+| **Total** | **{n_train} of {tasks_train}** | **{n_dev} of {tasks_dev}** |
 
-The test split (100 tasks) is τ²-bench's own test split, unchanged. No test task was ever run by
+The test split ({split_sizes['test']} tasks) is τ²-bench's own test split, unchanged. No test task was ever run by
 the teacher or appears here.
 
 ## One record
@@ -178,8 +220,8 @@ In `messages`:
 
 Sizes per training record: {sizes['turns']['min']}–{sizes['turns']['max']} turns (median
 {sizes['turns']['median']}), {sizes['targets']['min']}–{sizes['targets']['max']} targets
-(median {sizes['targets']['median']}), and at most {sizes['chars']['max']:,} characters
-(about 11–13K tokens). Everything fits a 16K context.
+(median {sizes['targets']['median']}), and at most {max_chars:,} characters
+(about {tok_lo}–{tok_hi}K tokens). {fits}
 
 ## How it was made
 
@@ -205,10 +247,10 @@ ReAgent repo (commit `{git_commit()}`). τ²-bench commit `{tau2_commit}`.
 
 ## Limitations
 
-- **{sum(map(len, unsolved.values()))} train tasks have no trajectory** (the teacher never passed them cleanly).
+- **{n_unsolved} train tasks have no trajectory** (the teacher never passed them cleanly).
   They're the core of the hard subset:
 {unsolved_md}
-- **One teacher, almost always one attempt.** The trajectories reflect GLM-5.3-Flash's style, e.g. markdown in
+{unsolved_dev_md}- **One teacher, almost always one attempt.** The trajectories reflect GLM-5.3-Flash's style, e.g. markdown in
   replies and an occasional parallel call.
 - **Every conversation opens with the agent's fixed greeting** ("Hi! How can I help you today?"),
   before the first customer message. That's how τ²-bench starts a conversation, and Aya's baseline
@@ -230,7 +272,7 @@ This v1 is private to the team.
 
 {chr(10).join(f'- `{k}`: `{v}`' for k, v in shas.items())}
 
-*Version v1, built {dt.date.today().isoformat()}.*
+*Version {TAG}, built {dt.date.today().isoformat()}.*
 """
 
 
@@ -239,6 +281,7 @@ def main() -> int:
     p.add_argument("--repo", default=REPO)
     p.add_argument("--dir", type=Path, default=DIR)
     p.add_argument("--dry-run", action="store_true", help="check and write the card; upload nothing")
+    p.add_argument("--retag", action="store_true", help=f"move an existing {TAG} tag to this upload")
     a = p.parse_args()
 
     if not (a.dir / FILES["train"]).exists():
@@ -246,7 +289,7 @@ def main() -> int:
         return 1
     rows = {s: load(a.dir / f) for s, f in FILES.items()}
     report = json.loads((a.dir / "build_report.json").read_text())
-    problems = validate(rows, report)
+    problems = validate(rows, report) + check_files(a.dir, report)
     if problems:
         for x in problems[:20]:
             print(f"⛔ {x}")
@@ -259,7 +302,7 @@ def main() -> int:
     (a.dir / "README.md").write_text(card(rows, report, a.repo, shas))
     print(f"wrote {_rel(a.dir)}/README.md (the data card)")
     if a.dry_run:
-        print(f"dry run: would upload {', '.join(names)} and README.md to {a.repo} (private), tag v1")
+        print(f"dry run: would upload {', '.join(names)} and README.md to {a.repo} (private), tag {TAG}")
         return 0
 
     from huggingface_hub import HfApi
@@ -271,15 +314,23 @@ def main() -> int:
         if not info.private:
             print(f"⛔ {a.repo} exists and is PUBLIC; not uploading. Make it private first.")
             return 1
+        tagged = any(t.name == TAG for t in api.list_repo_refs(a.repo, repo_type="dataset").tags)
+        if tagged and not a.retag:
+            print(f"⛔ {a.repo} already has tag {TAG}; not uploading. Pass --retag to move {TAG} "
+                  "to the new data (anyone loading revision v1 will then get it).")
+            return 1
     except RepositoryNotFoundError:
+        tagged = False
         api.create_repo(a.repo, repo_type="dataset", private=True)
         print(f"created {a.repo} (private)")
     api.upload_folder(repo_id=a.repo, repo_type="dataset", folder_path=str(a.dir),
                       allow_patterns=[*names, "README.md"],
                       commit_message=f"Golden trajectories v1 ({len(rows['train'])} train, "
                                      f"{len(rows['dev'])} dev reference)")
-    api.create_tag(a.repo, repo_type="dataset", tag="v1", exist_ok=True)
-    print(f"uploaded and tagged v1: https://huggingface.co/datasets/{a.repo}")
+    if tagged:
+        api.delete_tag(a.repo, repo_type="dataset", tag=TAG)
+    api.create_tag(a.repo, repo_type="dataset", tag=TAG)
+    print(f"uploaded and {'re' if tagged else ''}tagged {TAG}: https://huggingface.co/datasets/{a.repo}")
     return 0
 
 

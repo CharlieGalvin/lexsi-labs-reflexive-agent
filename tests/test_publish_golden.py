@@ -21,9 +21,10 @@ def rows():
     return {"train": [tr], "dev": [dv]}
 
 
-def report(n_train=1, n_dev=1):
+def report(n_train=1, n_dev=1, unsolved_train=(), unsolved_dev=()):
     z = {"tasks": 0, "trajectories": 0, "unsolved": []}
-    retail = {"train": {**z, "trajectories": n_train}, "dev": {**z, "trajectories": n_dev}}
+    retail = {"train": {**z, "trajectories": n_train, "unsolved": list(unsolved_train)},
+              "dev": {**z, "trajectories": n_dev, "unsolved": list(unsolved_dev)}}
     return {"domains": {"retail": retail},
             "train_sizes": {k: {"min": 1, "median": 1, "max": 1} for k in ("turns", "targets", "chars")}}
 
@@ -48,6 +49,23 @@ def test_catches_bad_reward_and_targets():
     r["train"][0]["train_on"] = r["train"][0]["train_on"][1:]
     probs = pg.validate(r, report())
     assert any("reward" in p for p in probs) and any("train_on" in p for p in probs)
+
+
+def test_malformed_record_is_a_problem_not_a_crash():
+    r = rows()
+    del r["train"][0]["outcome"]
+    r["dev"][0]["task_id"] = "no-such-task"
+    probs = pg.validate(r, report())
+    assert any("malformed" in p for p in probs)
+    assert any("belongs to no split" in p for p in probs)
+
+
+def test_card_counts_unsolved_train_and_dev_separately():
+    tr, dv = splits.task_ids("retail", "train")[1:3], splits.task_ids("retail", "dev")[1:2]
+    text = pg.card(rows(), report(unsolved_train=tr, unsolved_dev=dv), "org/name", {})
+    assert "**2 train tasks have no trajectory**" in text
+    assert "**1 dev tasks have no reference trajectory" in text
+    assert "The format is set by the same prompt builder" in text
 
 
 def test_card_has_front_matter_and_never_train_on_dev():
@@ -76,22 +94,32 @@ class FakeApi:
     def upload_folder(self, **kw):
         self.calls.append(("upload", sorted(kw["allow_patterns"])))
 
-    def create_tag(self, repo_id, repo_type, tag, exist_ok):
+    tags: list = []
+
+    def list_repo_refs(self, repo_id, repo_type):
+        return type("Refs", (), {"tags": [type("Ref", (), {"name": t})() for t in self.tags]})()
+
+    def delete_tag(self, repo_id, repo_type, tag):
+        self.calls.append(("untag", tag))
+
+    def create_tag(self, repo_id, repo_type, tag):
         self.calls.append(("tag", tag))
 
 
-def _setup(tmp_path, monkeypatch, existing):
+def _setup(tmp_path, monkeypatch, existing, tags=(), args=()):
     import json
+    import shutil
 
     import huggingface_hub
 
     for split, recs in rows().items():
         (tmp_path / pg.FILES[split]).write_text("".join(json.dumps(r) + "\n" for r in recs))
-    (tmp_path / "splits.json").write_text("{}")
-    (tmp_path / "build_report.json").write_text(json.dumps(report()))
-    FakeApi.existing, FakeApi.calls = existing, []
+    shutil.copy(splits.SPLITS_PATH, tmp_path / "splits.json")
+    files = {n: pg.sha256(tmp_path / n) for n in [*pg.FILES.values(), "splits.json"]}
+    (tmp_path / "build_report.json").write_text(json.dumps({**report(), "files": files}))
+    FakeApi.existing, FakeApi.calls, FakeApi.tags = existing, [], list(tags)
     monkeypatch.setattr(huggingface_hub, "HfApi", FakeApi)
-    monkeypatch.setattr(sys, "argv", ["publish_golden.py", "--dir", str(tmp_path), "--repo", "org/ds"])
+    monkeypatch.setattr(sys, "argv", ["publish_golden.py", "--dir", str(tmp_path), "--repo", "org/ds", *args])
 
 
 def test_upload_creates_private_repo_and_tags(tmp_path, monkeypatch):
@@ -105,3 +133,37 @@ def test_upload_creates_private_repo_and_tags(tmp_path, monkeypatch):
 def test_refuses_public_repo(tmp_path, monkeypatch):
     _setup(tmp_path, monkeypatch, existing={"org/ds": False})
     assert pg.main() == 1 and FakeApi.calls == []
+
+
+def test_refuses_to_reupload_over_existing_tag(tmp_path, monkeypatch):
+    _setup(tmp_path, monkeypatch, existing={"org/ds": True}, tags=["v1"])
+    assert pg.main() == 1 and FakeApi.calls == []
+
+
+def test_retag_moves_existing_tag(tmp_path, monkeypatch):
+    _setup(tmp_path, monkeypatch, existing={"org/ds": True}, tags=["v1"], args=["--retag"])
+    assert pg.main() == 0
+    assert [c[0] for c in FakeApi.calls] == ["upload", "untag", "tag"]
+
+
+def test_refuses_files_changed_since_build(tmp_path, monkeypatch):
+    _setup(tmp_path, monkeypatch, existing={})
+    with (tmp_path / pg.FILES["train"]).open("a") as f:
+        f.write("\n")
+    assert pg.main() == 1 and FakeApi.calls == []
+
+
+def test_refuses_stale_splits_copy(tmp_path):
+    (tmp_path / "splits.json").write_text("{}")
+    for n in pg.FILES.values():
+        (tmp_path / n).write_text("")
+    files = {n: pg.sha256(tmp_path / n) for n in [*pg.FILES.values(), "splits.json"]}
+    probs = pg.check_files(tmp_path, {"files": files})
+    assert any("differs from" in p for p in probs)
+    assert any("no file checksums" in p for p in pg.check_files(tmp_path, {}))
+
+
+def test_splits_order_keeps_file_order_across_train_and_dev():
+    tr, dv = splits.task_ids("telecom", "train"), splits.task_ids("telecom", "dev")
+    mixed = [dv[0], tr[3], tr[0], dv[3]]
+    assert pg.splits_order("telecom", mixed) == [tr[0], tr[3], dv[0], dv[3]]
