@@ -55,6 +55,10 @@ check: lint test
 
 # --- τ²-bench ----------------------------------------------------------------
 
+# Build golden trajectories v1 from the teacher's fix run (SEL-9; no API calls)
+golden *args:
+    python scripts/build_golden.py {{args}}
+
 # Confirm configs/splits.json matches a rebuild from its seed (SEL-36)
 splits-check:
     python scripts/make_splits.py --check
