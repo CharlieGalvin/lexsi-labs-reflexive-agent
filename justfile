@@ -102,6 +102,10 @@ teacher-sample *models="aya qwen":
 teacher-fixes *args:
     python scripts/teacher_fixes.py {{args}}
 
+# Where does a model go wrong? Failure categories + a browsable log page (results/reports/)
+student-review path="results/fixes/aya.jsonl":
+    python scripts/student_review.py {{path}}
+
 # Bake-off statistics and projected cost from the saved runs in results/episodes (no API calls)
 bakeoff-report:
     python scripts/bakeoff_report.py

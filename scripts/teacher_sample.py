@@ -486,6 +486,9 @@ def run_one(model: str, domain: str, task_id: str, *, temperature: float = 0.0,
         "unseen_arguments": unseen_arguments(msgs),
         **tool_errors(msgs),
     }
+    raw = getattr(getattr(agent, "client", None), "raw_turns", None)
+    if raw:  # prompted models (Aya): the raw replies, to review how calls were written and read
+        rec["raw_turns"] = raw
     rec["wall_s"] = round(time.monotonic() - start, 1)
     return rec
 
