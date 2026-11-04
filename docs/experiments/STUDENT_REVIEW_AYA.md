@@ -55,7 +55,8 @@ tool call inside prose, but that's a note, not a failure: the call was still rea
    - `check_app_permissions` 6;
    - `run_speed_test` 5.
 
-   That's 52 of its 53 unknown-tool calls. The teacher instead *asks the customer* to check.
+   **55 of its 56 unknown-tool calls** were the customer's phone tools (the 8 commonest are listed
+   above). The teacher instead *asks the customer* to check.
 2. **Batching dependent calls.** **50% of Aya's tool turns** (54 of 107) make several calls at
    once, often using a placeholder for a value the first call hasn't returned yet. GLM-5.3-Flash
    does it in **4%** (54 of 1,410) of its turns, and only for independent lookups.
