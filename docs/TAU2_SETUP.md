@@ -47,7 +47,20 @@ The agent and simulated customer can run through either OpenAI or OpenRouter. Wi
 | telecom | 74 | 40 | At risk (context); also a 2,285-task generated pool for extra training |
 | **Total** | **178** | **100** | all three; 104 / 60 if telecom is dropped |
 
-Healing (hard subset, teacher fixes, GRPO) and the DSPy prompt (Arm D) use **train only**. All
+**Frozen 4 Nov (SEL-36) in [`configs/splits.json`](../configs/splits.json).** A dev set is carved
+from train **by task**, at random with a fixed seed (`reagent-dev-v1`):
+
+| Domain | Train (for training) | Dev | Test |
+| --- | ---: | ---: | ---: |
+| retail | 59 | 15 | 40 |
+| airline | 24 | 6 | 20 |
+| telecom | 59 | 15 | 40 |
+| **Total** | **142** | **36** | **100** |
+
+Dev is for DSPy, gate checks and heal-cycle checks; a dev task's trajectory is never trained on.
+`python scripts/make_splits.py --check` confirms the file matches a fresh rebuild from the seed.
+
+Healing (hard subset, teacher fixes, GRPO) and the DSPy prompt (Arm D) use **train only** (and dev). All
 reported numbers come from the test tasks (100, or 60 without telecom), run with 3–4 trials
 each (τ²-bench's pass^k) so the confidence intervals stay usable on a small test set.
 
