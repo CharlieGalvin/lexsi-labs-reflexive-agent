@@ -46,6 +46,10 @@ setup: setup-dev
 test:
     python -m pytest -q
 
+# The plain-English specifications (tests/features/*.feature), with each scenario's result
+features:
+    python -m pytest tests/test_features_*.py --gherkin-terminal-reporter -v -p no:cacheprovider
+
 # Lint the code
 lint:
     python -m ruff check src scripts tests
