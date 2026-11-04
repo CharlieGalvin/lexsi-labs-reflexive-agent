@@ -61,7 +61,7 @@ tool call inside prose, but that's a note, not a failure: the call was still rea
    once, often using a placeholder for a value the first call hasn't returned yet. GLM-5.3-Flash
    does it in **4%** (54 of 1,410) of its turns, and only for independent lookups.
 3. **Inventing IDs.** Examples: `#W0000000`, `1234567890`, `sara_doe_496`. Lookups came back
-   "not found" 50 times, usually after a guessed ID:
+   "not found" 56 times across 13 tools, usually after a guessed ID. The commonest:
    - `get_user_details` 15;
    - `get_customer_by_phone` 9;
    - `get_order_details` 8;
