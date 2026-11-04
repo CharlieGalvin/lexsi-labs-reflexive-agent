@@ -1,7 +1,7 @@
 """Does the teacher (Aya Expanse 32B via Cohere) do native tool calling? 3 API calls (SEL-37).
 
-    python scripts/teacher_probe.py                            # needs COHERE_API_KEY in .env
-    python scripts/teacher_probe.py --model tiny-aya-global    # the student instead
+    python scripts/archive/teacher_probe.py                            # needs COHERE_API_KEY in .env
+    python scripts/archive/teacher_probe.py --model tiny-aya-global    # the student instead
 
 1. Plain chat: is the key and model ID right? What latency?
 2. Native: the same question with ``tools=``. Do structured ``tool_calls`` come back?
@@ -17,7 +17,7 @@ import pathlib
 import sys
 import time
 
-sys.path.insert(0, str(pathlib.Path(__file__).parents[1] / "src"))
+sys.path.insert(0, str(pathlib.Path(__file__).parents[2] / "src"))
 from reflexive.teacher import TeacherClient  # noqa: E402
 
 TOOLS = [{"type": "function", "function": {

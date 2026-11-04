@@ -91,15 +91,16 @@ tau2-episode-check:
 tau2-check-gold *domains:
     python scripts/tau2_check_scorer.py gold {{domains}}
 
-# --- Teacher (Aya Expanse 32B via Cohere; needs COHERE_API_KEY) -----------------
+# --- Archived: Aya Expanse 32B as the teacher (3 Nov; Aya is now the student) ---
+# Kept for the record (docs/TEACHER_SETUP.md, history). Needs COHERE_API_KEY.
 
 # Does a Cohere model do native tool calling? 3 API calls (default: the teacher; or tiny-aya-global)
 teacher-probe model="c4ai-aya-expanse-32b":
-    python scripts/teacher_probe.py --model {{model}}
+    python scripts/archive/teacher_probe.py --model {{model}}
 
 # Teacher on 3 tasks (one per domain). style: cohere (Aya's own) | agenttune; hints: none | steps | steps_with_args
 teacher-check style="cohere" hints="none":
-    python scripts/teacher_check.py --style {{style}} --hints {{hints}}
+    python scripts/archive/teacher_check.py --style {{style}} --hints {{hints}}
 
 # Is Aya a usable teacher? Same 30 train tasks for Aya and a reference (default: Qwen3 32B). ~$5
 teacher-sample *models="aya qwen":

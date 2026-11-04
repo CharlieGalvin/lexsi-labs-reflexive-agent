@@ -10,7 +10,7 @@
 Calls go through Cohere's OpenAI-compatible endpoint (https://api.cohere.ai/compatibility/v1)
 with LiteLLM. See docs/TEACHER_SETUP.md for limits and prices.
 
-**Two ways to make tool calls** (`scripts/teacher_probe.py` shows which one works):
+**Two ways to make tool calls** (`scripts/archive/teacher_probe.py` shows which one works):
 
 - ``native``: pass the tool schemas as ``tools=`` and read structured ``tool_calls`` back.
   **Aya Expanse doesn't support this:** Cohere rejects it with "tool use is not supported by

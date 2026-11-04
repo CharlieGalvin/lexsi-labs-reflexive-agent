@@ -1,6 +1,6 @@
 """Teacher cost and latency on 3 τ²-bench tasks, plus a budget estimate (SEL-37).
 
-    python scripts/teacher_check.py [--mode prompted|native] [--tasks retail:0 airline:3 ...]
+    python scripts/archive/teacher_check.py [--mode prompted|native] [--tasks retail:0 airline:3 ...]
 
 Runs the teacher (Aya Expanse 32B via Cohere) as the agent through `Tau2Episode`, one train
 task per domain by default, with GPT-4.1 as the simulated customer (as in every run). For each
@@ -25,7 +25,7 @@ import time
 
 from loguru import logger
 
-sys.path.insert(0, str(pathlib.Path(__file__).parents[1] / "src"))
+sys.path.insert(0, str(pathlib.Path(__file__).parents[2] / "src"))
 from reflexive.episode import Tau2Episode  # noqa: E402
 from reflexive.teacher import EmptyTeacherReply, TeacherClient, unseen_arguments  # noqa: E402
 
