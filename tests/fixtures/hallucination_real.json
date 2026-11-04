@@ -1,0 +1,1477 @@
+{
+ "note": "Excerpts of real Aya Expanse 32B conversations (SEL-41 Arm A / Arm C rollouts), system prompt cut. Built once from results/episodes/arms/ for tests/test_hallucination.py.",
+ "cases": [
+  {
+   "source": "Arm A, telecom train, [mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|br",
+   "kind": "customer_tool",
+   "type": "TOOL",
+   "detail": "the agent has no tool 'can_send_mms'",
+   "termination": null,
+   "messages": [
+    {
+     "role": "system",
+     "content": "(τ²-bench system prompt, cut for the fixture)"
+    },
+    {
+     "role": "assistant",
+     "content": "Hi! How can I help you today?"
+    },
+    {
+     "role": "user",
+     "content": "Yeah, hi. I’m having trouble sending those picture messages—MMS, I think they’re called? It’s been a few hours now and nothing’s going through. Can you help me get this sorted out?"
+    },
+    {
+     "role": "assistant",
+     "content": null,
+     "tool_calls": [
+      {
+       "id": "t1_0",
+       "type": "function",
+       "function": {
+        "name": "get_customer_by_phone",
+        "arguments": "{\"phone_number\": \"customer's phone number\"}"
+       }
+      },
+      {
+       "id": "t1_1",
+       "type": "function",
+       "function": {
+        "name": "can_send_mms",
+        "arguments": "{}"
+       }
+      },
+      {
+       "id": "t1_2",
+       "type": "function",
+       "function": {
+        "name": "check_network_status",
+        "arguments": "{}"
+       }
+      },
+      {
+       "id": "t1_3",
+       "type": "function",
+       "function": {
+        "name": "check_apn_settings",
+        "arguments": "{}"
+       }
+      },
+      {
+       "id": "t1_4",
+       "type": "function",
+       "function": {
+        "name": "check_wifi_calling_status",
+        "arguments": "{}"
+       }
+      },
+      {
+       "id": "t1_5",
+       "type": "function",
+       "function": {
+        "name": "check_app_permissions",
+        "arguments": "{\"app_name\": \"messaging\"}"
+       }
+      }
+     ]
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t1_0",
+     "content": "Error: Customer with phone number customer's phone number not found or ambiguous"
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t1_1",
+     "content": "Error: Tool 'can_send_mms' not found."
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t1_2",
+     "content": "Error: Tool 'check_network_status' not found."
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t1_3",
+     "content": "Error: Tool 'check_apn_settings' not found."
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t1_4",
+     "content": "Error: Tool 'check_wifi_calling_status' not found."
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t1_5",
+     "content": "Error: Tool 'check_app_permissions' not found."
+    }
+   ]
+  },
+  {
+   "source": "Arm A, telecom train, [mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|br",
+   "kind": "placeholder",
+   "type": "ARG",
+   "detail": "phone_number=\"customer's phone number\"",
+   "termination": null,
+   "messages": [
+    {
+     "role": "system",
+     "content": "(τ²-bench system prompt, cut for the fixture)"
+    },
+    {
+     "role": "assistant",
+     "content": "Hi! How can I help you today?"
+    },
+    {
+     "role": "user",
+     "content": "Yeah, hi, so here’s the problem: I haven’t been able to send any picture messages from my phone for a few hours now. I just want to get it working again. Can you help me with that?"
+    },
+    {
+     "role": "assistant",
+     "content": null,
+     "tool_calls": [
+      {
+       "id": "t1_0",
+       "type": "function",
+       "function": {
+        "name": "get_customer_by_phone",
+        "arguments": "{\"phone_number\": \"customer's phone number\"}"
+       }
+      },
+      {
+       "id": "t1_1",
+       "type": "function",
+       "function": {
+        "name": "get_details_by_id",
+        "arguments": "{\"id\": \"customer_id from previous tool result\"}"
+       }
+      },
+      {
+       "id": "t1_2",
+       "type": "function",
+       "function": {
+        "name": "check_network_status",
+        "arguments": "{}"
+       }
+      },
+      {
+       "id": "t1_3",
+       "type": "function",
+       "function": {
+        "name": "check_apn_settings",
+        "arguments": "{}"
+       }
+      },
+      {
+       "id": "t1_4",
+       "type": "function",
+       "function": {
+        "name": "check_app_permissions",
+        "arguments": "{\"app_name\": \"messaging\"}"
+       }
+      }
+     ]
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t1_0",
+     "content": "Error: Customer with phone number customer's phone number not found or ambiguous"
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t1_1",
+     "content": "Error: Unknown ID format or type: customer_id from previous tool result"
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t1_2",
+     "content": "Error: Tool 'check_network_status' not found."
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t1_3",
+     "content": "Error: Tool 'check_apn_settings' not found."
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t1_4",
+     "content": "Error: Tool 'check_app_permissions' not found."
+    }
+   ]
+  },
+  {
+   "source": "Arm A, telecom train, [mobile_data_issue]airplane_mode_on|bad_network_preference|data_mode_o",
+   "kind": "ungrounded",
+   "type": "ARG",
+   "detail": "customer_id='C00123456789' never appeared before this call",
+   "termination": null,
+   "messages": [
+    {
+     "role": "system",
+     "content": "(τ²-bench system prompt, cut for the fixture)"
+    },
+    {
+     "role": "assistant",
+     "content": "Hi! How can I help you today?"
+    },
+    {
+     "role": "user",
+     "content": "Hey, yeah, I’m having some trouble with my mobile data. It keeps cutting out or is just super slow. I really need to get excellent internet speed on my phone—nothing less will do. I’m not on Wi-Fi, just using mobile data. Can you help me sort this out?"
+    },
+    {
+     "role": "assistant",
+     "content": null,
+     "tool_calls": [
+      {
+       "id": "t1_0",
+       "type": "function",
+       "function": {
+        "name": "check_network_status",
+        "arguments": "{}"
+       }
+      },
+      {
+       "id": "t1_1",
+       "type": "function",
+       "function": {
+        "name": "check_data_restriction_status",
+        "arguments": "{}"
+       }
+      },
+      {
+       "id": "t1_2",
+       "type": "function",
+       "function": {
+        "name": "check_apn_settings",
+        "arguments": "{}"
+       }
+      },
+      {
+       "id": "t1_3",
+       "type": "function",
+       "function": {
+        "name": "run_speed_test",
+        "arguments": "{}"
+       }
+      }
+     ]
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t1_0",
+     "content": "Error: Tool 'check_network_status' not found."
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t1_1",
+     "content": "Error: Tool 'check_data_restriction_status' not found."
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t1_2",
+     "content": "Error: Tool 'check_apn_settings' not found."
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t1_3",
+     "content": "Error: Tool 'run_speed_test' not found."
+    },
+    {
+     "role": "assistant",
+     "content": "I'm sorry for the inconvenience. It seems like some of the tools I used to diagnose your issue are not available. Let's try a different approach.\n\nCan you please confirm if your phone's mobile data is turned on? Also, are you currently roaming or outside your carrier's primary coverage area?"
+    },
+    {
+     "role": "user",
+     "content": "Yeah, my mobile data is definitely turned on. And yep, I’m currently abroad in France, so I’m roaming right now. What should I check next?"
+    },
+    {
+     "role": "assistant",
+     "content": null,
+     "tool_calls": [
+      {
+       "id": "t3_0",
+       "type": "function",
+       "function": {
+        "name": "enable_roaming",
+        "arguments": "{\"customer_id\": \"C00123456789\", \"line_id\": \"L00123456789\"}"
+       }
+      },
+      {
+       "id": "t3_1",
+       "type": "function",
+       "function": {
+        "name": "get_data_usage",
+        "arguments": "{\"customer_id\": \"C00123456789\", \"line_id\": \"L00123456789\"}"
+       }
+      }
+     ]
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t3_0",
+     "content": "Error: Customer with ID C00123456789 not found"
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t3_1",
+     "content": "Error: Customer with ID C00123456789 not found"
+    }
+   ]
+  },
+  {
+   "source": "Arm A, telecom train, [mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|br",
+   "kind": "malformed",
+   "type": "ARG",
+   "detail": "an Action: block the parser couldn't read",
+   "termination": null,
+   "messages": [
+    {
+     "role": "system",
+     "content": "(τ²-bench system prompt, cut for the fixture)"
+    },
+    {
+     "role": "assistant",
+     "content": "Hi! How can I help you today?"
+    },
+    {
+     "role": "user",
+     "content": "Hey, yeah, I’m having trouble sending MMS messages on my phone. It’s been a few hours now and nothing’s going through. Can you help me get this sorted?"
+    },
+    {
+     "role": "assistant",
+     "content": null,
+     "tool_calls": [
+      {
+       "id": "t1_0",
+       "type": "function",
+       "function": {
+        "name": "get_customer_by_phone",
+        "arguments": "{\"phone_number\": \"customer's phone number\"}"
+       }
+      },
+      {
+       "id": "t1_1",
+       "type": "function",
+       "function": {
+        "name": "can_send_mms",
+        "arguments": "{}"
+       }
+      },
+      {
+       "id": "t1_2",
+       "type": "function",
+       "function": {
+        "name": "check_network_status",
+        "arguments": "{}"
+       }
+      },
+      {
+       "id": "t1_3",
+       "type": "function",
+       "function": {
+        "name": "check_apn_settings",
+        "arguments": "{}"
+       }
+      },
+      {
+       "id": "t1_4",
+       "type": "function",
+       "function": {
+        "name": "check_wifi_calling_status",
+        "arguments": "{}"
+       }
+      },
+      {
+       "id": "t1_5",
+       "type": "function",
+       "function": {
+        "name": "check_app_permissions",
+        "arguments": "{\"app_name\": \"messaging\"}"
+       }
+      }
+     ]
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t1_0",
+     "content": "Error: Customer with phone number customer's phone number not found or ambiguous"
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t1_1",
+     "content": "Error: Tool 'can_send_mms' not found."
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t1_2",
+     "content": "Error: Tool 'check_network_status' not found."
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t1_3",
+     "content": "Error: Tool 'check_apn_settings' not found."
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t1_4",
+     "content": "Error: Tool 'check_wifi_calling_status' not found."
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t1_5",
+     "content": "Error: Tool 'check_app_permissions' not found."
+    },
+    {
+     "role": "assistant",
+     "content": "I apologize for the inconvenience. It seems there was an error with the tools I used to diagnose your issue. Let's try a different approach.\n\nCan you please confirm your full name and date of birth so I can locate your account? I'll then be able to assist you further with the MMS issue."
+    },
+    {
+     "role": "user",
+     "content": "Sure thing. My name’s John Smith. Let me know if you need anything else to pull up my account."
+    },
+    {
+     "role": "assistant",
+     "content": "Action: ```json\n[\n    {\n        \"tool_name\": \"get_customer_by_name\",\n        \"parameters\": {\n            \"full_name\": \"John Smith\",\n            \"dob\": \"YYYY-MM-DD\"  # Replace with actual date of birth\n        }\n    }\n]\n```"
+    }
+   ]
+  },
+  {
+   "source": "Arm A, telecom train, [mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|br",
+   "kind": "repeated_failed_call",
+   "type": "LOOP",
+   "detail": "the same call already failed",
+   "termination": null,
+   "messages": [
+    {
+     "role": "system",
+     "content": "(τ²-bench system prompt, cut for the fixture)"
+    },
+    {
+     "role": "assistant",
+     "content": "Hi! How can I help you today?"
+    },
+    {
+     "role": "user",
+     "content": "Yeah, hi, so here’s the problem: I haven’t been able to send MMS messages from my phone for the past few hours. I’m currently in France, and I really need this fixed. Can you help me get this sorted out?"
+    },
+    {
+     "role": "assistant",
+     "content": null,
+     "tool_calls": [
+      {
+       "id": "t1_0",
+       "type": "function",
+       "function": {
+        "name": "get_customer_by_phone",
+        "arguments": "{\"phone_number\": \"customer's phone number\"}"
+       }
+      },
+      {
+       "id": "t1_1",
+       "type": "function",
+       "function": {
+        "name": "get_details_by_id",
+        "arguments": "{\"id\": \"line ID from customer data\"}"
+       }
+      },
+      {
+       "id": "t1_2",
+       "type": "function",
+       "function": {
+        "name": "check_network_status",
+        "arguments": "{}"
+       }
+      },
+      {
+       "id": "t1_3",
+       "type": "function",
+       "function": {
+        "name": "check_apn_settings",
+        "arguments": "{}"
+       }
+      },
+      {
+       "id": "t1_4",
+       "type": "function",
+       "function": {
+        "name": "check_wifi_calling_status",
+        "arguments": "{}"
+       }
+      },
+      {
+       "id": "t1_5",
+       "type": "function",
+       "function": {
+        "name": "check_app_permissions",
+        "arguments": "{\"app_name\": \"messaging\"}"
+       }
+      }
+     ]
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t1_0",
+     "content": "Error: Customer with phone number customer's phone number not found or ambiguous"
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t1_1",
+     "content": "Error: Unknown ID format or type: line ID from customer data"
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t1_2",
+     "content": "Error: Tool 'check_network_status' not found."
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t1_3",
+     "content": "Error: Tool 'check_apn_settings' not found."
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t1_4",
+     "content": "Error: Tool 'check_wifi_calling_status' not found."
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t1_5",
+     "content": "Error: Tool 'check_app_permissions' not found."
+    },
+    {
+     "role": "assistant",
+     "content": "I'm sorry for the inconvenience. It seems there was an error retrieving your customer information and running the necessary diagnostics. Let's try a different approach.\n\nCan you please provide me with your account number or customer ID? This will help me access your account details more accurately. Once I have that information, I can guide you through some troubleshooting steps to resolve the MMS issue."
+    },
+    {
+     "role": "user",
+     "content": "I don’t have my account number or customer ID handy right now, but I can give you my phone number if that helps. It’s 555-123-2002. Can you use that to look up my account and help me fix the MMS problem?"
+    },
+    {
+     "role": "assistant",
+     "content": null,
+     "tool_calls": [
+      {
+       "id": "t3_0",
+       "type": "function",
+       "function": {
+        "name": "get_customer_by_phone",
+        "arguments": "{\"phone_number\": \"555-123-2002\"}"
+       }
+      },
+      {
+       "id": "t3_1",
+       "type": "function",
+       "function": {
+        "name": "get_details_by_id",
+        "arguments": "{\"id\": \"line ID from customer data\"}"
+       }
+      },
+      {
+       "id": "t3_2",
+       "type": "function",
+       "function": {
+        "name": "check_network_status",
+        "arguments": "{}"
+       }
+      },
+      {
+       "id": "t3_3",
+       "type": "function",
+       "function": {
+        "name": "check_apn_settings",
+        "arguments": "{}"
+       }
+      },
+      {
+       "id": "t3_4",
+       "type": "function",
+       "function": {
+        "name": "check_wifi_calling_status",
+        "arguments": "{}"
+       }
+      },
+      {
+       "id": "t3_5",
+       "type": "function",
+       "function": {
+        "name": "check_app_permissions",
+        "arguments": "{\"app_name\": \"messaging\"}"
+       }
+      }
+     ]
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t3_0",
+     "content": "{\"customer_id\":\"C1001\",\"full_name\":\"Priya Patil\",\"date_of_birth\":\"1985-06-15\",\"email\":\"john.smith@example.com\",\"phone_number\":\"555-123-2002\",\"address\":{\"street\":\"123 Main St\",\"city\":\"Anytown\",\"state\":\"CA\",\"zip_code\":\"90210\"},\"account_status\":\"Active\",\"payment_methods\":[{\"method_type\":\"Credit Card\",\"account_number_last_4\":\"1235\",\"expiration_date\":\"12/2026\"}],\"line_ids\":[\"L1001\",\"L1002\",\"L1003\"],\"bill_ids\":[\"B1001\",\"B1002\",\"B1003\"],\"created_at\":\"2025-01-15 10:30:00\",\"last_extension_date\":null,\"goodwill_credit_used_this_year\":25.0}"
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t3_1",
+     "content": "Error: Unknown ID format or type: line ID from customer data"
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t3_2",
+     "content": "Error: Tool 'check_network_status' not found."
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t3_3",
+     "content": "Error: Tool 'check_apn_settings' not found."
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t3_4",
+     "content": "Error: Tool 'check_wifi_calling_status' not found."
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t3_5",
+     "content": "Error: Tool 'check_app_permissions' not found."
+    }
+   ]
+  },
+  {
+   "source": "Arm A, telecom train, [mms_issue]bad_wifi_calling|break_apn_mms_setting|break_app_sms_permis",
+   "kind": "repeated_call",
+   "type": "LOOP",
+   "detail": "the same call 3 times",
+   "termination": null,
+   "messages": [
+    {
+     "role": "system",
+     "content": "(τ²-bench system prompt, cut for the fixture)"
+    },
+    {
+     "role": "assistant",
+     "content": "Hi! How can I help you today?"
+    },
+    {
+     "role": "user",
+     "content": "Yeah, hi. I’m having trouble sending those picture messages—MMS, I think they’re called? My phone just won’t send them all of a sudden. Can you help me get that working again?"
+    },
+    {
+     "role": "assistant",
+     "content": null,
+     "tool_calls": [
+      {
+       "id": "t1_0",
+       "type": "function",
+       "function": {
+        "name": "get_customer_by_phone",
+        "arguments": "{\"phone_number\": \"customer's phone number\"}"
+       }
+      },
+      {
+       "id": "t1_1",
+       "type": "function",
+       "function": {
+        "name": "can_send_mms",
+        "arguments": "{}"
+       }
+      },
+      {
+       "id": "t1_2",
+       "type": "function",
+       "function": {
+        "name": "check_network_status",
+        "arguments": "{}"
+       }
+      },
+      {
+       "id": "t1_3",
+       "type": "function",
+       "function": {
+        "name": "check_apn_settings",
+        "arguments": "{}"
+       }
+      },
+      {
+       "id": "t1_4",
+       "type": "function",
+       "function": {
+        "name": "check_app_permissions",
+        "arguments": "{\"app_name\": \"messaging\"}"
+       }
+      }
+     ]
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t1_0",
+     "content": "Error: Customer with phone number customer's phone number not found or ambiguous"
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t1_1",
+     "content": "Error: Tool 'can_send_mms' not found."
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t1_2",
+     "content": "Error: Tool 'check_network_status' not found."
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t1_3",
+     "content": "Error: Tool 'check_apn_settings' not found."
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t1_4",
+     "content": "Error: Tool 'check_app_permissions' not found."
+    },
+    {
+     "role": "assistant",
+     "content": "I'm sorry, it seems like there was an error retrieving your customer information and running the necessary diagnostics. Let's try again.\n\nCan you please confirm your phone number so I can access your account and investigate the issue? I'll need to run a few checks to identify the problem and get your MMS working again."
+    },
+    {
+     "role": "user",
+     "content": "Sure, my number is 555-123-2002. Let me know what you need me to do next."
+    },
+    {
+     "role": "assistant",
+     "content": null,
+     "tool_calls": [
+      {
+       "id": "t3_0",
+       "type": "function",
+       "function": {
+        "name": "get_customer_by_phone",
+        "arguments": "{\"phone_number\": \"555-123-2002\"}"
+       }
+      },
+      {
+       "id": "t3_1",
+       "type": "function",
+       "function": {
+        "name": "can_send_mms",
+        "arguments": "{}"
+       }
+      },
+      {
+       "id": "t3_2",
+       "type": "function",
+       "function": {
+        "name": "check_network_status",
+        "arguments": "{}"
+       }
+      },
+      {
+       "id": "t3_3",
+       "type": "function",
+       "function": {
+        "name": "check_apn_settings",
+        "arguments": "{}"
+       }
+      },
+      {
+       "id": "t3_4",
+       "type": "function",
+       "function": {
+        "name": "check_app_permissions",
+        "arguments": "{\"app_name\": \"messaging\"}"
+       }
+      }
+     ]
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t3_0",
+     "content": "{\"customer_id\":\"C1001\",\"full_name\":\"Mamadou Diallo\",\"date_of_birth\":\"1985-06-15\",\"email\":\"john.smith@example.com\",\"phone_number\":\"555-123-2002\",\"address\":{\"street\":\"123 Main St\",\"city\":\"Anytown\",\"state\":\"CA\",\"zip_code\":\"90210\"},\"account_status\":\"Active\",\"payment_methods\":[{\"method_type\":\"Credit Card\",\"account_number_last_4\":\"1235\",\"expiration_date\":\"12/2026\"}],\"line_ids\":[\"L1001\",\"L1002\",\"L1003\"],\"bill_ids\":[\"B1001\",\"B1002\",\"B1003\"],\"created_at\":\"2025-01-15 10:30:00\",\"last_extension_date\":null,\"goodwill_credit_used_this_year\":25.0}"
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t3_1",
+     "content": "Error: Tool 'can_send_mms' not found."
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t3_2",
+     "content": "Error: Tool 'check_network_status' not found."
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t3_3",
+     "content": "Error: Tool 'check_apn_settings' not found."
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t3_4",
+     "content": "Error: Tool 'check_app_permissions' not found."
+    },
+    {
+     "role": "assistant",
+     "content": "Thank you for confirming your phone number. I have accessed your account and will now run some diagnostics to identify the issue with your MMS.\n\nPlease bear with me while I check a few things. I'll let you know what I find and what steps we can take next."
+    },
+    {
+     "role": "user",
+     "content": "Yeah, no problem, take your time. Just let me know if you need anything from me."
+    },
+    {
+     "role": "assistant",
+     "content": null,
+     "tool_calls": [
+      {
+       "id": "t5_0",
+       "type": "function",
+       "function": {
+        "name": "check_network_status",
+        "arguments": "{}"
+       }
+      },
+      {
+       "id": "t5_1",
+       "type": "function",
+       "function": {
+        "name": "check_apn_settings",
+        "arguments": "{}"
+       }
+      },
+      {
+       "id": "t5_2",
+       "type": "function",
+       "function": {
+        "name": "check_app_permissions",
+        "arguments": "{\"app_name\": \"messaging\"}"
+       }
+      }
+     ]
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t5_0",
+     "content": "Error: Tool 'check_network_status' not found."
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t5_1",
+     "content": "Error: Tool 'check_apn_settings' not found."
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t5_2",
+     "content": "Error: Tool 'check_app_permissions' not found."
+    }
+   ]
+  },
+  {
+   "source": "Arm A, telecom train, [mms_issue]break_app_storage_permission|data_usage_exceeded[PERSONA:Ea",
+   "kind": "repeated_message",
+   "type": "LOOP",
+   "detail": "the same reply 3 times: \"You're very welcome, Mamadou. I appreciate your patience and understanding.\\n\\nPle\"",
+   "termination": null,
+   "messages": [
+    {
+     "role": "system",
+     "content": "(τ²-bench system prompt, cut for the fixture)"
+    },
+    {
+     "role": "assistant",
+     "content": "Hi! How can I help you today?"
+    },
+    {
+     "role": "user",
+     "content": "Hey there! Yeah, I’m having a bit of trouble sending MMS messages from my phone today. Regular texts are fine, but pictures just won’t go through. Can you help me get this sorted out?"
+    },
+    {
+     "role": "assistant",
+     "content": null,
+     "tool_calls": [
+      {
+       "id": "t1_0",
+       "type": "function",
+       "function": {
+        "name": "get_customer_by_phone",
+        "arguments": "{\"phone_number\": \"customer's phone number\"}"
+       }
+      },
+      {
+       "id": "t1_1",
+       "type": "function",
+       "function": {
+        "name": "check_network_status",
+        "arguments": "{}"
+       }
+      },
+      {
+       "id": "t1_2",
+       "type": "function",
+       "function": {
+        "name": "check_apn_settings",
+        "arguments": "{}"
+       }
+      },
+      {
+       "id": "t1_3",
+       "type": "function",
+       "function": {
+        "name": "check_wifi_calling_status",
+        "arguments": "{}"
+       }
+      },
+      {
+       "id": "t1_4",
+       "type": "function",
+       "function": {
+        "name": "check_app_permissions",
+        "arguments": "{\"app_name\": \"messaging\"}"
+       }
+      }
+     ]
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t1_0",
+     "content": "Error: Customer with phone number customer's phone number not found or ambiguous"
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t1_1",
+     "content": "Error: Tool 'check_network_status' not found."
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t1_2",
+     "content": "Error: Tool 'check_apn_settings' not found."
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t1_3",
+     "content": "Error: Tool 'check_wifi_calling_status' not found."
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t1_4",
+     "content": "Error: Tool 'check_app_permissions' not found."
+    },
+    {
+     "role": "assistant",
+     "content": "I'm sorry for the inconvenience. It seems there was an error retrieving your customer information and running the diagnostic tools.\n\nTo help me understand your issue better, could you please provide me with the following details:\n- Your full name and date of birth for verification.\n- The make and model of your phone.\n- Any recent changes to your phone or network settings that you can recall.\n\nOnce I have this information, I can provide more specific guidance or take the necessary actions to resolve the MMS issue."
+    },
+    {
+     "role": "user",
+     "content": "Sure thing! My name is Mamadou Diallo. I can give you my date of birth if you need it—just let me know.\n\nAs for my phone, could you tell me how to check the make and model? I’m not totally sure where to find that. And I haven’t changed any network settings or anything like that recently."
+    },
+    {
+     "role": "assistant",
+     "content": "Thank you for the additional information, Mamadou!\n\nTo find your phone's make and model, you can usually locate it in the device settings. Here's a simple way to check:\n\n1. Go to your phone's **Settings**.\n2. Scroll down and look for **About Phone** or **About Device**.\n3. Here, you should see details about your phone, including the **Make** and **Model**.\n\nPlease provide me with this information, and if needed, your date of birth for further verification. Once I have these details, I can proceed with the next steps to troubleshoot the MMS issue."
+    },
+    {
+     "role": "user",
+     "content": "Alright, I checked my phone’s status bar and it shows I’ve got good signal, 5G, and mobile data is enabled. Would you like me to keep looking for the make and model in the settings, or is this info enough for now? And just let me know if you still need my date of birth."
+    },
+    {
+     "role": "assistant",
+     "content": "Thank you for checking, Mamadou! The information you provided about your signal and data connection is helpful.\n\nFor now, please go ahead and locate your phone's make and model in the settings as I instructed earlier. Once you have that information, please provide it to me.\n\nRegarding your date of birth, I will need it for verification purposes, so please have it ready as well.\n\nWith these details, I can better assist you in troubleshooting the MMS issue."
+    },
+    {
+     "role": "user",
+     "content": "Okay, so I checked the messaging app’s status and it looks like it has permissions for SMS and phone. I’m still working on finding the make and model in my settings—just a sec.\n\nAnd my date of birth is ready whenever you need it. Let me know if you want me to send that now or wait until I’ve got the phone details."
+    },
+    {
+     "role": "assistant",
+     "content": "Great! I'm glad you were able to check the messaging app's permissions.\n\nPlease take your time to find the make and model of your phone. Once you have that information, you can provide it to me, along with your date of birth for verification.\n\nI will wait for your response with the requested details before proceeding with any further actions."
+    },
+    {
+     "role": "user",
+     "content": "Alright, just confirming again—the messaging app has permissions for SMS and phone.\n\nI’m still looking for the make and model in my phone’s settings. I’ll send you that info along with my date of birth as soon as I find it. Hang tight!"
+    },
+    {
+     "role": "assistant",
+     "content": "Thank you for the confirmation, Mamadou. I appreciate your patience and cooperation.\n\nPlease go ahead and provide the make and model of your phone, along with your date of birth, when you have the information ready. I will be here to assist you further."
+    },
+    {
+     "role": "user",
+     "content": "Okay, thanks for waiting. My date of birth is ready to go—just let me know when you want it.\n\nI’m still poking around in the settings for the make and model. I’ll send both pieces of info as soon as I have them. Thanks for hanging in there with me!"
+    },
+    {
+     "role": "assistant",
+     "content": "No problem at all, Mamadou! I'm happy to help.\n\nPlease provide your date of birth whenever you are ready. I will need it for verification.\n\nTake your time to find the make and model of your phone. I will wait for your response with the requested details."
+    },
+    {
+     "role": "user",
+     "content": "Alright, my date of birth is January 14, 1983.\n\nStill working on finding the make and model in my phone’s settings—will send that over as soon as I spot it. Thanks for your patience!"
+    },
+    {
+     "role": "assistant",
+     "content": "Thank you for providing your date of birth, Mamadou. I have verified your information.\n\nPlease continue to look for the make and model of your phone in the settings. Once you have that information, please let me know.\n\nI will wait for your response with the phone details before proceeding with any further troubleshooting steps."
+    },
+    {
+     "role": "user",
+     "content": "Sounds good, I’ll keep looking and let you know as soon as I find the make and model in my settings. Thanks for sticking with me!"
+    },
+    {
+     "role": "assistant",
+     "content": "You're welcome, Mamadou! I appreciate your efforts in providing the necessary information.\n\nPlease take your time and let me know when you have the make and model of your phone. I will be here to assist you further."
+    },
+    {
+     "role": "user",
+     "content": "Alright, will do! I’ll send you the make and model as soon as I find it in my phone’s settings. Thanks again for your patience—I’ll be back with that info shortly."
+    },
+    {
+     "role": "assistant",
+     "content": "No problem, Mamadou! I will wait for your response with the make and model of your phone.\n\nIn the meantime, if you have any other questions or concerns, feel free to ask. I'm here to help."
+    },
+    {
+     "role": "user",
+     "content": "Thanks, I appreciate it! I’ll let you know if anything else comes up while I’m looking. Otherwise, I’ll just send the make and model once I’ve got it."
+    },
+    {
+     "role": "assistant",
+     "content": "You're very welcome, Mamadou. I'm glad to assist you.\n\nPlease go ahead and provide the make and model of your phone when you have it. I will be ready to receive that information and continue with the troubleshooting process."
+    },
+    {
+     "role": "user",
+     "content": "Alright, will do! I’ll send the make and model your way as soon as I spot it in my settings. Thanks for being so patient—I’ll be back with that info soon."
+    },
+    {
+     "role": "assistant",
+     "content": "No need to thank me, Mamadou! I understand the importance of taking the time to find the right information.\n\nPlease provide the make and model of your phone at your earliest convenience. I will be here waiting for your response."
+    },
+    {
+     "role": "user",
+     "content": "You got it! I’ll keep looking and let you know as soon as I have the make and model. Thanks for hanging in there with me."
+    },
+    {
+     "role": "assistant",
+     "content": "Of course, Mamadou! I'm committed to helping you resolve this issue.\n\nPlease take your time and provide the make and model of your phone when you find it. I will be ready to assist you further based on that information."
+    },
+    {
+     "role": "user",
+     "content": "Alright, I’ll keep at it and send you the make and model as soon as I find it in my settings. Appreciate your patience!"
+    },
+    {
+     "role": "assistant",
+     "content": "You're very welcome, Mamadou. I understand that finding the exact details can take some time.\n\nPlease continue your search for the make and model, and I will wait for your response. Once you provide that information, we can proceed with the next steps to address the MMS issue."
+    },
+    {
+     "role": "user",
+     "content": "Will do! I’ll send the make and model your way as soon as I have it. Thanks for sticking with me through this."
+    },
+    {
+     "role": "assistant",
+     "content": "I'm happy to help, Mamadou! Please take your time and provide the make and model of your phone when you are ready.\n\nI will be here to assist you further once you have that information."
+    },
+    {
+     "role": "user",
+     "content": "Alright, I’ll keep looking and let you know as soon as I find the make and model in my settings. Thanks again for your patience—I’ll be back with that info soon!"
+    },
+    {
+     "role": "assistant",
+     "content": "No problem at all, Mamadou! I understand that finding specific details in phone settings can sometimes be a bit challenging.\n\nPlease continue your search, and I will wait for your response. Once you provide the make and model, we can move forward with the necessary troubleshooting steps."
+    },
+    {
+     "role": "user",
+     "content": "Thanks, I appreciate it! I’ll keep at it and send you the make and model as soon as I spot it. I’ll be back with that info soon."
+    },
+    {
+     "role": "assistant",
+     "content": "You're very welcome, Mamadou. I appreciate your cooperation and understanding.\n\nPlease go ahead and provide the make and model of your phone when you find it. I will be ready to assist you further based on that information."
+    },
+    {
+     "role": "user",
+     "content": "Alright, I’ll keep looking and let you know as soon as I have the make and model. Thanks for being so patient—I’ll get back to you with that info as soon as I can."
+    },
+    {
+     "role": "assistant",
+     "content": "No need to thank me, Mamadou! I'm here to help and understand that these processes can take some time.\n\nPlease take your time to find the make and model of your phone. I will be here waiting for your response. Once you provide that information, we can proceed with the next steps to resolve the MMS issue."
+    },
+    {
+     "role": "user",
+     "content": "You got it! I’ll keep searching and send you the make and model as soon as I find it. Thanks for hanging in there with me."
+    },
+    {
+     "role": "assistant",
+     "content": "I appreciate your efforts, Mamadou! Please continue your search and provide the make and model of your phone when you are ready.\n\nI will be here to assist you further once you have that information."
+    },
+    {
+     "role": "user",
+     "content": "Alright, I’ll keep at it and let you know as soon as I have the make and model. Thanks again for your patience—I’ll be back with that info soon!"
+    },
+    {
+     "role": "assistant",
+     "content": "No problem, Mamadou! I understand that finding the right information can take some time.\n\nPlease go ahead and provide the make and model of your phone when you find it. I will be ready to assist you further and provide the necessary guidance."
+    },
+    {
+     "role": "user",
+     "content": "Will do! I’ll send the make and model your way as soon as I find it. Thanks for sticking with me—I’ll be back with that info soon."
+    },
+    {
+     "role": "assistant",
+     "content": "You're very welcome, Mamadou. I appreciate your patience and understanding.\n\nPlease take your time to locate the make and model of your phone. I will be here waiting for your response. Once you provide that information, we can continue with the troubleshooting process."
+    },
+    {
+     "role": "user",
+     "content": "Alright, I’ll keep looking and let you know as soon as I have the make and model. Thanks for being so patient—I’ll get back to you with that info as soon as I can."
+    },
+    {
+     "role": "assistant",
+     "content": "No need to thank me, Mamadou! I'm here to help and understand that these processes can be time-consuming.\n\nPlease continue your search for the make and model, and I will wait for your response. Once you provide that information, we can proceed with the next steps to address the MMS issue."
+    },
+    {
+     "role": "user",
+     "content": "You got it! I’ll keep searching and send you the make and model as soon as I find it. Thanks for hanging in there with me."
+    },
+    {
+     "role": "assistant",
+     "content": "I appreciate your cooperation, Mamadou! Please go ahead and provide the make and model of your phone when you are ready.\n\nI will be here to assist you further and provide the necessary guidance based on that information."
+    },
+    {
+     "role": "user",
+     "content": "Alright, I’ll keep at it and let you know as soon as I have the make and model. Thanks again for your patience—I’ll be back with that info soon!"
+    },
+    {
+     "role": "assistant",
+     "content": "No problem at all, Mamadou! I understand that finding specific details can take some time.\n\nPlease continue your search, and I will wait for your response. Once you provide the make and model, we can move forward with the appropriate troubleshooting steps."
+    },
+    {
+     "role": "user",
+     "content": "Will do! I’ll send the make and model your way as soon as I find it. Thanks for sticking with me—I’ll be back with that info soon."
+    },
+    {
+     "role": "assistant",
+     "content": "You're very welcome, Mamadou. I appreciate your patience and understanding.\n\nPlease take your time to locate the make and model of your phone. I will be ready to assist you further once you have that information."
+    },
+    {
+     "role": "user",
+     "content": "Alright, I’ll keep looking and let you know as soon as I have the make and model. Thanks for being so patient—I’ll get back to you with that info as soon as I can."
+    },
+    {
+     "role": "assistant",
+     "content": "No need to thank me, Mamadou! I'm here to help and understand that these processes can take some time.\n\nPlease continue your search for the make and model, and I will wait for your response. Once you provide that information, we can proceed with the next steps to resolve the MMS issue."
+    },
+    {
+     "role": "user",
+     "content": "You got it! I’ll keep searching and send you the make and model as soon as I find it. Thanks for hanging in there with me."
+    },
+    {
+     "role": "assistant",
+     "content": "I appreciate your efforts, Mamadou! Please go ahead and provide the make and model of your phone when you find it.\n\nI will be here to assist you further and provide the necessary guidance based on that information."
+    },
+    {
+     "role": "user",
+     "content": "Alright, I’ll keep at it and let you know as soon as I have the make and model. Thanks again for your patience—I’ll be back with that info soon!"
+    },
+    {
+     "role": "assistant",
+     "content": "No problem, Mamadou! I understand that finding the right information can be a bit time-consuming.\n\nPlease continue your search, and I will wait for your response. Once you provide the make and model, we can move forward with the appropriate troubleshooting steps."
+    },
+    {
+     "role": "user",
+     "content": "Will do! I’ll send the make and model your way as soon as I find it. Thanks for sticking with me—I’ll be back with that info soon."
+    },
+    {
+     "role": "assistant",
+     "content": "You're very welcome, Mamadou. I appreciate your patience and understanding.\n\nPlease take your time to locate the make and model of your phone. I will be ready to assist you further once you have that information."
+    },
+    {
+     "role": "user",
+     "content": "Alright, I’ll keep looking and let you know as soon as I have the make and model. Thanks for being so patient—I’ll get back to you with that info as soon as I can."
+    },
+    {
+     "role": "assistant",
+     "content": "No need to thank me, Mamadou! I'm here to help and understand that these processes can take some time.\n\nPlease continue your search for the make and model, and I will wait for your response. Once you provide that information, we can proceed with the next steps to address the MMS issue."
+    },
+    {
+     "role": "user",
+     "content": "You got it! I’ll keep searching and send you the make and model as soon as I find it. Thanks for hanging in there with me."
+    },
+    {
+     "role": "assistant",
+     "content": "I appreciate your cooperation, Mamadou! Please go ahead and provide the make and model of your phone when you are ready.\n\nI will be here to assist you further and provide the necessary guidance based on that information."
+    },
+    {
+     "role": "user",
+     "content": "Alright, I’ll keep at it and let you know as soon as I have the make and model. Thanks again for your patience—I’ll be back with that info soon!"
+    },
+    {
+     "role": "assistant",
+     "content": "No problem at all, Mamadou! I understand that finding specific details can be challenging.\n\nPlease continue your search, and I will wait for your response. Once you provide the make and model, we can move forward with the appropriate troubleshooting steps."
+    },
+    {
+     "role": "user",
+     "content": "Will do! I’ll send the make and model your way as soon as I find it. Thanks for sticking with me—I’ll be back with that info soon."
+    },
+    {
+     "role": "assistant",
+     "content": "You're very welcome, Mamadou. I appreciate your patience and understanding.\n\nPlease take your time to locate the make and model of your phone. I will be ready to assist you further once you have that information."
+    }
+   ]
+  },
+  {
+   "source": "Arm A, telecom train, [mms_issue]bad_wifi_calling|data_mode_off|data_usage_exceeded[PERSONA:",
+   "kind": "step_limit",
+   "type": "LOOP",
+   "detail": "stopped at τ²-bench's step limit",
+   "termination": "max_steps",
+   "messages": [
+    {
+     "role": "system",
+     "content": "(cut)"
+    },
+    {
+     "role": "assistant",
+     "content": "You're very welcome! I'm committed to helping you resolve this issue.\n\nPlease check for updates on both your system and messaging app. If you're still experiencing difficulties sending MMS messages, we can take the following steps:\n\n1. **Contact your carrier's support team**: They can provide valuable insights into any network-related issues or account-specific problems.\n\n2. **Verify OS compatibility**: Ensure that your phone's operating system is compatible with MMS messaging.\n\n3. **Check for data restrictions**: Although you've mentioned that Data Saver mode is off, it's worth double-checking if there are any other data restrictions in place.\n\nI'll be here to assist you with these steps and provide any further guidance as needed. Let's keep working together until we find a solution!"
+    },
+    {
+     "role": "user",
+     "content": "Thank you! I’ll check for updates on both my system and the messaging app. If I’m still having trouble after that, I’ll reach out so we can keep working on this together. I appreciate all your help and support!"
+    },
+    {
+     "role": "assistant",
+     "content": "You're very welcome! I appreciate your positive feedback and am happy to help you through this process.\n\nPlease go ahead and check for updates on both your system and messaging app. If you're still unable to send MMS messages, we can contact your carrier's support team. They can assist in diagnosing any network-related issues or account settings that might be causing the problem.\n\nAdditionally, we can verify OS compatibility to ensure that your phone's operating system supports MMS messaging.\n\nI'll be here to assist you with these steps and provide any further guidance as needed. Let's keep working together until we find a resolution!"
+    },
+    {
+     "role": "user",
+     "content": "Absolutely, I’ll check for updates on both my system and the messaging app. If I’m still having issues after that, I’ll let you know so we can keep troubleshooting together. Thanks again for all your help!"
+    },
+    {
+     "role": "assistant",
+     "content": "It's my pleasure to assist you! I understand that troubleshooting can be a challenging process, so I'm here to make it as smooth as possible.\n\nPlease check for updates on both your system and messaging app. If you're still experiencing difficulties sending MMS messages, we can take the following steps:\n\n1. **Contact your carrier's support team**: They can help diagnose any network-related issues or account settings that might be causing the problem.\n\n2. **Verify OS compatibility**: Ensure that your phone's operating system is compatible with MMS messaging.\n\n3. **Check for data restrictions**: Although you've mentioned that Data Saver mode is off, it's worth double-checking if there are any other data restrictions in place.\n\nI'll be here to guide you through these steps and provide any necessary assistance. Let's work together to find a solution!"
+    },
+    {
+     "role": "user",
+     "content": "Thank you! I’ll check for updates on both my system and the messaging app. If I’m still having trouble after that, I’ll reach out so we can keep working on this together. I really appreciate your help and patience!"
+    },
+    {
+     "role": "assistant",
+     "content": "You're very welcome! I appreciate your kind words and am happy to help you resolve this issue.\n\nPlease check for updates on both your system and messaging app. If you're still unable to send MMS messages, we can contact your carrier's support team. They can provide valuable insights into any network-related problems or account-specific issues.\n\nAdditionally, we can verify OS compatibility to ensure that your phone's operating system supports MMS messaging.\n\nI'll be here to assist you with these steps and provide any further guidance as needed. Let's keep working together until we find a solution!"
+    },
+    {
+     "role": "user",
+     "content": "Absolutely, I’ll check for updates on both my system and the messaging app. If I’m still having issues after that, I’ll let you know so we can keep troubleshooting together. Thanks again for all your help!"
+    },
+    {
+     "role": "assistant",
+     "content": "You're very welcome! I appreciate your positive feedback and am happy to help you through this process.\n\nPlease go ahead and check for updates on both your system and messaging app. If you're still unable to send MMS messages, we can contact your carrier's support team. They can assist in diagnosing any network-related issues or account settings that might be causing the problem.\n\nAdditionally, we can verify OS compatibility to ensure that your phone's operating system supports MMS messaging.\n\nI'll be here to assist you with these steps and provide any further guidance as needed. Let's keep working together until we find a resolution!"
+    },
+    {
+     "role": "user",
+     "content": "Absolutely, I’ll check for updates on both my system and the messaging app. If I’m still having issues after that, I’ll let you know so we can keep troubleshooting together. Thanks again for all your help!"
+    },
+    {
+     "role": "assistant",
+     "content": "You're very welcome! I appreciate your positive feedback and am happy to help you through this process.\n\nPlease go ahead and check for updates on both your system and messaging app. If you're still unable to send MMS messages, we can contact your carrier's support team. They can assist in diagnosing any network-related issues or account settings that might be causing the problem.\n\nAdditionally, we can verify OS compatibility to ensure that your phone's operating system supports MMS messaging.\n\nI'll be here to assist you with these steps and provide any further guidance as needed. Let's keep working together until we find a resolution!"
+    },
+    {
+     "role": "user",
+     "content": "Absolutely, I’ll check for updates on both my system and the messaging app. If I’m still having issues after that, I’ll let you know so we can keep troubleshooting together. Thanks again for all your help!"
+    }
+   ]
+  },
+  {
+   "source": "Arm A, telecom train, [mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|br",
+   "kind": "grounded_dob",
+   "type": null,
+   "detail": "dob given by the customer before the call",
+   "termination": null,
+   "messages": [
+    {
+     "role": "system",
+     "content": "(cut)"
+    },
+    {
+     "role": "assistant",
+     "content": "Hi! How can I help you today?"
+    },
+    {
+     "role": "user",
+     "content": "Hey, yeah, I’m having trouble sending MMS messages on my phone. It’s been a few hours now and nothing’s going through. Can you help me get this sorted?"
+    },
+    {
+     "role": "assistant",
+     "content": null,
+     "tool_calls": [
+      {
+       "id": "t1_0",
+       "type": "function",
+       "function": {
+        "name": "get_customer_by_phone",
+        "arguments": "{\"phone_number\": \"customer's phone number\"}"
+       }
+      },
+      {
+       "id": "t1_1",
+       "type": "function",
+       "function": {
+        "name": "can_send_mms",
+        "arguments": "{}"
+       }
+      },
+      {
+       "id": "t1_2",
+       "type": "function",
+       "function": {
+        "name": "check_network_status",
+        "arguments": "{}"
+       }
+      },
+      {
+       "id": "t1_3",
+       "type": "function",
+       "function": {
+        "name": "check_apn_settings",
+        "arguments": "{}"
+       }
+      },
+      {
+       "id": "t1_4",
+       "type": "function",
+       "function": {
+        "name": "check_wifi_calling_status",
+        "arguments": "{}"
+       }
+      },
+      {
+       "id": "t1_5",
+       "type": "function",
+       "function": {
+        "name": "check_app_permissions",
+        "arguments": "{\"app_name\": \"messaging\"}"
+       }
+      }
+     ]
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t1_0",
+     "content": "Error: Customer with phone number customer's phone number not found or ambiguous"
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t1_1",
+     "content": "Error: Tool 'can_send_mms' not found."
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t1_2",
+     "content": "Error: Tool 'check_network_status' not found."
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t1_3",
+     "content": "Error: Tool 'check_apn_settings' not found."
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t1_4",
+     "content": "Error: Tool 'check_wifi_calling_status' not found."
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t1_5",
+     "content": "Error: Tool 'check_app_permissions' not found."
+    },
+    {
+     "role": "assistant",
+     "content": "I apologize for the inconvenience. It seems there was an error with the tools I used to diagnose your issue. Let's try a different approach.\n\nCan you please confirm your full name and date of birth so I can locate your account? I'll then be able to assist you further with the MMS issue."
+    },
+    {
+     "role": "user",
+     "content": "Sure thing. My name’s John Smith. Let me know if you need anything else to pull up my account."
+    },
+    {
+     "role": "assistant",
+     "content": "Action: ```json\n[\n    {\n        \"tool_name\": \"get_customer_by_name\",\n        \"parameters\": {\n            \"full_name\": \"John Smith\",\n            \"dob\": \"YYYY-MM-DD\"  # Replace with actual date of birth\n        }\n    }\n]\n```"
+    },
+    {
+     "role": "user",
+     "content": "Just a heads up, I don’t think I’ve given you my date of birth yet. Do you need that as well?"
+    },
+    {
+     "role": "assistant",
+     "content": "Yes, I do need your date of birth to locate your account securely. Please provide it in the format YYYY-MM-DD (for example, 1990-06-24)."
+    },
+    {
+     "role": "user",
+     "content": "Alright, my date of birth is 1985-04-17. Let me know if you need anything else."
+    },
+    {
+     "role": "assistant",
+     "content": null,
+     "tool_calls": [
+      {
+       "id": "t5_0",
+       "type": "function",
+       "function": {
+        "name": "get_customer_by_name",
+        "arguments": "{\"full_name\": \"John Smith\", \"dob\": \"1985-04-17\"}"
+       }
+      },
+      {
+       "id": "t5_1",
+       "type": "function",
+       "function": {
+        "name": "can_send_mms",
+        "arguments": "{}"
+       }
+      },
+      {
+       "id": "t5_2",
+       "type": "function",
+       "function": {
+        "name": "check_network_status",
+        "arguments": "{}"
+       }
+      },
+      {
+       "id": "t5_3",
+       "type": "function",
+       "function": {
+        "name": "check_apn_settings",
+        "arguments": "{}"
+       }
+      },
+      {
+       "id": "t5_4",
+       "type": "function",
+       "function": {
+        "name": "check_wifi_calling_status",
+        "arguments": "{}"
+       }
+      },
+      {
+       "id": "t5_5",
+       "type": "function",
+       "function": {
+        "name": "check_app_permissions",
+        "arguments": "{\"app_name\": \"messaging\"}"
+       }
+      }
+     ]
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t5_0",
+     "content": "[]"
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t5_1",
+     "content": "Error: Tool 'can_send_mms' not found."
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t5_2",
+     "content": "Error: Tool 'check_network_status' not found."
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t5_3",
+     "content": "Error: Tool 'check_apn_settings' not found."
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t5_4",
+     "content": "Error: Tool 'check_wifi_calling_status' not found."
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "t5_5",
+     "content": "Error: Tool 'check_app_permissions' not found."
+    }
+   ]
+  }
+ ]
+}

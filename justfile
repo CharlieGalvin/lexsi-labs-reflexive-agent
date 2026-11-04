@@ -63,6 +63,14 @@ golden *args:
 splits-check:
     python scripts/make_splits.py --check
 
+# Spot-check the Tool/Arg/Loop classifier on saved rollouts (SEL-12; no API calls)
+hallucination-spot-check *files="results/episodes/arms/A-telecom-train.jsonl results/episodes/arms/C-telecom-train.jsonl":
+    python scripts/spot_check_hallucination.py {{files}} --labels docs/experiments/hallucination_labels.json
+
+# Re-save τ²-bench's tool schemas for the classifier (configs/tool_schemas.json; --check to verify)
+tool-schemas *args:
+    python scripts/dump_tool_schemas.py {{args}}
+
 # Splits, prompt sizes and context fit per domain (no API calls)
 tau2-inspect:
     python scripts/tau2_inspect.py
