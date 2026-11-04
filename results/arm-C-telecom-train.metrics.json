@@ -1,0 +1,76 @@
+{
+  "run": "arm-C-telecom-train",
+  "date": "2026-11-04",
+  "owner": "Chiara",
+  "commit": "0253859",
+  "config": "configs/arms.yaml",
+  "arm": "C",
+  "prompt_variant": "careful",
+  "prompt_version": "careful/v1",
+  "student": "c4ai-aya-expanse-32b (Cohere API, prompted, cohere Action: format)",
+  "customer": "openrouter/openai/gpt-4.1",
+  "domain": "telecom",
+  "split": "train (tau2-bench v2.0.0)",
+  "samples_per_task": 1,
+  "judges": false,
+  "note_judges": "telecom has no LLM judges: scores are complete",
+  "conversations": 74,
+  "crashed": 0,
+  "passed": 2,
+  "task_success": 0.027,
+  "task_success_wilson95": [
+    0.0074,
+    0.0933
+  ],
+  "by_issue": {
+    "mms_issue": {
+      "passed": 0,
+      "n": 33
+    },
+    "mobile_data_issue": {
+      "passed": 0,
+      "n": 27
+    },
+    "service_issue": {
+      "passed": 2,
+      "n": 14
+    }
+  },
+  "termination": {
+    "user_stop": 52,
+    "too_many_errors": 21,
+    "max_steps": 1
+  },
+  "transferred_to_human": 24,
+  "context_overflow": 0,
+  "conversations_flagged": {
+    "tool_unknown_tool": 74,
+    "arg_unseen_id_like_argument": 18,
+    "loop_repeated_failed_call": 54,
+    "tool_or_arg": 74
+  },
+  "flag_method": "heuristic diagnostics (reflexive.teacher.unseen_arguments / tool_errors), not the SEL-12 classifier",
+  "hallucination_rate_tool_or_arg": 1.0,
+  "student_calls": 834,
+  "student_calls_per_success": 417.0,
+  "tool_calls_per_conversation": 8.9,
+  "student_tokens_per_conversation_median": 63672,
+  "cost_usd": {
+    "customer": 2.89,
+    "student_est": 3.84,
+    "total": 6.73
+  },
+  "vs_arm_A": {
+    "metrics": "results/arm-A-telecom-train.metrics.json",
+    "same_tasks": true,
+    "both_pass": 0,
+    "A_only": 5,
+    "C_only": 2,
+    "neither": 67,
+    "exact_mcnemar_p": 0.453,
+    "A_transferred_to_human": 9,
+    "A_student_calls": 1209
+  },
+  "records": "results/episodes/arms/C-telecom-train.jsonl (not committed)",
+  "history": "first attempt froze when the Mac idle-slept (17:03-18:13); 66 clean conversations kept, last 8 re-run under caffeinate"
+}
