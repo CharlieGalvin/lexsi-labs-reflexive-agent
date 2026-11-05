@@ -94,14 +94,24 @@ def test_card_has_front_matter_and_never_train_on_dev():
 
 
 class FakeApi:
-    """Stands in for huggingface_hub.HfApi: records calls, never touches the network."""
+    """Stands in for huggingface_hub.HfApi, keeping state like the Hub; never touches the network.
 
-    existing: dict = {}
+    Like the real Hub, creating a tag that exists fails (HTTP 409), deleting one removes it, and
+    each upload is a new commit with its own ID.
+    """
+
+    existing: dict = {}  # repo → private?
     calls: list = []
+    tags: list = []
+    tagged_at: dict = {}  # tag → the commit it points to
+    commits: int = 0
+    offline: bool = False  # True: every call fails, as with no token or no network
 
     def repo_info(self, repo_id, repo_type):
         from huggingface_hub.utils import RepositoryNotFoundError
 
+        if self.offline:
+            raise ConnectionError("no network")
         if repo_id not in self.existing:
             # built without __init__, which needs an HTTP response object whose type varies by version
             raise RepositoryNotFoundError.__new__(RepositoryNotFoundError)
@@ -109,20 +119,27 @@ class FakeApi:
 
     def create_repo(self, repo_id, repo_type, private):
         self.calls.append(("create", repo_id, private))
+        type(self).existing = {**self.existing, repo_id: private}
 
     def upload_folder(self, **kw):
         self.calls.append(("upload", sorted(kw["allow_patterns"])))
-
-    tags: list = []
+        type(self).commits += 1
+        return type("CommitInfo", (), {"oid": f"commit-{self.commits}"})()
 
     def list_repo_refs(self, repo_id, repo_type):
         return type("Refs", (), {"tags": [type("Ref", (), {"name": t})() for t in self.tags]})()
 
     def delete_tag(self, repo_id, repo_type, tag):
         self.calls.append(("untag", tag))
+        self.tags.remove(tag)  # ValueError if it isn't there, as the Hub refuses
+        self.tagged_at.pop(tag, None)
 
-    def create_tag(self, repo_id, repo_type, tag):
+    def create_tag(self, repo_id, repo_type, tag, revision=None):
+        if tag in self.tags:
+            raise RuntimeError(f"409 Conflict: tag {tag} already exists")
         self.calls.append(("tag", tag))
+        self.tags.append(tag)
+        self.tagged_at[tag] = revision
 
 
 def _setup(tmp_path, monkeypatch, existing, tags=(), args=()):
@@ -136,7 +153,8 @@ def _setup(tmp_path, monkeypatch, existing, tags=(), args=()):
     shutil.copy(splits.SPLITS_PATH, tmp_path / "splits.json")
     files = {n: pg.sha256(tmp_path / n) for n in [*pg.FILES.values(), "splits.json"]}
     (tmp_path / "build_report.json").write_text(json.dumps({**report(), "files": files}))
-    FakeApi.existing, FakeApi.calls, FakeApi.tags = existing, [], list(tags)
+    FakeApi.existing, FakeApi.calls, FakeApi.tags = dict(existing), [], list(tags)
+    FakeApi.tagged_at, FakeApi.commits, FakeApi.offline = {}, 0, False
     monkeypatch.setattr(huggingface_hub, "HfApi", FakeApi)
     monkeypatch.setattr(sys, "argv", ["publish_golden.py", "--dir", str(tmp_path), "--repo", "org/ds", *args])
 
@@ -163,6 +181,30 @@ def test_retag_moves_existing_tag(tmp_path, monkeypatch):
     _setup(tmp_path, monkeypatch, existing={"org/ds": True}, tags=["v1"], args=["--retag"])
     assert pg.main() == 0
     assert [c[0] for c in FakeApi.calls] == ["upload", "untag", "tag"]
+    assert FakeApi.tags == ["v1"] and FakeApi.tagged_at["v1"] == "commit-1"  # one v1, on the new data
+
+
+def test_the_tag_points_at_the_commit_just_uploaded(tmp_path, monkeypatch):
+    """Not "whatever is newest": an upload by someone else in between can't take the tag."""
+    _setup(tmp_path, monkeypatch, existing={})
+    FakeApi.commits = 41  # the repo's history before this upload
+    assert pg.main() == 0
+    assert FakeApi.tagged_at == {"v1": "commit-42"}
+
+
+def test_dry_run_says_the_real_run_would_stop_on_an_existing_tag(tmp_path, monkeypatch, capsys):
+    _setup(tmp_path, monkeypatch, existing={"org/ds": True}, tags=["v1"], args=["--dry-run"])
+    assert pg.main() == 0 and FakeApi.calls == []  # a dry run uploads nothing
+    out = capsys.readouterr().out
+    assert "the real run would stop" in out and "already has tag v1" in out
+
+
+def test_dry_run_still_checks_the_files_when_the_hub_cant_be_reached(tmp_path, monkeypatch, capsys):
+    _setup(tmp_path, monkeypatch, existing={}, args=["--dry-run"])
+    FakeApi.offline = True
+    assert pg.main() == 0
+    out = capsys.readouterr().out
+    assert "no problems" in out and "couldn't check the Hub" in out
 
 
 def test_refuses_files_changed_since_build(tmp_path, monkeypatch):

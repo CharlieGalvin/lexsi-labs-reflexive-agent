@@ -19,7 +19,9 @@ import collections
 import datetime as dt
 import json
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from reflexive import golden, splits
 from reflexive.files import ROOT, BadJsonLine, read_jsonl, sha256, shown
@@ -282,71 +284,123 @@ This v1 is private to the team.
 """
 
 
-def main() -> int:
-    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--repo", default=REPO)
-    p.add_argument("--dir", type=Path, default=DIR)
-    p.add_argument("--dry-run", action="store_true", help="check and write the card; upload nothing")
-    p.add_argument("--retag", action="store_true", help=f"move an existing {TAG} tag to this upload")
-    a = p.parse_args()
+@dataclass
+class HubState:
+    """What the Hub already has for the dataset (read-only)."""
 
-    if not (a.dir / FILES["train"]).exists():
-        print(f"⛔ {a.dir} has no {FILES['train']}: run `just golden` first")
-        return 1
+    exists: bool
+    private: bool = True
+    tagged: bool = False
+
+
+def hub_state(api: Any, repo: str) -> HubState:
+    """Does the dataset exist, is it private, and does it already have the tag?"""
+    from huggingface_hub.utils import RepositoryNotFoundError
+
     try:
-        rows = {s: read_jsonl(a.dir / f) for s, f in FILES.items()}
+        info = api.repo_info(repo, repo_type="dataset")
+    except RepositoryNotFoundError:
+        return HubState(exists=False)
+    tags = api.list_repo_refs(repo, repo_type="dataset").tags
+    return HubState(exists=True, private=bool(info.private), tagged=any(t.name == TAG for t in tags))
+
+
+def refusal(state: HubState, repo: str, *, retag: bool) -> str | None:
+    """Why the upload must not go ahead, or None."""
+    if state.exists and not state.private:
+        return f"{repo} exists and is PUBLIC; not uploading. Make it private first."
+    if state.tagged and not retag:
+        return (
+            f"{repo} already has tag {TAG}; not uploading. Anyone who trained on {TAG} expects it "
+            f"never to change: publish the new data as v1.1 or v2 instead (see --retag)."
+        )
+    return None
+
+
+def load_checked(folder: Path) -> dict[str, list[dict[str, Any]]] | None:
+    """The records, if every check passes; otherwise print the problems and return None."""
+    if not (folder / FILES["train"]).exists():
+        print(f"⛔ {folder} has no {FILES['train']}: run `just golden` first")
+        return None
+    try:
+        rows = {s: read_jsonl(folder / f) for s, f in FILES.items()}
     except BadJsonLine as e:
         print(f"⛔ {e}")
-        return 1
-    report = json.loads((a.dir / "build_report.json").read_text())
-    problems = validate(rows, report) + check_files(a.dir, report)
+        return None
+    report = json.loads((folder / "build_report.json").read_text())
+    problems = validate(rows, report) + check_files(folder, report)
     if problems:
         for x in problems[:20]:
             print(f"⛔ {x}")
         print(f"⛔ {len(problems)} problems; nothing uploaded")
-        return 1
+        return None
     print(f"checked: {len(rows['train'])} train + {len(rows['dev'])} dev records, no problems")
+    return rows
 
+
+def main() -> int:
+    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("--repo", default=REPO)
+    p.add_argument("--dir", type=Path, default=DIR)
+    p.add_argument(
+        "--dry-run", action="store_true", help="check, write the card and look at the Hub; upload nothing"
+    )
+    p.add_argument(
+        "--retag",
+        action="store_true",
+        help=f"move an existing {TAG} tag to this upload. Only before anyone has trained on {TAG}; "
+        "after the hand-over, publish v1.1 or v2 instead",
+    )
+    a = p.parse_args()
+
+    rows = load_checked(a.dir)
+    if rows is None:
+        return 1
+    report = json.loads((a.dir / "build_report.json").read_text())
     names = [*FILES.values(), "splits.json"]
     shas = {n: sha256(a.dir / n) for n in names}
     (a.dir / "README.md").write_text(card(rows, report, a.repo, shas))
     print(f"wrote {shown(a.dir)}/README.md (the data card)")
-    if a.dry_run:
-        print(f"dry run: would upload {', '.join(names)} and README.md to {a.repo} (private), tag {TAG}")
-        return 0
 
     from huggingface_hub import HfApi
-    from huggingface_hub.utils import RepositoryNotFoundError
 
     api = HfApi()
-    try:
-        info = api.repo_info(a.repo, repo_type="dataset")
-        if not info.private:
-            print(f"⛔ {a.repo} exists and is PUBLIC; not uploading. Make it private first.")
-            return 1
-        tagged = any(t.name == TAG for t in api.list_repo_refs(a.repo, repo_type="dataset").tags)
-        if tagged and not a.retag:
-            print(
-                f"⛔ {a.repo} already has tag {TAG}; not uploading. Pass --retag to move {TAG} "
-                "to the new data (anyone loading revision v1 will then get it)."
-            )
-            return 1
-    except RepositoryNotFoundError:
-        tagged = False
+    if a.dry_run:
+        print(f"dry run: would upload {', '.join(names)} and README.md to {a.repo} (private), tag {TAG}")
+        try:
+            state = hub_state(api, a.repo)
+        except Exception as e:  # noqa: BLE001 - no token or offline: the dry run still checked the files
+            print(f"   (couldn't check the Hub: {type(e).__name__})")
+            return 0
+        why = refusal(state, a.repo, retag=a.retag)
+        print(
+            f"   ⛔ the real run would stop: {why}"
+            if why
+            else f"   the Hub: {'exists' if state.exists else 'new'}, ok"
+        )
+        return 0
+
+    state = hub_state(api, a.repo)
+    why = refusal(state, a.repo, retag=a.retag)
+    if why:
+        print(f"⛔ {why}")
+        return 1
+    if not state.exists:
         api.create_repo(a.repo, repo_type="dataset", private=True)
         print(f"created {a.repo} (private)")
-    api.upload_folder(
+    commit = api.upload_folder(
         repo_id=a.repo,
         repo_type="dataset",
         folder_path=str(a.dir),
         allow_patterns=[*names, "README.md"],
-        commit_message=f"Golden trajectories v1 ({len(rows['train'])} train, "
-        f"{len(rows['dev'])} dev reference)",
+        commit_message=f"Golden trajectories v1 ({len(rows['train'])} train, {len(rows['dev'])} dev reference)",
     )
-    if tagged:
+    if state.tagged:
         api.delete_tag(a.repo, repo_type="dataset", tag=TAG)
-    api.create_tag(a.repo, repo_type="dataset", tag=TAG)
-    print(f"uploaded and {'re' if tagged else ''}tagged {TAG}: https://huggingface.co/datasets/{a.repo}")
+    api.create_tag(a.repo, repo_type="dataset", tag=TAG, revision=commit.oid)  # the commit just uploaded
+    print(
+        f"uploaded and {'re' if state.tagged else ''}tagged {TAG}: https://huggingface.co/datasets/{a.repo}"
+    )
     return 0
 
 
