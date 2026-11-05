@@ -22,7 +22,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from reflexive.hallucination import FailureType, classify_record  # noqa: E402
+from reflexive.hallucination import FailureType, agent_view_of, classify_record  # noqa: E402
 
 SEED = "sel-12-spot-check-v1"
 
@@ -59,7 +59,7 @@ def sample(paths: list[Path], per_type: int) -> list[dict]:
 
 def show(item: dict) -> str:
     rec, f = item["rec"], item["finding"]
-    view = rec["agent_view"] or rec["messages"]
+    view = agent_view_of(rec)
     before = [m for m in view[1 : f.turn] if m["role"] != "assistant"][-4:]
     lines = [
         f"### {item['id']}  {f.type.value}/{f.kind}  (conversation {item['conv']}, {rec['task_id'][:60]})",

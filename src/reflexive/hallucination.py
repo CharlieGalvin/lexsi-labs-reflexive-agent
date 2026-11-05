@@ -406,10 +406,30 @@ def classify_hallucination(
     return Diagnosis(findings[0].type if findings else FailureType.NONE, findings)
 
 
+def agent_view_of(rec: dict) -> list[dict]:
+    """The conversation as the agent saw it: the saved ``agent_view``, or one rebuilt from ``messages``.
+
+    Older records (e.g. the teacher runs) have no ``agent_view``. Their ``messages`` include the
+    customer's own phone actions and the results, which the agent never saw; counting them as
+    "seen" would hide invented values. So those are dropped, as `reflexive.golden.agent_view` does.
+    """
+    if rec.get("agent_view"):
+        return rec["agent_view"]
+    messages = rec["messages"]
+    customer_calls = {
+        tc.get("id") for m in messages if m.get("role") == "user" for tc in m.get("tool_calls") or []
+    }
+    return [
+        m
+        for m in messages
+        if not (m.get("role") == "user" and m.get("tool_calls"))
+        and not (m.get("role") == "tool" and m.get("tool_call_id") in customer_calls)
+    ]
+
+
 def classify_record(rec: dict, **kw: Any) -> Diagnosis:
     """Classify a saved episode record (``reagent.tau2.episode``): its agent's view, domain and ending."""
     tools, customer = domain_tools(rec["domain"])
-    messages = rec.get("agent_view") or rec["messages"]
     return classify_hallucination(
-        messages, tools, customer_tools=customer, termination=rec.get("termination"), **kw
+        agent_view_of(rec), tools, customer_tools=customer, termination=rec.get("termination"), **kw
     )
