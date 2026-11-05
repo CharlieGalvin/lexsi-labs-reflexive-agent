@@ -1,5 +1,8 @@
 # Teacher bake-off, phase 2: GLM-5.3-Flash is the teacher (3 Nov 2026, SEL-58)
 
+> **Status: final.** The fixes became the golden trajectories v1 dataset on 4 Nov:
+> [`GOLDEN_TRAJECTORIES_V1.md`](GOLDEN_TRAJECTORIES_V1.md).
+
 **Decision: GLM-5.3-Flash.** On the full τ²-bench train split (178 tasks across retail, airline
 and telecom, with judges on), it passes **88% on the first try** and produces a verified fix for
 **158 of the 178 tasks**. That cost **$11** in total. On a paired comparison over the same 138
@@ -127,9 +130,12 @@ failed-call retries and no unknown tools.
 - **Teacher:** **GLM-5.3-Flash (MIT licence).** Qwen3.8 27B (thinking off, Apache-2.0) is
   acceptable as a *second* teacher for retail and airline only.
 - **The fixes exist already:** 193 clean fixes for 158 of the 178 train tasks, in
-  `results/fixes/glm53f.jsonl`. The other 20 tasks (10 retail, 8 telecom, 2 airline) have no
+  `results/fixes/glm53f.jsonl`. The other 20 tasks (10 retail, 8 telecom, 2 airline; since the dev split, that's 15 in train
+  and 5 in dev) have no
   fix yet. They're the hard subset's core (SEL-7), and could get retries at temperature 0.7.
-- **Before hand-over:**
-  1. Freeze the dev split (SEL-36) and drop dev tasks' fixes.
-  2. Convert the fixes to Aya's format and re-score them (SEL-35, SEL-9).
-  3. Package the dataset for the Architect and Trainer.
+- **After this (4 Nov), all done:**
+  1. Dev split frozen (SEL-36): `configs/splits.json`, 36 dev tasks.
+  2. Fixes converted to Aya's Cohere format and checked (SEL-9): `just golden`.
+  3. Packaged as **127 training + 31 dev reference records** and **published 5 Nov** as a
+     [private HF dataset](https://huggingface.co/datasets/reagent-lexsi/tau2-golden-trajectories), tag `v1` (SEL-48).
+     See [`GOLDEN_TRAJECTORIES_V1.md`](GOLDEN_TRAJECTORIES_V1.md).

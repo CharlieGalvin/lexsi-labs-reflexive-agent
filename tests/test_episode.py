@@ -72,6 +72,15 @@ def test_prompt_and_tools_match_the_official_agent(domain):
     ep.finish()
 
 
+def test_the_agents_view_survives_the_end_of_the_conversation():
+    # τ²-bench clears the agent's observation when the run ends; messages() must still have it
+    ep, _, seen = play_correct_actions("retail", "0", max_context=200_000)
+    assert ep.done
+    view = ep.messages()
+    assert view[0]["role"] == "system"
+    assert sum(m["role"] == "tool" for m in view) == len(seen) > 0
+
+
 def test_tool_results_are_compact_json():
     ep, _, seen = play_correct_actions("retail", "0", max_context=200_000)
     results = [new[0]["content"] for new in seen if new[0]["content"].startswith("{")]

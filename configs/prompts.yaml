@@ -1,0 +1,22 @@
+# The agent prompt variants (SEL-41). An arm picks one with `prompt_variant` in configs/arms.yaml;
+# `src/reflexive/episode.py` adds its text at the end of τ²-bench's <instructions> block, and
+# every record saves the variant's `version`.
+#
+# Versioning: never edit a variant's text in place. That makes earlier runs incomparable (and
+# tests/test_arms.py pins each version's text, so it fails). To change a prompt, add a new
+# variant with a new version (e.g. `careful_v2` with `careful/v2`) and point the arm at it.
+
+variants:
+  default:  # Arm A: τ²-bench's own agent prompt, unchanged
+    version: tau2/default
+    text: null
+
+  careful:  # Arm C, the prompt-only control. It names the three failure types we heal
+    # (Tool / Arg / Loop) plus ungrounded claims, so Arm C is a fair test of "just tell the model".
+    version: careful/v1
+    text: |-
+      Be careful not to hallucinate:
+      - Only call tools you have been given. Never invent a tool or a tool name.
+      - Only use argument values (IDs, names, dates, amounts) that the user gave you or that a tool returned earlier in this conversation. If you don't have a value, ask the user or look it up first. Never guess or make one up.
+      - If a tool call returns an error, read it and change something before trying again. Never repeat the same call with the same arguments.
+      - Only tell the user things that the policy or a tool result supports. If you don't know, say so.
