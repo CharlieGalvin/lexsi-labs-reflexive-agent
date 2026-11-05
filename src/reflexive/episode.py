@@ -3,7 +3,7 @@
     ep = Tau2Episode("telecom", task_id)          # customer: GPT-4.1 (τ²-bench's default)
     ep.reset()
     while not ep.done:
-        messages = ep.prompt()                    # system prompt + conversation, fitted to 8K
+        messages = ep.prompt()                    # system prompt + conversation, fitted to the window
         if ep.done:                               # didn't fit even after trimming → ended
             break
         reply = my_model(messages, tools=ep.tool_schemas)   # {"role": "assistant", ...}
@@ -28,7 +28,8 @@ tool calls. τ²-bench's instructions say "send a message *or* make a tool call,
 a turn with both is passed through as it is, as in an official run.
 
 **Tool results** go back to the model as compact JSON (no indentation): it's the same data in
-fewer tokens, which matters with Tiny Aya's 8,192-token window.
+fewer tokens. The window defaults to 128K (Aya Expanse 32B's); pass ``max_context`` for a
+smaller model (Tiny Aya, the first student, had 8,192 tokens).
 
 **Hints (teacher only).** ``hints="steps"`` adds τ²-bench's own resolution steps for the task
 (its `llm_agent_gt` setting) to the system prompt, so a teacher producing training data knows
@@ -149,8 +150,8 @@ class Tau2Episode:
         user_llm: str | None = None,
         user_llm_args: dict[str, Any] | None = None,
         max_steps: int = DEFAULT_MAX_STEPS,
-        max_context: int = 8192,
-        reserve: int = 1024,
+        max_context: int = 128_000,
+        reserve: int = 4_096,
         count_tokens: Callable[[list[dict]], int] = estimate_tokens,
         language: str = "en",
         seed: int | None = None,
@@ -341,8 +342,11 @@ class Tau2Episode:
     def finish(self) -> None:
         """End the conversation from the agent's side (termination ``agent_stop``).
 
-        For test drivers. A model ends a conversation the way τ²-bench's agent does: by
-        writing ``###STOP###`` in a message, or by transferring to a human agent.
+        For test drivers. A model ends a conversation the way τ²-bench's agent does: by writing
+        ``###STOP###`` in a message. A hand-off takes two steps: the ``transfer_to_human_agents``
+        call, then the policy's sentence ("YOU ARE BEING TRANSFERRED TO A HUMAN AGENT. PLEASE
+        HOLD ON."), after which the simulated customer ends it with ``###TRANSFER###``. Without
+        that sentence the conversation carries on (conversation A56 in Arm A ran to the step limit).
         """
         if not self.done:
             self._send_done()
