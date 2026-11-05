@@ -59,6 +59,10 @@ check: lint test
 golden *args:
     python scripts/build_golden.py {{args}}
 
+# Check data/golden/v1/, write the data card and upload it PRIVATE to the team HF org, tag v1 (SEL-48; --dry-run first)
+golden-publish *args:
+    python scripts/publish_golden.py {{args}}
+
 # Confirm configs/splits.json matches a rebuild from its seed (SEL-36)
 splits-check:
     python scripts/make_splits.py --check
