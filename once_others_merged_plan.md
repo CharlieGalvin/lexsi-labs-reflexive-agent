@@ -133,8 +133,6 @@ scripts/
 - [ ] Move `load`/`sha256` from `build_golden.py` into the package (the publish script imports a script)
 - [ ] `Tau2Episode`'s default `max_context=8192` (the Tiny Aya leftover) → 128K, or make it required
   (a GRPO loop building episodes directly would cut telecom short)
-- [ ] Data card (`publish_golden.card`, for v1.1): add the size facts now in `docs/DATA_CONTRACT.md`
-  (file sizes, target tokens per record and in total, ~13% of each record is a target)
 - [ ] Wait for #40 (Chiara's classifier): it adds `scripts/dump_tool_schemas.py`,
   `scripts/spot_check_hallucination.py` and `docs/experiments/HALLUCINATION_CLASSIFIER.md`.
   Move, type and format them with the rest, and add the page to `docs/experiments/README.md`
