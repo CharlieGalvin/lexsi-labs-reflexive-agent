@@ -1,0 +1,23 @@
+# Run 1 (SEL-34): AgentTune's own Tiny Aya example, 10 steps, one `add` tool.
+# Proves the install, the gated model, GRPO with tool calls and adapter saving. ~10 min.
+#   just train-smoke
+task: add_smoke
+model: CohereLabs/tiny-aya-global
+output_dir: runs/smoke-add
+
+trainer:                          # passed unchanged to create_agentic_trainer("grpo", ...)
+  max_steps: 10
+  per_device_train_batch_size: 2
+  gradient_accumulation_steps: 1  # set it: AgentTune's default is 16 (16x slower steps)
+  num_generations: 2              # answers per prompt (the "group")
+  max_steps_per_turn: 3           # max tool-call rounds per rollout
+  max_completion_length: 256
+  learning_rate: 1.0e-5
+  warmup_steps: 0
+  logging_steps: 1
+  save_steps: 1000                # no checkpoints for a smoke run
+  bf16: true
+  model_init_kwargs: {dtype: bfloat16}
+  use_vllm: false
+  peft_config: {r: 16, lora_alpha: 32, target_modules: all-linear, task_type: CAUSAL_LM}
+  report_to: none
