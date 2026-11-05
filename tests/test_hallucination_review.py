@@ -111,3 +111,43 @@ def test_whole_values_still_ground() -> None:
         call("c", "get_details_by_id", {"id": "W123"}),
     ]
     assert ("ARG", "ungrounded") not in kinds(msgs)
+
+
+# --- A retry means repeating a failure the agent had already seen ----------------------------
+
+
+def _two_calls(ids: tuple[str, str], name: str, args: dict[str, Any]) -> Msg:
+    return {
+        "role": "assistant",
+        "content": None,
+        "tool_calls": [
+            {"id": i, "type": "function", "function": {"name": name, "arguments": json.dumps(args)}}
+            for i in ids
+        ],
+    }
+
+
+def test_two_identical_calls_in_one_turn_are_not_a_retry() -> None:
+    msgs = [
+        SYSTEM,
+        user("my id is C9"),
+        _two_calls(("x", "y"), "get_customer_by_id", {"customer_id": "C9"}),
+        result("x", "Error: Customer not found"),
+        result("y", "Error: Customer not found"),
+    ]
+    assert ("LOOP", "repeated_failed_call") not in kinds(msgs)
+
+
+def test_a_retry_in_a_later_turn_is_caught_and_names_the_turn_it_repeats() -> None:
+    msgs = [
+        SYSTEM,
+        user("my id is C9"),
+        call("x", "get_customer_by_id", {"customer_id": "C9"}),
+        result("x", "Error: Customer not found"),
+        user("please try again"),
+        call("y", "get_customer_by_id", {"customer_id": "C9"}),
+        result("y", "Error: Customer not found"),
+    ]
+    found = classify_hallucination(msgs, TOOLS, customer_tools=CUSTOMER).findings
+    retry = [f for f in found if f.kind == "repeated_failed_call"]
+    assert len(retry) == 1 and retry[0].turn == 5 and "at turn 2" in retry[0].detail

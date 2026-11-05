@@ -322,7 +322,7 @@ def classify_hallucination(
     results = {m.get("tool_call_id"): m.get("content") or "" for m in messages if m.get("role") == "tool"}
     ctx = _Context()
     findings: list[Finding] = []
-    failed: set[str] = set()
+    failed: dict[str, int] = {}  # call -> the turn where it first failed
     call_counts: Counter = Counter()
     said: Counter = Counter()
     handed_off = False  # after a successful hand-off the agent has no more work: don't count its chat
@@ -350,6 +350,7 @@ def classify_hallucination(
                         f"the same reply {loop_threshold} times: {text.strip()[:80]!r}",
                     )
                 )
+        failed_now: dict[str, int] = {}  # failures in this turn count only from the next turn on
         for pos, (name, raw, cid) in enumerate(calls):
             args = _parse_args(raw)
             key = f"{name}:{json.dumps(args if args is not None else raw, sort_keys=True)}"
@@ -374,7 +375,12 @@ def classify_hallucination(
             if key in failed:
                 findings.append(
                     Finding(
-                        FailureType.LOOP, "repeated_failed_call", i, name, "the same call already failed", pos
+                        FailureType.LOOP,
+                        "repeated_failed_call",
+                        i,
+                        name,
+                        f"the same call already failed at turn {failed[key]}",
+                        pos,
                     )
                 )
             call_counts[key] += 1
@@ -390,9 +396,11 @@ def classify_hallucination(
                     )
                 )
             if results.get(cid, "").startswith("Error"):
-                failed.add(key)
+                failed_now.setdefault(key, i)
             elif name == "transfer_to_human_agents" and cid in results:
                 handed_off = True
+        for key, turn in failed_now.items():  # the agent sees these results only after its turn
+            failed.setdefault(key, turn)
 
     if termination == "max_steps" and not handed_off:
         last = max(

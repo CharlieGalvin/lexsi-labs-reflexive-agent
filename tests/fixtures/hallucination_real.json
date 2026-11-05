@@ -438,7 +438,7 @@
    "source": "Arm A, telecom train, [mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|br",
    "kind": "repeated_failed_call",
    "type": "LOOP",
-   "detail": "the same call already failed",
+   "detail": "the same call already failed at turn 3",
    "termination": null,
    "messages": [
     {
