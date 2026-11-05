@@ -135,5 +135,6 @@ failed-call retries and no unknown tools.
 - **After this (4 Nov), all done:**
   1. Dev split frozen (SEL-36): `configs/splits.json`, 36 dev tasks.
   2. Fixes converted to Aya's Cohere format and checked (SEL-9): `just golden`.
-  3. Packaged as **127 training + 31 dev reference records**, ready for a private upload
-     (SEL-48): `just golden-publish`. See [`GOLDEN_TRAJECTORIES_V1.md`](GOLDEN_TRAJECTORIES_V1.md).
+  3. Packaged as **127 training + 31 dev reference records** and **published 5 Nov** as a
+     [private HF dataset](https://huggingface.co/datasets/reagent-lexsi/tau2-golden-trajectories), tag `v1` (SEL-48).
+     See [`GOLDEN_TRAJECTORIES_V1.md`](GOLDEN_TRAJECTORIES_V1.md).

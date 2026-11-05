@@ -104,7 +104,8 @@ successful rollouts), to isolate the teacher's contribution.
   subset** (tasks that reliably trigger Tool / Arg / Loop failures in the baseline).
 - Run the teacher (**GLM-5.3-Flash**) to generate **golden trajectories** on train tasks,
   verified by τ²-bench's own evaluator, then convert them to the student's format and publish
-  them for the Trainer (**done 4 Nov: v1, 127 train + 31 dev reference records**).
+  them for the Trainer (**published 5 Nov: [v1](https://huggingface.co/datasets/reagent-lexsi/tau2-golden-trajectories), private, 127 train + 31 dev reference
+  records**; the hard subset follows as v1.1, SEL-60).
 - Run the AuditKIT verification suite; produce the final ROI and success-per-token charts.
 
 ### Role 2 — Systems & Logic ("the Architect")
@@ -160,7 +161,8 @@ Homebrew, use `uv tool install rust-just`. Check with `which just`: it should no
 git clone https://github.com/CharlieGalvin/lexsi-labs-reflexive-agent && cd lexsi-labs-reflexive-agent
 just setup-dev                  # .venv (Python 3.12) + τ²-bench with its data + test tools; creates .env
 #   → open .env and add OPENAI_API_KEY (the retail/airline judges), OPENROUTER_API_KEY (teacher +
-#     simulated customer) and HF_TOKEN (your own, for the team HF org): docs/TEACHER_SETUP.md
+#     simulated customer), COHERE_API_KEY (the student, Aya Expanse 32B, for `just rollout`) and
+#     HF_TOKEN (your own, for the team HF org): docs/TEACHER_SETUP.md
 just check                      # lint + tests
 just tau2-first-run telecom     # 2 τ²-bench tasks: official score + cost (a few cents; retail/airline need OPENAI_API_KEY)
 source .venv/bin/activate && hf auth login   # then accept the Aya Expanse licence on its model page

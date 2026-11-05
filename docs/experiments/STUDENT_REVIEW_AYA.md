@@ -57,6 +57,13 @@ tool call inside prose, but that's a note, not a failure: the call was still rea
 
    **55 of its 56 unknown-tool calls** were the customer's phone tools (the 8 commonest are listed
    above). The teacher instead *asks the customer* to check.
+
+   **Why it happens:** Aya isn't inventing these names. Telecom's agent policy includes
+   τ²-bench's `tech_support_manual.md`, which names the customer's tools in call syntax
+   (`check_network_status()` 4 times, `check_apn_settings` 3, …). So Aya calls tools its own
+   instructions mention. It's a confusion about **whose** tools they are rather than a made-up
+   tool, which is why Arm C's "never invent a tool" had no effect. Chiara's full Arm A telecom
+   run (5/74 passed, [`../EXPERIMENTS.md`](../EXPERIMENTS.md)) shows the same pattern.
 2. **Batching dependent calls.** **50% of Aya's tool turns** (54 of 107) make several calls at
    once, often using a placeholder for a value the first call hasn't returned yet. GLM-5.3-Flash
    does it in **4%** (54 of 1,410) of its turns, and only for independent lookups.

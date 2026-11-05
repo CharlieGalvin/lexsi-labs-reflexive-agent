@@ -1,4 +1,8 @@
-# Golden trajectories v1 (4 Nov 2026, SEL-36, SEL-9, SEL-48)
+# Golden trajectories v1 (4–5 Nov 2026, SEL-36, SEL-9, SEL-48)
+
+> **Status: published 5 Nov** as a private Hugging Face dataset,
+> [`reagent-lexsi/tau2-golden-trajectories`](https://huggingface.co/datasets/reagent-lexsi/tau2-golden-trajectories), tag `v1`, and handed over to the Trainer
+> and Architect. The hard subset follows as `v1.1` (SEL-60).
 
 **What the Curator hands the Trainer:** 127 conversations in which the teacher, GLM-5.3-Flash,
 solved a τ²-bench **train** task, verified by τ²-bench's own evaluator. They're formatted
@@ -7,8 +11,14 @@ learning targets. There are also 31 dev conversations, for reference only and ne
 The format is fixed by the [data contract v1](https://claude.ai/artifact/Ew1amyTBrTHbdiW92DQzNw),
 agreed on 4 Nov.
 
-**Rebuild it yourself (no API calls, ~10 s):** `just golden --sample 5`. It needs the teacher
-run's raw file `results/fixes/glm53f.jsonl`, which is gitignored; ask Charlie for it.
+**Rebuild it yourself (no API calls, ~10 s).** The raw run files are backed up in the same
+dataset under `raw/` (team members only):
+
+```bash
+hf download reagent-lexsi/tau2-golden-trajectories --repo-type dataset --include "raw/fixes/*" --local-dir hf_raw
+mkdir -p results/fixes && cp hf_raw/raw/fixes/*.jsonl results/fixes/
+just golden --sample 5      # expect 30/30 · 127 of 142 · 31 of 36
+```
 
 ## From teacher run to dataset
 
@@ -46,16 +56,23 @@ Each step stops the build if it fails.
 
 ## Publishing (`just golden-publish`, SEL-48)
 
-`scripts/publish_golden.py` re-checks every record first:
+`scripts/publish_golden.py` refuses to upload unless all of these hold:
 
-- IDs are unique;
-- each file holds only its own split, and no task is in both files;
-- the counts match the build report.
+- every record is well formed (a malformed record is reported, never a crash), IDs are
+  unique, each file holds only its own split, and no task is in both files;
+- the counts match the build report;
+- **the files are byte-for-byte the ones `just golden` checked** (SHA-256 checksums in
+  `build_report.json`), and the uploaded `splits.json` is the live `configs/splits.json`;
+- the repo is private;
+- tag `v1` doesn't exist yet. `--retag` moves it, but only use that before the hand-over. Once
+  someone has trained on `v1`, publish a new version (`v1.1`) instead.
 
-It then writes the data card and uploads **privately** to
-`reagent-lexsi/tau2-golden-trajectories`, tagged `v1`. It refuses a public repo, and uses
-each person's own HF token. `--dry-run` checks the records and writes the card without
-uploading.
+It then writes the data card, with every number derived from the build report and the splits,
+and uploads with each person's own HF token. `--dry-run` runs every check and writes the card
+without uploading. Chiara's review of #38 added most of these checks.
+
+**Published 5 Nov:** `v1` holds exactly `golden_train.jsonl`, `golden_dev_reference.jsonl`,
+`splits.json` and `README.md`, as checked on the Hub.
 
 ## What a record looks like
 
@@ -77,17 +94,19 @@ teacher   {"model": "z-ai/glm-5.3-flash", "provider": "InferenceNet", "temperatu
 Training records run from 9 to 73 turns (median 31), and the longest is ~45K characters,
 roughly 11–13K tokens. Everything fits a 16K context.
 
-## Open questions for the Trainer (raise at hand-over)
+## Questions sent to the Trainer at hand-over (5 Nov; answers pending)
 
 1. Does GRPO need the live τ²-bench environment (`Tau2Episode`), or only these files?
 2. Which chat template turns `messages` into tokens for Aya Expanse?
-3. Does BCO need failed (negative) examples? If so, ~$20 for an Aya run on the train tasks.
+3. Does BCO need failed (negative) examples? If so, ~$5–15 for Aya runs on retail and airline
+   train (telecom is done).
 4. Every record opens with the agent's fixed greeting before any customer message. Aya's
    baseline sees the same, but some chat templates expect a user turn first.
 
-## To do: back up the raw run files
+## The raw run files (backed up 5 Nov)
 
-The raw teacher and student runs exist only on Charlie's laptop (`results/`, gitignored):
+The raw teacher and student runs are gitignored (`results/`), so they're backed up in the same
+private dataset, under `raw/` (in later commits on `main`, so they're not part of `v1`):
 
 | File | Why it matters |
 |---|---|
@@ -96,14 +115,14 @@ The raw teacher and student runs exist only on Charlie's laptop (`results/`, git
 | `results/fixes/qwen38nt.jsonl` | The phase 2 comparison behind choosing GLM |
 | `results/episodes/sample-*.jsonl` | Phase 1 bake-off |
 
-**Plan:** upload them to the same private HF dataset under `raw/`, so Chiara and Katie can
-re-run `just golden` and the reports (SEL-48).
+They're at `raw/fixes/` and `raw/episodes/` in the dataset.
 
 ## Limitations
 
 - **One teacher**, at temperature 0 for 156 of the 158 tasks. The records carry GLM's style,
   e.g. markdown in replies.
-- **20 unsolved train tasks** (retail 4, 41, 46, 59, 76, 82, 83, 105, 110, 112; airline 7, 39;
-  8 telecom) have no trajectory. They're the core of the hard subset (SEL-7).
+- **20 of τ²-bench's train tasks have no trajectory:** 15 in our train split (retail 41, 46,
+  59, 83, 105, 110; airline 7; 8 telecom) and 5 in dev (retail 4, 76, 82, 112; airline 39).
+  The 15 train ones are the hard subset's "teacher-unsolved" group (SEL-60).
 - **The customer turns are GPT-4.1 outputs** (OpenAI's terms). They're context only and never a
   learning target. Settle the licence before any public release.

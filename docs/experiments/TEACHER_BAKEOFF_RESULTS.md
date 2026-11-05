@@ -32,8 +32,10 @@ Four levels, from free to a full re-run. You only need an `OPENROUTER_API_KEY` i
 - **Expect some movement on a re-run.** The simulated customer is itself an LLM, so a model's
   score can move by a task or two. That's within the 95% intervals below. Rows that moved by
   more would be worth flagging.
-- **The raw runs aren't in git.** `results/` is ignored. Ask Charlie for the
-  `sample-*.jsonl` files, about 8 MB.
+- **The raw runs aren't in git.** `results/` is ignored. The `sample-*.jsonl` files (about
+  8 MB) are backed up in the private golden-trajectories dataset under `raw/episodes/`:
+  `hf download reagent-lexsi/tau2-golden-trajectories --repo-type dataset --include "raw/episodes/*" --local-dir hf_raw`,
+  then copy them into `results/episodes/`.
 
 ## Setup
 
