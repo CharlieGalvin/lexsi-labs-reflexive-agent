@@ -25,7 +25,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-SEED = 0
+SEED = 42
 N_CUSTOMERS = 200
 N_EVAL_CUSTOMERS = 40
 
@@ -47,6 +47,26 @@ PREAMBLE = (
     "tools. Never guess a value: look it up. When you have the value, reply with just the "
     "answer wrapped in stars, for example *42.10*."
 )
+
+# How the tools and their results are shown to a model whose chat template can't render tools
+# (Tiny Aya). AgentTune's defaults say "use this result to answer" after every tool result,
+# which stops the model before a second call, so L2 questions could never be answered (first
+# baseline, 5 Nov: L2 correct 0%, exactly one call per rollout). Passed to both training
+# (train_grpo.py) and eval (eval_lookup.py), so both see the same harness.
+TOOLS_FALLBACK_PROMPT = (
+    "You can call these tools:\n{tools}\n\n"
+    "To call tools, reply with only a JSON list, one object per call, and no other text: "
+    '[{{"tool_name": "<name>", "parameters": {{"<argument>": <value>}}}}]. '
+    "Use a list even for one call. "
+    'A user turn that starts with "Tool result" is the output of your call, not a new '
+    "message from the user. You can make several calls in a row, using one call's result "
+    "in the next. When you have everything you need, answer the user's original question."
+)
+TOOL_RESULT_FORMAT = (
+    "Tool result for {name}: {content}\n"
+    "If you need more information, call another tool. Otherwise, answer the original question."
+)
+HARNESS = {"tools_fallback_prompt": TOOLS_FALLBACK_PROMPT, "tool_result_format": TOOL_RESULT_FORMAT}
 
 
 # --- The database and its tools ---------------------------------------------------------------
@@ -206,9 +226,13 @@ def score(conversation: list[dict], final_text: str, answer: str, field: str) ->
         1 for name, args in calls
         if name == "get_customer" and str(args.get("customer_id", "")).strip().upper() not in ids
     )
+    # Tool results are "tool" turns, or "user" turns starting "Tool result" when AgentTune folds
+    # them for a model without tool support (Tiny Aya).
     errors = sum(
         1 for m in conversation or []
-        if isinstance(m, dict) and m.get("role") == "tool" and "error" in str(m.get("content", ""))
+        if isinstance(m, dict) and "'error'" in str(m.get("content", ""))
+        and (m.get("role") == "tool"
+             or (m.get("role") == "user" and str(m.get("content", "")).startswith("Tool result")))
     )
     tool_ok = bool(calls) and hallucinated == 0 and errors == 0 and all(n in names for n, _ in calls)
     predicted = starred(final_text)

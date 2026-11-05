@@ -48,7 +48,8 @@ def main() -> int:
         model = PeftModel.from_pretrained(model, str(a.adapter))
     model.eval()
     rollout = create_rollout_fn(model=model, tokenizer=tok, rollout_backend="transformers",
-                                tools=toy_lookup.TOOLS, max_steps=a.max_tool_steps)
+                                tools=toy_lookup.TOOLS, max_steps=a.max_tool_steps,
+                                **toy_lookup.HARNESS)  # the same tool wording as training
 
     records, t0 = [], time.time()
     for i, row in enumerate(rows, 1):

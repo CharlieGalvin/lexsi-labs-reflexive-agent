@@ -99,6 +99,9 @@ def main() -> int:
     from agenttune.core.backend_factory import create_agentic_trainer
 
     ds, tools, rewards = build_task(cfg, out)
+    if cfg["task"] == "customer_lookup":
+        for key, value in toy_lookup.HARNESS.items():  # the same tool wording as eval_lookup.py
+            trainer_kw.setdefault(key, value)
     print(f"task={cfg['task']} model={cfg['model']} train_rows={len(ds)} output={out}")
     print(f"GPU: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'NONE (CPU!)'}")
 

@@ -63,6 +63,27 @@ def test_score_hallucinated_id_and_guess():
     assert s == {**s, "correct": 0.0, "tool_ok": 0.0, "format": 0.0, "n_tool_calls": 0}
 
 
+def test_folded_tool_error_breaks_tool_ok():
+    # AgentTune folds tool results into user turns for Tiny Aya
+    c = tl.customers()[0]
+    conv = [
+        {"role": "user", "content": "q"},
+        {"role": "assistant", "content": "", "tool_calls": [{"name": "find_customer",
+                                                            "arguments": {"name": "Nobody"}}]},
+        {"role": "user", "content": tl.TOOL_RESULT_FORMAT.format(
+            name="find_customer", content=str(tl.find_customer("Nobody")))},
+        {"role": "assistant", "content": "*Basic*"},
+    ]
+    s = tl.score(conv, "*Basic*", c["plan"], "plan")
+    assert s["tool_ok"] == 0.0 and s["hallucinated_ids"] == 0
+
+
+def test_harness_prompt_formats_like_agenttune():
+    # AgentTune fills {tools} with str.format, so literal braces must be doubled
+    text = tl.TOOLS_FALLBACK_PROMPT.format(tools="[]")
+    assert '[{"tool_name": "<name>", "parameters": {"<argument>": <value>}}]' in text
+
+
 def test_numeric_tolerance_and_text_match():
     assert tl._matches("£42.10", "42.10", "balance")
     assert not tl._matches("42.2", "42.10", "balance")
