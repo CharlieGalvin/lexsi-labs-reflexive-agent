@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import argparse
 import collections
-import hashlib
 import json
 import random
 import shutil
@@ -32,6 +31,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from reflexive import golden, splits  # noqa: E402
+from reflexive.files import BadJsonLine, read_jsonl, sha256, shown  # noqa: E402
 
 DEFAULT_IN = ROOT / "results" / "fixes" / "glm53f.jsonl"
 VIEW_CHECK = ROOT / "results" / "fixes" / "aya.jsonl"
@@ -51,14 +51,6 @@ def prompts_and_tools(domain: str, task_id: str) -> tuple[str, list[dict]]:
     return prompt, [t.openai_schema for t in agent.tools if t.name != "done"]
 
 
-def load(path: Path) -> list[dict]:
-    return [json.loads(x) for x in path.read_text().splitlines() if x.strip()]
-
-
-def sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
 def sha(path: Path) -> str:
     return sha256(path)[:16]
 
@@ -72,8 +64,13 @@ def main() -> int:
     from loguru import logger
 
     logger.remove()
-    recs = load(a.input)
-    print(f"{len(recs)} conversations from {a.input.relative_to(ROOT)}")
+    try:
+        recs = read_jsonl(a.input)
+        saved_views = read_jsonl(VIEW_CHECK) if VIEW_CHECK.exists() else []
+    except BadJsonLine as e:
+        print(f"⛔ {e}")
+        return 1
+    print(f"{len(recs)} conversations from {shown(a.input)}")
 
     # 1. System prompt and tools, one per domain
     first = {}
@@ -83,7 +80,7 @@ def main() -> int:
 
     # 2. The agent's view must match what the agent really saw
     checked = 0
-    for r in load(VIEW_CHECK) if VIEW_CHECK.exists() else []:
+    for r in saved_views:
         if "agent_view" not in r:
             continue
         sp, _ = system.get(r["domain"]) or prompts_and_tools(r["domain"], r["task_id"])
@@ -107,7 +104,7 @@ def main() -> int:
     a.out.mkdir(parents=True, exist_ok=True)
     rows: dict[str, list[dict]] = {"train": [], "dev": []}
     bad = []
-    src = {"file": str(a.input.relative_to(ROOT)), "sha256_16": sha(a.input)}
+    src = {"file": shown(a.input), "sha256_16": sha(a.input)}
     for (d, t), r in sorted(picked.items(), key=lambda kv: (kv[0][0], splits.task_ids(kv[0][0], "train")
                                                            .index(kv[0][1]) if kv[0][1] in
                                                            splits.task_ids(kv[0][0], "train") else -1)):
@@ -157,13 +154,13 @@ def main() -> int:
         print(f"{d:8s}  {v['train']['trajectories']:3d} of {v['train']['tasks']:3d}       "
               f"{v['dev']['trajectories']:2d} of {v['dev']['tasks']:2d}")
     print(f"{'total':8s}  {len(rows['train']):3d} of 142       {len(rows['dev']):2d} of 36")
-    print(f"\nwrote {a.out.relative_to(ROOT)}/: golden_train.jsonl, golden_dev_reference.jsonl, "
+    print(f"\nwrote {shown(a.out)}/: golden_train.jsonl, golden_dev_reference.jsonl, "
           "splits.json, build_report.json")
 
     if a.sample:
         pick_ = random.Random("reagent-read-v1").sample(rows["train"], a.sample)
         (a.out / "sample_to_read.md").write_text(render(pick_))
-        print(f"wrote {a.out.relative_to(ROOT)}/sample_to_read.md ({a.sample} records to read)")
+        print(f"wrote {shown(a.out)}/sample_to_read.md ({a.sample} records to read)")
     return 0
 
 

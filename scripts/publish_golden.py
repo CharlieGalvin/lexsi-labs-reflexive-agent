@@ -24,11 +24,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
-sys.path.insert(0, str(ROOT / "scripts"))
-
-from build_golden import load, sha256  # noqa: E402
 
 from reflexive import golden, splits  # noqa: E402
+from reflexive.files import BadJsonLine, read_jsonl, sha256, shown  # noqa: E402
 
 DIR = ROOT / "data" / "golden" / "v1"
 REPO = "reagent-lexsi/tau2-golden-trajectories"
@@ -83,12 +81,8 @@ def check_files(folder: Path, report: dict) -> list[str]:
         if built.get(name) != sha256(folder / name):
             problems.append(f"{name} changed since `just golden` checked it: rebuild")
     if sha256(folder / "splits.json") != sha256(splits.SPLITS_PATH):
-        problems.append(f"splits.json differs from {_rel(splits.SPLITS_PATH)}: rebuild with `just golden`")
+        problems.append(f"splits.json differs from {shown(splits.SPLITS_PATH)}: rebuild with `just golden`")
     return problems
-
-
-def _rel(path: Path) -> str:
-    return str(path.relative_to(ROOT)) if path.is_relative_to(ROOT) else str(path)
 
 
 def splits_order(domain: str, ids: list[str]) -> list[str]:
@@ -288,7 +282,11 @@ def main() -> int:
     if not (a.dir / FILES["train"]).exists():
         print(f"⛔ {a.dir} has no {FILES['train']}: run `just golden` first")
         return 1
-    rows = {s: load(a.dir / f) for s, f in FILES.items()}
+    try:
+        rows = {s: read_jsonl(a.dir / f) for s, f in FILES.items()}
+    except BadJsonLine as e:
+        print(f"⛔ {e}")
+        return 1
     report = json.loads((a.dir / "build_report.json").read_text())
     problems = validate(rows, report) + check_files(a.dir, report)
     if problems:
@@ -301,7 +299,7 @@ def main() -> int:
     names = [*FILES.values(), "splits.json"]
     shas = {n: sha256(a.dir / n) for n in names}
     (a.dir / "README.md").write_text(card(rows, report, a.repo, shas))
-    print(f"wrote {_rel(a.dir)}/README.md (the data card)")
+    print(f"wrote {shown(a.dir)}/README.md (the data card)")
     if a.dry_run:
         print(f"dry run: would upload {', '.join(names)} and README.md to {a.repo} (private), tag {TAG}")
         return 0
