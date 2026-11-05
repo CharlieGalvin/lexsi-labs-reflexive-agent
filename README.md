@@ -174,8 +174,9 @@ configs/                 one YAML per experiment / arm (copy, don't edit in plac
 src/reflexive/           Python package: each role adds its modules here
   outcome.py             pass/fail for any τ²-bench trajectory via τ²-bench's own scoring (Curator)
   episode.py             one τ²-bench conversation our code drives: tools, customer, context guard (Curator)
+  arms.py                the experiment arms (configs/arms.yaml) and one rollout of an arm (Architect)
   llm.py                 API model names and OpenRouter prices
-  splits.py              load the frozen splits; split_of(), assert_not_test()
+scripts/rollout.py       run an arm on a domain's tasks: `just rollout A retail` (Arm A), `just rollout C ...`
 scripts/tau2_*           τ²-bench: first run, cost report, context-fit check, OpenRouter pricing
 third_party/             τ²-bench v2.0.0 (with data) and AgentTune, cloned by `just setup-dev` / `just setup`
 tests/                   offline tests (no GPU) — run in CI on every PR
