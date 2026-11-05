@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import inspect
 import json
+from typing import Any
 
 import pytest
 
@@ -19,11 +20,12 @@ if not (DATA_DIR / "tau2" / "domains").exists():
 
 from loguru import logger  # noqa: E402
 
-from reflexive.episode import TRUNCATED, Tau2Episode, compact_json, fit_context  # noqa: E402
+from reflexive.episode import TRUNCATED, Tau2Episode, compact_json, fit_context, official_split  # noqa: E402
 from reflexive.outcome import scorer  # noqa: E402
 
 logger.disable("tau2")
-CUSTOMER = {"user_llm": "gpt-4.1", "user_llm_args": {"mock_response": "Yes, please go ahead."}}
+CUSTOMER: dict[str, Any] = {"user_llm": "gpt-4.1",
+                            "user_llm_args": {"mock_response": "Yes, please go ahead."}}
 
 
 def play_correct_actions(domain, task_id, **kw):
@@ -120,7 +122,7 @@ def test_trimming_lets_a_tight_conversation_finish_and_keeps_the_full_trajectory
 def test_tool_functions_match_the_tools_and_run_in_the_conversation():
     ep = Tau2Episode("retail", "0", **CUSTOMER)
     ep.reset()
-    fns = {f.__name__: f for f in ep.tool_functions()}
+    fns = {f.__name__: f for f in ep.tool_functions()}  # ty: ignore[unresolved-attribute]  # functions have names
     assert set(fns) == {t["function"]["name"] for t in ep.tool_schemas}
     find = fns["find_user_id_by_name_zip"]
     assert list(inspect.signature(find).parameters) == ["first_name", "last_name", "zip"]
@@ -166,9 +168,8 @@ def test_hints_with_args_include_the_exact_call():
 
 
 def test_hints_are_refused_on_test_split_tasks():
-    from tau2.registry import registry
 
-    test_task = registry.get_task_splits_loader("retail")()["test"][0]
+    test_task = official_split("retail", "test")[0]
     with pytest.raises(ValueError, match="only allowed on train-split"):
         Tau2Episode("retail", test_task, **CUSTOMER, hints="steps")
 

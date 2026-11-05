@@ -20,6 +20,7 @@ import json
 import random
 import subprocess
 import sys
+from collections.abc import Iterable
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -29,7 +30,7 @@ DEV_SIZE = {"retail": 15, "airline": 6, "telecom": 15}
 SEED = "reagent-dev-v1"
 
 
-def _order(ids):
+def _order(ids: Iterable[str]) -> list[str]:
     """Numeric IDs in numeric order; telecom's string IDs alphabetically."""
     return sorted(ids, key=lambda x: (0, int(x), "") if str(x).isdigit() else (1, 0, str(x)))
 

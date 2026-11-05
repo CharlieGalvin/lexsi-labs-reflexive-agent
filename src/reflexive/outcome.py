@@ -38,9 +38,10 @@ import json
 import uuid
 from dataclasses import dataclass, field
 from functools import cache
-from typing import Any
+from typing import Any, Literal, cast
 
 JUDGED = {"NL_ASSERTION", "COMMUNICATE"}
+Requestor = Literal["user", "assistant"]  # who made a tool call (τ²-bench ToolMessage)
 NORMAL_STOPS = {"agent_stop", "user_stop"}
 
 
@@ -102,7 +103,7 @@ def from_openai(messages: list[Any]) -> list[Any]:
                 content = json.dumps(content)
             out.append(ToolMessage(
                 id=call_id, role="tool", content=content,
-                requestor=m.get("requestor") or requestor_of.get(call_id, "assistant"),
+                requestor=cast(Requestor, m.get("requestor") or requestor_of.get(call_id, "assistant")),
                 error=bool(m.get("error", False)),
             ))
         else:
@@ -137,7 +138,7 @@ def to_openai(messages: list[Any]) -> list[dict]:
 class Tau2Scorer:
     """Task definitions + evaluation environment for one domain, set up as `tau2 run` does."""
 
-    def __init__(self, domain: str, language: str = "en"):
+    def __init__(self, domain: str, language: str = "en") -> None:
         from tau2.data_model.simulation import TextRunConfig
         from tau2.multilingual.runtime import language_environment_kwargs, load_run_language
 
@@ -150,7 +151,7 @@ class Tau2Scorer:
         self.communicate_scoring = self.config.communicate_scoring
         self.customer_language = None  # English runs are not cross-lingual
 
-    def task(self, task_id: str):
+    def task(self, task_id: str) -> Any:  # a τ²-bench Task
         try:
             return self.tasks[task_id]
         except KeyError:
@@ -177,7 +178,9 @@ class Tau2Scorer:
         )
         info = evaluate_simulation(
             simulation=sim, task=task, evaluation_type=EvaluationType.ALL, solo_mode=False,
-            domain=self.domain, env_kwargs=self.env_kwargs, strict_replay=False,
+            # τ²-bench hints env_kwargs as `dict = None` and turns None into {} itself
+            domain=self.domain, env_kwargs=self.env_kwargs,  # ty: ignore[invalid-argument-type]
+            strict_replay=False,
             communicate_scoring=self.communicate_scoring,
             customer_language=self.customer_language,
         )

@@ -26,7 +26,7 @@ import time
 from collections.abc import Callable
 from typing import Any
 
-from reflexive.episode import Tau2Episode, estimate_tokens
+from reflexive.episode import Tau2Episode, estimate_tokens, official_split
 from reflexive.teacher import (
     CohereClient,
     ContextTooLong,
@@ -116,7 +116,7 @@ class NativeAgent:
     def turn(self, messages: list[Message], tools: list[dict[str, Any]]) -> Message:
         import litellm
 
-        litellm.suppress_debug_info = True
+        litellm.suppress_debug_info = True  # ty: ignore[invalid-assignment]  # litellm types it Literal[False]
         if self.no_think and messages and messages[0]["role"] == "system":
             messages = [{**messages[0], "content": messages[0]["content"] + "\n\n/no_think"},
                         *messages[1:]]
@@ -253,10 +253,11 @@ class OpenRouterAgent(NativeAgent):
                 break
             self.usage["empty"] = self.usage.get("empty", 0) + 1
             msgs = [*msgs, {"role": "user", "content": EMPTY_NUDGE}]
-        calls = [{"id": tc["id"], "type": "function",
-                  "function": {"name": tc["function"]["name"],
-                               "arguments": tc["function"].get("arguments") or "{}"}}
-                 for tc in (msg.get("tool_calls") or [])]
+        calls: list[dict[str, Any]] = [
+            {"id": tc["id"], "type": "function",
+             "function": {"name": tc["function"]["name"],
+                          "arguments": tc["function"].get("arguments") or "{}"}}
+            for tc in (msg.get("tool_calls") or [])]
         if msg.get("reasoning_details"):
             self.reasoning[calls[0]["id"] if calls else text] = msg["reasoning_details"]
         if calls:  # τ²-bench's rule: a tool call or a message, not both
@@ -417,15 +418,12 @@ SEED = 0
 
 def sample_tasks(sizes: dict[str, int] = SAMPLE, seed: int = SEED) -> list[Task]:
     """Phase 1's fixed sample: train tasks whose expected actions change state, per domain."""
-    from tau2.registry import registry
-
     from reflexive.outcome import scorer
 
     out = []
     for domain, n in sizes.items():
         sc = scorer(domain)
-        pool = sorted(t for t in registry.get_task_splits_loader(domain)()["train"]
-                      if sc.write_action_indices(t))
+        pool = sorted(t for t in official_split(domain, "train") if sc.write_action_indices(t))
         out += [(domain, t) for t in random.Random(seed).sample(pool, min(n, len(pool)))]
     return out
 

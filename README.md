@@ -163,7 +163,9 @@ just setup-dev                  # .venv (Python 3.12) + τ²-bench with its data
 #   → open .env and add OPENAI_API_KEY (the retail/airline judges), OPENROUTER_API_KEY (teacher +
 #     simulated customer), COHERE_API_KEY (the student, Aya Expanse 32B, for `just rollout`) and
 #     HF_TOKEN (your own, for the team HF org): docs/TEACHER_SETUP.md
-just check                      # lint + tests
+just check                      # lint + type checks (ty) + tests: what CI runs
+just features                   # the plain-English specifications (tests/features/), scenario by scenario
+just quality                    # advisory: types, dead code (vulture), undeclared dependencies (deptry)
 just tau2-first-run telecom     # 2 τ²-bench tasks: official score + cost (a few cents; retail/airline need OPENAI_API_KEY)
 source .venv/bin/activate && hf auth login   # then accept the Aya Expanse licence on its model page
 

@@ -49,7 +49,7 @@ import os
 import re
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -227,7 +227,7 @@ def _calls_from(value: Any, id_prefix: str, strict: bool) -> list[dict] | None:
     return calls
 
 
-def _json_values(text: str):
+def _json_values(text: str) -> Iterator[Any]:
     """Every JSON list or object that starts somewhere in ``text``, in order."""
     decoder = json.JSONDecoder()
     i = 0
@@ -320,7 +320,7 @@ class RateLimiter:
     """Spaces calls at least 60/rpm seconds apart (thread-safe)."""
 
     def __init__(self, rpm: float, clock: Callable[[], float] = time.monotonic,
-                 sleep: Callable[[float], None] = time.sleep):
+                 sleep: Callable[[float], None] = time.sleep) -> None:
         self.interval = 60.0 / rpm if rpm > 0 else 0.0
         self._clock, self._sleep = clock, sleep
         self._next = 0.0
@@ -392,7 +392,7 @@ class CohereClient:
                  rpm: float | None = None, temperature: float = 0.0, max_tokens: int = 1024,
                  seed: int | None = None, num_retries: int = 3,
                  prices: tuple[float, float] | None = None,
-                 completion: Callable[..., Any] | None = None):
+                 completion: Callable[..., Any] | None = None) -> None:
         if mode not in ("native", "prompted"):
             raise ValueError("mode must be 'native' or 'prompted'")
         if style not in ("agenttune", "cohere"):
@@ -415,7 +415,7 @@ class CohereClient:
         if self._completion is None:
             import litellm
 
-            litellm.suppress_debug_info = True  # no "Give Feedback / Get Help" banner per error
+            litellm.suppress_debug_info = True  # ty: ignore[invalid-assignment]  # no "Get Help" banner per error
             self._completion = litellm.completion
         kwargs: dict[str, Any] = dict(
             model=f"openai/{self.model}", api_base=self.api_base, api_key=self.api_key,

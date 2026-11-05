@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import pathlib
 import sys
+from typing import Any
 
 from loguru import logger
 
@@ -27,7 +28,7 @@ logger.remove()
 logger.add(sys.stderr, level="ERROR")
 
 
-def load_results(name: str):
+def load_results(name: str) -> tuple[Any, pathlib.Path]:  # (τ²-bench Results, its file)
     from tau2.data_model.simulation import Results
     from tau2.utils.utils import DATA_DIR
 
@@ -38,7 +39,7 @@ def load_results(name: str):
     sys.exit(f"No results.json for {name!r} (looked in . and {DATA_DIR}/simulations/)")
 
 
-def deterministic(info) -> dict:
+def deterministic(info: Any) -> dict[str, Any]:  # info: a τ²-bench RewardInfo
     """The parts of a RewardInfo that don't depend on an LLM judge."""
     db = info.db_check.db_match if info.db_check else None
     return {

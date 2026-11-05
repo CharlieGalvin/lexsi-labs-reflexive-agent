@@ -31,8 +31,8 @@ def _task_id(domain, task_id):
     if task_id is not None:
         return task_id
     sc = scorer(domain)  # a telecom task whose reward also includes ACTION
-    return next(t.id for t in sc.tasks.values()
-                if "ACTION" in {b.value for b in t.evaluation_criteria.reward_basis})
+    return next(t.id for t in sc.tasks.values() if t.evaluation_criteria
+                and "ACTION" in {b.value for b in t.evaluation_criteria.reward_basis})
 
 
 @pytest.mark.parametrize("domain,task_id", CASES)

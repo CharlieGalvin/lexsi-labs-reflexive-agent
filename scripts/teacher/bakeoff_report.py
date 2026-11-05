@@ -23,6 +23,7 @@ import json
 import pathlib
 import random
 from itertools import combinations
+from typing import Any
 
 from reflexive.stats import holm, mcnemar, mcnemar_power, paired_bootstrap, wilson
 
@@ -130,7 +131,7 @@ def report(folder: pathlib.Path) -> dict:
     best = max(full, key=lambda s: s["passed"])
     top = [s for s in full if s["passed"] / s["n"] >= best["ci"][0] and s["invented_ids"] <= 5]
 
-    pairs = []
+    pairs: list[dict[str, Any]] = []
     for a, b in combinations(top, 2):
         oa, ob, p = mcnemar(a["passed_tasks"], b["passed_tasks"])
         pairs.append({"a": a["label"], "b": b["label"], "only_a": oa, "only_b": ob, "p": p,

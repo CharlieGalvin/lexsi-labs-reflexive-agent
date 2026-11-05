@@ -39,6 +39,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
 from reflexive import runner
+from reflexive.episode import official_split
 from reflexive.runner import Record, Task, is_broken
 from reflexive.stats import wilson
 
@@ -66,7 +67,7 @@ def preflight(models: list[str]) -> list[str]:
     """
     import litellm
 
-    litellm.suppress_debug_info = True
+    litellm.suppress_debug_info = True  # ty: ignore[invalid-assignment]  # litellm types it Literal[False]
     problems = []
     for m in dict.fromkeys(models):
         try:
@@ -84,13 +85,11 @@ DOMAINS = ("retail", "airline", "telecom")
 
 def remaining_train_tasks() -> list[Task]:
     """Every train task in the three domains, minus phase 1's fixed 30, in a stable order."""
-    from tau2.registry import registry
-
     used = set(runner.sample_tasks())
     out = []
     for d in DOMAINS:
-        out += [(d, t) for t in sorted(registry.get_task_splits_loader(d)()["train"],
-                                       key=lambda x: (len(x), x)) if (d, t) not in used]
+        out += [(d, t) for t in sorted(official_split(d, "train"), key=lambda x: (len(x), x))
+                if (d, t) not in used]
     return out
 
 

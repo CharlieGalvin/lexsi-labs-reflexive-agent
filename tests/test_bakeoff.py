@@ -6,6 +6,7 @@ import pytest
 from _scripts import load_script
 
 from reflexive import runner
+from reflexive.episode import official_split
 
 
 def load():
@@ -33,7 +34,6 @@ def test_summary_counts_conversations_with_each_problem():
 
 def test_phase1_sample_is_fixed_train_only_and_needs_a_state_change():
     pytest.importorskip("tau2")
-    from tau2.registry import registry
 
     from reflexive.outcome import scorer
 
@@ -41,7 +41,7 @@ def test_phase1_sample_is_fixed_train_only_and_needs_a_state_change():
     assert tasks == runner.sample_tasks()  # same every run
     assert sum(d == "retail" for d, _ in tasks) == 20 and sum(d == "airline" for d, _ in tasks) == 10
     for d, t in tasks:
-        assert t in registry.get_task_splits_loader(d)()["train"]
+        assert t in official_split(d, "train")
         assert scorer(d).write_action_indices(t)
 
 

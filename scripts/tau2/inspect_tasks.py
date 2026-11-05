@@ -13,12 +13,15 @@ from __future__ import annotations
 import argparse
 import json
 import statistics as st
+from typing import Any
+
+from reflexive.episode import official_split
 
 DOMAINS = ["airline", "retail", "telecom"]
 CHAT_OVERHEAD = 600  # rough tokens for user / assistant text turns on top of tool I/O
 
 
-def approx_tokens(obj) -> int:
+def approx_tokens(obj: Any) -> int:
     text = obj if isinstance(obj, str) else json.dumps(obj, default=str, separators=(",", ":"))
     return len(text) // 4
 
@@ -34,13 +37,13 @@ def main() -> None:
           f"{'gold I/O med':>12s} {'p90':>5s} {'over ctx':>8s}")
     for d in DOMAINS:
         env = registry.get_env_constructor(d)()
-        splits = registry.get_task_splits_loader(d)() if hasattr(registry, "get_task_splits_loader") else {}
+        splits = {s: official_split(d, s) for s in ("train", "test")}
         policy_tok = approx_tokens(env.get_policy())
         tools_tok = approx_tokens([t.openai_schema for t in env.get_tools()])
         fixed = policy_tok + tools_tok
 
         io = []
-        for task in registry.get_tasks_loader(d)():
+        for task in registry.get_tasks_loader(d)("base"):  # "base": the loader's own default
             fresh = registry.get_env_constructor(d)()
             acts = (task.evaluation_criteria.actions or []) if task.evaluation_criteria else []
             total = 0

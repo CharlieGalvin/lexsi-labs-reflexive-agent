@@ -26,8 +26,8 @@ prints. **Cost** is the API spend of one run; "none" means no API calls.
 | `bakeoff.py` | `just teacher-sample` | Phase 1: candidate teachers on a fixed 30-task sample → `results/episodes/sample-*.jsonl` | the whole slate was ~$26 |
 | `fixes.py` | `just teacher-fixes` | Phase 2: the chosen teacher on every train task, up to 3 attempts → `results/fixes/` (`--report`: no API calls) | GLM-5.3-Flash on all 178 tasks was $11.20 |
 | `bakeoff_report.py` | `just bakeoff-report` | Phase 1 statistics (Wilson ranges, McNemar) and projected cost | none |
-| `bakeoff_plot.py` | (none) | The quality-vs-cost chart from `bakeoff_report.py --json` (needs `matplotlib`) | none |
-| `phase2_report.py` | (none) | Phase 2: GLM-5.3-Flash vs Qwen3.8 27B, paired | none |
+| `bakeoff_plot.py` | (none) | The quality-vs-cost chart from `bakeoff_report.py --json` (needs `uv pip install -e ".[reports]"`) | none |
+| `phase2_report.py` | (none) | Phase 2: GLM-5.3-Flash vs Qwen3.8 27B, paired (`--plot` needs `.[reports]`) | none |
 
 ## student/: the student
 

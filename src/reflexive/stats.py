@@ -1,16 +1,19 @@
 """Statistics for comparing pass rates: confidence ranges and paired tests. Standard library only.
 
 Used by the bake-off and phase 2 reports, the bake-off run, and anything that compares two arms
-on the same tasks. "Paired" functions take ``{task: passed}`` dicts and use only the shared tasks.
+on the same tasks. "Paired" functions take ``{task: passed}`` dicts and use only the shared
+tasks. Any task key works; ``paired_bootstrap`` sorts them, so they must be comparable.
 """
 
 from __future__ import annotations
 
 import math
 import random
-from collections.abc import Hashable, Mapping
+from collections.abc import Mapping
+from typing import TYPE_CHECKING
 
-Passes = Mapping[Hashable, bool]  # task → passed?
+if TYPE_CHECKING:
+    from _typeshed import SupportsRichComparison
 
 
 def wilson(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
@@ -33,7 +36,7 @@ def binom_two_sided(k: int, n: int) -> float:
                         if math.comb(n, i) / 2**n <= pk * (1 + 1e-9)))
 
 
-def mcnemar(a: Passes, b: Passes) -> tuple[int, int, float]:
+def mcnemar[K](a: Mapping[K, bool], b: Mapping[K, bool]) -> tuple[int, int, float]:
     """Paired exact McNemar test on shared tasks: (only a passed, only b passed, p-value)."""
     shared = a.keys() & b.keys()
     only_a = sum(a[t] and not b[t] for t in shared)
@@ -51,7 +54,9 @@ def holm(pvals: list[float]) -> list[float]:
     return adj
 
 
-def paired_bootstrap(a: Passes, b: Passes, reps: int = 10_000, seed: int = 0) -> tuple[float, float]:
+def paired_bootstrap[K: SupportsRichComparison](
+    a: Mapping[K, bool], b: Mapping[K, bool], reps: int = 10_000, seed: int = 0
+) -> tuple[float, float]:
     """95% bootstrap interval for pass-rate(a) - pass-rate(b), resampling shared tasks."""
     shared = sorted(a.keys() & b.keys())
     rng = random.Random(seed)

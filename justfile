@@ -54,8 +54,17 @@ features:
 lint:
     python -m ruff check src scripts tests
 
-# Lint + tests (what CI runs)
-check: lint test
+# Type checks with ty (Chiara's arms and classifier show as warnings; only errors fail)
+types:
+    python -m ty check --exit-zero-on-warning
+
+# Lint + types + tests (what CI runs)
+check: lint types test
+
+# Advisory, not blocking: types, dead code (vulture) and undeclared dependencies (deptry)
+quality: types
+    -uvx vulture@2.14 src scripts --min-confidence 80 --exclude scripts/archive
+    -uvx deptry@0.23.1 .
 
 # --- τ²-bench ----------------------------------------------------------------
 

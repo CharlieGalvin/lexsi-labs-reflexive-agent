@@ -108,6 +108,6 @@ def test_pick_first_clean_pass():
     later = record(attempt=4)
     assert golden.why_not_clean(fail) == "failed a check"
     assert golden.why_not_clean(retry) == "retried a failed call"
-    assert golden.why_not_clean(record(termination="max_steps")).startswith("run broke")
-    assert golden.why_not_clean(record(error="boom")).startswith("run broke")
+    assert (golden.why_not_clean(record(termination="max_steps")) or "").startswith("run broke")
+    assert (golden.why_not_clean(record(error="boom")) or "").startswith("run broke")
     assert golden.pick([later, retry, fail, good])[("telecom", "t1")]["attempt"] == 3

@@ -43,6 +43,7 @@ def test_native_agent_adds_no_think_and_reads_tool_calls(monkeypatch):
 def test_tiny_uses_tiny_aya_prompted_inside_its_8k_window(monkeypatch):
     monkeypatch.setenv("COHERE_API_KEY", "test-placeholder")
     agent = runner.make_agent("tiny")()
+    assert isinstance(agent, runner.AyaAgent)
     assert agent.client.model == "tiny-aya-global" and agent.client.mode == "prompted"
     assert agent.client.style == "cohere" and agent.usage_dict()["est_cost"] == 0.0
     assert runner.CONTEXT == {"tiny": (8192, 1024)}  # only Tiny Aya is cut to 8K
@@ -80,9 +81,11 @@ FAKE_LIST = {
 def test_bakeoff_slate_prices_and_open_weights_come_from_openrouter(monkeypatch):
     monkeypatch.setattr(runner, "_openrouter_models", lambda: FAKE_LIST)
     glm = runner.make_agent("glm")()
+    assert isinstance(glm, runner.OpenRouterAgent)
     assert glm.slug == "z-ai/glm-4.7-flash" and glm.prices == (7e-8, 4e-7)
     assert runner.open_weights("glm") is True and runner.open_weights("haiku") is False
     haiku = runner.make_agent("or:anthropic/claude-haiku-5.5")()
+    assert isinstance(haiku, runner.OpenRouterAgent) and haiku.supported is not None
     assert haiku.prices == (1e-6, 5e-6) and "temperature" not in haiku.supported
     assert runner.resolve_models(["aya", "bakeoff", "glm"])[:3] == ["aya", "glm", "glm53f"]
     assert runner.file_name("or:moonshotai/kimi-k2.6") == "or-moonshotai__kimi-k2.6"
@@ -152,6 +155,7 @@ def test_out_of_credits_is_recognised():
 def test_qwen_thinking_off_variant_sends_reasoning_disabled(monkeypatch):
     monkeypatch.setattr(runner, "_openrouter_models", lambda: {})
     agent = runner.make_agent("qwen38nt")()
+    assert isinstance(agent, runner.OpenRouterAgent)
     assert agent.slug == "qwen/qwen3.8-27b" and agent.extra_body == {"reasoning": {"enabled": False}}
     assert "qwen38nt" not in runner.resolve_models(["bakeoff"])
 

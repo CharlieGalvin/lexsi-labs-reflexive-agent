@@ -39,7 +39,7 @@ def fake_completion(replies):
                 for c in r])
         return NS(choices=[NS(message=msg)], usage=NS(prompt_tokens=1000, completion_tokens=50))
 
-    completion.calls = calls
+    completion.calls = calls  # ty: ignore[unresolved-attribute]  # the test reads it back
     return completion
 
 
@@ -87,6 +87,7 @@ def test_to_prompted_merges_adjacent_turns_from_the_same_role():
 ])
 def test_parse_prompted_reads_tool_calls(text, expected):
     calls = parse_prompted(text)
+    assert calls is not None
     assert [(c["function"]["name"], json.loads(c["function"]["arguments"])) for c in calls] == expected
 
 
@@ -153,7 +154,7 @@ TELECOM_REPLY = (
 ])
 def test_tool_calls_embedded_in_prose_are_found(text, name):
     calls, embedded = find_prompted_calls(text)
-    assert embedded and [c["function"]["name"] for c in calls] == [name]
+    assert calls is not None and embedded and [c["function"]["name"] for c in calls] == [name]
 
 
 def test_embedded_call_drops_the_prose_and_any_made_up_result():
@@ -295,6 +296,7 @@ def test_pseudo_tool_call_text_is_counted_as_unparsed():
 ])
 def test_function_call_style_is_read(text, args):
     calls, embedded = find_prompted_calls(text)
+    assert calls is not None
     assert calls[0]["function"]["name"] == "get_order_details" and not embedded
     assert json.loads(calls[0]["function"]["arguments"]) == args
 
@@ -302,6 +304,7 @@ def test_function_call_style_is_read(text, args):
 def test_function_call_with_keyword_arguments_uses_taus_parser():
     pytest.importorskip("tau2")
     calls, _ = find_prompted_calls("get_order_details(order_id='#W1')")
+    assert calls is not None
     assert json.loads(calls[0]["function"]["arguments"]) == {"order_id": "#W1"}
 
 
