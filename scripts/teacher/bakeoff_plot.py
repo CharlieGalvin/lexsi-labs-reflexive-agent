@@ -1,7 +1,8 @@
 """Quality-vs-cost chart for the teacher bake-off (SEL-58). Needs matplotlib.
 
-    python scripts/bakeoff_report.py --json results/bakeoff_report.json
-    python scripts/bakeoff_plot.py results/bakeoff_report.json docs/experiments/img/bakeoff_cost_vs_pass.png
+    python scripts/teacher/bakeoff_report.py --json results/bakeoff_report.json
+    python scripts/teacher/bakeoff_plot.py results/bakeoff_report.json \
+        docs/experiments/img/bakeoff_cost_vs_pass.png
 """
 
 from __future__ import annotations

@@ -9,8 +9,8 @@ confirms the committed file matches, so anyone can verify the dev pick wasn't ha
   reproducible.
 - **train**: the official train split minus dev.
 
-    python scripts/make_splits.py            # write configs/splits.json (refuses to overwrite)
-    python scripts/make_splits.py --check    # verify the committed file
+    python scripts/data/make_splits.py            # write configs/splits.json (refuses to overwrite)
+    python scripts/data/make_splits.py --check    # verify the committed file
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "configs" / "splits.json"
 TAU2 = ROOT / "third_party" / "tau2-bench"
 DEV_SIZE = {"retail": 15, "airline": 6, "telecom": 15}

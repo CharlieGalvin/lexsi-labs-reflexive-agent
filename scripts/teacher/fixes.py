@@ -1,9 +1,9 @@
 """Teacher fix run: the chosen teacher on every train task not used in phase 1 (SEL-58 phase 2, SEL-45).
 
-    python scripts/teacher_fixes.py --list                       # the 148 tasks, no API calls
-    python scripts/teacher_fixes.py --limit 3                    # smoke test: 3 tasks x 3 attempts
-    python scripts/teacher_fixes.py                              # the full run (GLM-5.3-Flash)
-    python scripts/teacher_fixes.py --report                     # summary of what's saved
+    python scripts/teacher/fixes.py --list                       # the 148 tasks, no API calls
+    python scripts/teacher/fixes.py --limit 3                    # smoke test: 3 tasks x 3 attempts
+    python scripts/teacher/fixes.py                              # the full run (GLM-5.3-Flash)
+    python scripts/teacher/fixes.py --report                     # summary of what's saved
 
 **Tasks.** Every τ²-bench *train* task in retail, airline and telecom that phase 1 didn't use:
 54 retail + 20 airline + 74 telecom = 148. Train tasks only, so every verified pass is a real fix.
@@ -36,7 +36,7 @@ import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 HERE = pathlib.Path(__file__).parent
-_spec = importlib.util.spec_from_file_location("teacher_sample", HERE / "teacher_sample.py")
+_spec = importlib.util.spec_from_file_location("teacher_sample", HERE / "bakeoff.py")
 ts = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(ts)
 

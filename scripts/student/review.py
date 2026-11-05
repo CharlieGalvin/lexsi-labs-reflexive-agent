@@ -1,8 +1,8 @@
 # ruff: noqa: E501  (long HTML/CSS template lines)
 """Where does the student go wrong? Failure categories plus a browsable log page (SEL-55, SEL-7).
 
-    python scripts/student_review.py                                  # results/fixes/aya.jsonl
-    python scripts/student_review.py results/episodes/sample-aya.jsonl
+    python scripts/student/review.py                                  # results/fixes/aya.jsonl
+    python scripts/student/review.py results/episodes/sample-aya.jsonl
     open results/reports/aya_review.html                              # every conversation, readable
 
 Each conversation is tagged with every problem found, and given one *main reason* (the first
@@ -57,7 +57,7 @@ def _current_unseen(rec: dict) -> list[str]:
     try:
         import sys
 
-        sys.path.insert(0, str(pathlib.Path(__file__).parents[1] / "src"))
+        sys.path.insert(0, str(pathlib.Path(__file__).parents[2] / "src"))
         from reflexive.teacher import unseen_arguments
 
         return unseen_arguments(rec["messages"])

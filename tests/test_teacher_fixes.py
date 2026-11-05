@@ -1,19 +1,13 @@
-"""scripts/teacher_fixes.py: the fix run's task list, attempts and report (SEL-58 phase 2)."""
+"""scripts/teacher/fixes.py: the fix run's task list, attempts and report (SEL-58 phase 2)."""
 
 from __future__ import annotations
 
-import importlib.util
-import pathlib
-
 import pytest
+from _scripts import load_script
 
 
 def load():
-    spec = importlib.util.spec_from_file_location(
-        "teacher_fixes", pathlib.Path(__file__).parents[1] / "scripts" / "teacher_fixes.py")
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
+    return load_script("teacher/fixes")
 
 
 def rec(domain, task, attempt, passed, checks=None, broken=False, judged=True):
@@ -99,10 +93,7 @@ def test_pass_at_3_counts_tasks_that_stopped_at_their_first_pass():
 
 
 def test_view_check_spots_customer_actions_shown_to_the_agent():
-    spec = importlib.util.spec_from_file_location(
-        "student_review", pathlib.Path(__file__).parents[1] / "scripts" / "student_review.py")
-    sr = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(sr)
+    sr = load_script("student/review")
     call = {"id": "u1", "function": {"name": "check_status_bar"}}
     full = [{"role": "user", "content": None, "tool_calls": [call]},
             {"role": "tool", "tool_call_id": "u1", "content": "No signal"},

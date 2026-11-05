@@ -1,5 +1,5 @@
 {
- "about": "SEL-12 spot check: is each sampled finding a real failure of that type? Labelled by reading the conversation (scripts/spot_check_hallucination.py prints the sample). First pass by Claude; to be confirmed by a person.",
+ "about": "SEL-12 spot check: is each sampled finding a real failure of that type? Labelled by reading the conversation (scripts/arms/spot_check_hallucination.py prints the sample). First pass by Claude; to be confirmed by a person.",
  "files": [
   "results/episodes/arms/A-telecom-train.jsonl",
   "results/episodes/arms/C-telecom-train.jsonl"

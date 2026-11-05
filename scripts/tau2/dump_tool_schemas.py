@@ -1,7 +1,7 @@
 """Save τ²-bench's tool schemas per domain to configs/tool_schemas.json (SEL-12).
 
-    python scripts/dump_tool_schemas.py           # rewrite the file (needs τ²-bench installed)
-    python scripts/dump_tool_schemas.py --check   # confirm the file matches τ²-bench
+    python scripts/tau2/dump_tool_schemas.py           # rewrite the file (needs τ²-bench installed)
+    python scripts/tau2/dump_tool_schemas.py --check   # confirm the file matches τ²-bench
 
 The hallucination classifier (``reflexive.hallucination``) reads this file, so it runs without
 τ²-bench. Per domain: the agent's tools as OpenAI function schemas (without τ²-bench's internal
@@ -15,7 +15,7 @@ import json
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 
 from reflexive import splits  # noqa: E402

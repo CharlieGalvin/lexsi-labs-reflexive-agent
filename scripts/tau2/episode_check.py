@@ -1,6 +1,6 @@
 """Drive `Tau2Episode` with an API model as the agent, to check the plumbing end to end (SEL-32).
 
-    python scripts/tau2_episode_check.py telecom --task-ids '<id> <id>' [--out results/x.jsonl]
+    python scripts/tau2/episode_check.py telecom --task-ids '<id> <id>' [--out results/x.jsonl]
 
 This is a test driver, not our harness: the real agents (Tiny Aya, the teacher) are driven by
 the Architect's harness and the Trainer's rollout. Here GPT-4.1 plays the agent with native
@@ -21,7 +21,7 @@ import sys
 
 from loguru import logger
 
-sys.path.insert(0, str(pathlib.Path(__file__).parents[1] / "src"))
+sys.path.insert(0, str(pathlib.Path(__file__).parents[2] / "src"))
 from reflexive.episode import Tau2Episode  # noqa: E402
 from reflexive.llm import default_model  # noqa: E402
 

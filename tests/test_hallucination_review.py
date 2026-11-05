@@ -209,7 +209,10 @@ def test_saved_tool_schemas_match_tau2_bench() -> None:
     pytest.importorskip("tau2")
     root = Path(__file__).resolve().parents[1]
     run = subprocess.run(
-        [sys.executable, "scripts/dump_tool_schemas.py", "--check"], cwd=root, capture_output=True, text=True
+        [sys.executable, "scripts/tau2/dump_tool_schemas.py", "--check"],
+        cwd=root,
+        capture_output=True,
+        text=True,
     )
     assert run.returncode == 0, run.stdout + run.stderr
 
@@ -221,7 +224,7 @@ def test_spot_check_reports_a_missing_file_instead_of_crashing(tmp_path: Any) ->
 
     root = Path(__file__).resolve().parents[1]
     run = subprocess.run(
-        [sys.executable, "scripts/spot_check_hallucination.py", str(tmp_path / "nope.jsonl")],
+        [sys.executable, "scripts/arms/spot_check_hallucination.py", str(tmp_path / "nope.jsonl")],
         cwd=root,
         capture_output=True,
         text=True,

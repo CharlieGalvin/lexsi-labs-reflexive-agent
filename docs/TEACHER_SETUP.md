@@ -206,7 +206,7 @@ A fixed test to settle it, agreed 3 Nov:
   too small". Add `gpt` for GPT-4.1, to show the tasks are solvable.
 - **Also counted** per conversation: invented IDs, calls to tools the agent doesn't have, and
   identical retries of a failed call. Broken runs (API failures) are reported separately; redo
-  them with `python scripts/teacher_sample.py --retry-broken`.
+  them with `python scripts/teacher/bakeoff.py --retry-broken`.
 - **95% ranges for 30 tasks:** 0 wins → 0–11%; 3 → 3–26%; 6 → 10–37%; 9 → 17–48%.
 - **Decision rule:**
   - **Aya ≤ 3/30 while the reference ≥ ~15/30:** unaided Aya is a poor teacher. Test hints

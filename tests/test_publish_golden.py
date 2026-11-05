@@ -2,16 +2,14 @@
 
 import copy
 import sys
-from pathlib import Path
 
 import pytest
+from _scripts import load_script
+from test_golden import SP, TOOLS, record
 
 from reflexive import golden, splits
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-import publish_golden as pg  # noqa: E402
-from test_golden import SP, TOOLS, record  # noqa: E402
+pg = load_script("data/publish_golden")
 
 TRAIN = splits.task_ids("retail", "train")[0]
 DEV = splits.task_ids("retail", "dev")[0]

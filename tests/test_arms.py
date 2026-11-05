@@ -204,14 +204,9 @@ def test_student_rpm_comes_from_the_config_not_teacher_rpm_and_can_be_shared(mon
 
 
 def _load_rollout_script():
-    import importlib.util
-    from pathlib import Path
+    from _scripts import load_script
 
-    path = Path(__file__).resolve().parents[1] / "scripts" / "rollout.py"
-    spec = importlib.util.spec_from_file_location("rollout_script", path)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
+    return load_script("arms/rollout")
 
 
 def test_rollout_reruns_crashed_conversations_and_counts_them_apart(tmp_path, monkeypatch, capsys):

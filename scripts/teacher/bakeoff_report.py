@@ -1,7 +1,7 @@
 """Teacher bake-off report: pass rates, paired statistics and projected cost (SEL-58).
 
-    python scripts/bakeoff_report.py                     # reads results/episodes/sample-*.jsonl
-    python scripts/bakeoff_report.py --json results/bakeoff_report.json
+    python scripts/teacher/bakeoff_report.py                     # reads results/episodes/sample-*.jsonl
+    python scripts/teacher/bakeoff_report.py --json results/bakeoff_report.json
 
 Standard library only, so it runs anywhere the results are. What it computes:
 

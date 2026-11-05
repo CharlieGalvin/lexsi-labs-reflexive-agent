@@ -1,7 +1,7 @@
 """Check our outcome checker (src/reflexive/outcome.py) against τ²-bench (SEL-39).
 
-    python scripts/tau2_check_scorer.py run <save-to name or results.json>   # vs an official run
-    python scripts/tau2_check_scorer.py gold [retail airline telecom]        # no API, all tasks
+    python scripts/tau2/check_scorer.py run <save-to name or results.json>   # vs an official run
+    python scripts/tau2/check_scorer.py gold [retail airline telecom]        # no API, all tasks
 
 `run` re-scores every conversation in a saved `tau2 run` with our wrapper, in both message
 formats (τ²-bench's own and the OpenAI-style one our harness writes), and compares with the
@@ -21,7 +21,7 @@ import sys
 
 from loguru import logger
 
-sys.path.insert(0, str(pathlib.Path(__file__).parents[1] / "src"))
+sys.path.insert(0, str(pathlib.Path(__file__).parents[2] / "src"))
 from reflexive.outcome import JUDGED, scorer, to_openai  # noqa: E402
 
 logger.remove()

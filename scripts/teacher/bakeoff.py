@@ -1,8 +1,8 @@
 """Is Aya Expanse 32B a usable teacher? A fixed 30-task test against a reference model (SEL-37).
 
-    python scripts/teacher_sample.py                      # Aya vs Qwen3 32B (same size)
-    python scripts/teacher_sample.py --models aya qwen gpt
-    python scripts/teacher_sample.py --models aya --workers 2
+    python scripts/teacher/bakeoff.py                      # Aya vs Qwen3 32B (same size)
+    python scripts/teacher/bakeoff.py --models aya qwen gpt
+    python scripts/teacher/bakeoff.py --models aya --workers 2
 
 **Tasks.** A fixed sample of 30 τ²-bench *train* tasks whose correct answer changes the database:
 20 retail + 10 airline (seed 0, the same every run). On these, doing nothing can't pass.
@@ -61,7 +61,7 @@ try:  # loguru comes with τ²-bench; CI installs the project without it
 except ImportError:  # pragma: no cover - only without τ²-bench
     logger = None
 
-sys.path.insert(0, str(pathlib.Path(__file__).parents[1] / "src"))
+sys.path.insert(0, str(pathlib.Path(__file__).parents[2] / "src"))
 from reflexive.episode import Tau2Episode, estimate_tokens  # noqa: E402
 from reflexive.teacher import (  # noqa: E402
     ContextTooLong,
@@ -132,7 +132,7 @@ class NativeAgent:
         # OpenRouter's list of parameters the model accepts. Some newer models (reasoning ones)
         # refuse `temperature`; with require_parameters on, sending it finds no endpoint at all.
         self.supported = supported
-        self.temperature = 0.0  # fix runs raise it for retries (scripts/teacher_fixes.py)
+        self.temperature = 0.0  # fix runs raise it for retries (scripts/teacher/fixes.py)
         self.usage = {"calls": 0, "prompt_tokens": 0, "completion_tokens": 0, "seconds": 0.0}
 
     def turn(self, messages: list[dict], tools: list[dict]) -> dict:

@@ -1,18 +1,14 @@
-"""scripts/tau2_report.py: per-message cost summing and the token-based fallback."""
+"""scripts/tau2/run_report.py: per-message cost summing and the token-based fallback."""
 
 from __future__ import annotations
 
-import importlib.util
 import json
-import pathlib
 import sys
 
 import pytest
+from _scripts import load_script
 
-_PATH = pathlib.Path(__file__).parents[1] / "scripts" / "tau2_report.py"
-_spec = importlib.util.spec_from_file_location("tau2_report", _PATH)
-tau2_report = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(tau2_report)
+tau2_report = load_script("tau2/run_report")
 
 
 def _run(tmp_path, monkeypatch, capsys, messages):

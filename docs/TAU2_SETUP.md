@@ -8,7 +8,7 @@
 > record of why telecom was at risk.
 
 Originally, telecom was **at risk**: its prompt alone fills ~91% of Tiny Aya's 8,192-token
-context window. Everything here is reproducible with `python scripts/tau2_inspect.py` (no API calls).
+context window. Everything here is reproducible with `python scripts/tau2/inspect_tasks.py` (no API calls).
 
 **Telecom drop rule (retired 3 Nov with the move to Aya Expanse 32B):** drop telecom if, in
 Arm A rollouts on its train tasks, **more than 25% hit the context limit**, or its pass rate is
@@ -63,7 +63,7 @@ from train **by task**, at random with a fixed seed (`reagent-dev-v1`):
 | **Total** | **142** | **36** | **100** |
 
 Dev is for DSPy, gate checks and heal-cycle checks; a dev task's trajectory is never trained on.
-`python scripts/make_splits.py --check` confirms the file matches a fresh rebuild from the seed.
+`python scripts/data/make_splits.py --check` confirms the file matches a fresh rebuild from the seed.
 
 Healing (hard subset, teacher fixes, GRPO) and the DSPy prompt (Arm D) use **train only** (and dev). All
 reported numbers come from the 100 test tasks, run with 3–4 trials
@@ -98,8 +98,8 @@ so real rollouts (extra lookups, retries, chat) will be longer: treat these as l
   the simulated customer is identical across the experiment.
 - Optional for cheap development runs only: `gpt-4.1-mini`. Never mix simulators between arms.
 - **Cost per task:** τ²-bench records `agent_cost` and `user_cost` for every run.
-  `bash scripts/tau2_first_run.sh` runs 2 retail train tasks and prints both, plus token counts
-  (`scripts/tau2_report.py`). LiteLLM may not price OpenRouter model IDs, so the reported cost
+  `bash scripts/tau2/first_run.sh` runs 2 retail train tasks and prints both, plus token counts
+  (`scripts/tau2/run_report.py`). LiteLLM may not price OpenRouter model IDs, so the reported cost
   can be empty; the script then estimates it from tokens at GPT-4.1 list prices. Your
   OpenRouter activity page shows the actual spend. Post the numbers
   in SEL-31 / SEL-37 and multiply: (178 train + 100 test × 3 trials × 4 arms) × user cost per task.

@@ -1,14 +1,10 @@
-"""scripts/bakeoff_report.py: the statistics behind the teacher bake-off write-up (SEL-58)."""
+"""scripts/teacher/bakeoff_report.py: the statistics behind the teacher bake-off write-up (SEL-58)."""
 
 from __future__ import annotations
 
-import importlib.util
-import pathlib
+from _scripts import load_script
 
-spec = importlib.util.spec_from_file_location(
-    "bakeoff_report", pathlib.Path(__file__).parents[1] / "scripts" / "bakeoff_report.py")
-br = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(br)
+br = load_script("teacher/bakeoff_report")
 
 
 def test_exact_binomial_matches_known_values():

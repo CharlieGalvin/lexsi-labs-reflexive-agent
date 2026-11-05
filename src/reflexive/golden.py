@@ -14,7 +14,7 @@ Every record is checked by `check_record` before it's written: the Cohere text i
 and must give exactly the original agent turns (same text, same tool calls and arguments,
 same tool results), the roles must alternate and ``train_on`` must be every assistant turn.
 
-Pure functions; τ²-bench is only needed to make the system prompt (`scripts/build_golden.py`).
+Pure functions; τ²-bench is only needed to make the system prompt (`scripts/data/build_golden.py`).
 """
 
 from __future__ import annotations

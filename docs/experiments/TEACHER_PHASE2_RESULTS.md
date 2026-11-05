@@ -10,7 +10,7 @@ tasks, it ties Qwen3.8 27B (thinking off) on retail and airline, and **beats it 
 telecom (89% vs 49%, p < 10⁻⁶)**.
 
 Phase 1 (screen, 30 tasks): [`TEACHER_BAKEOFF_RESULTS.md`](TEACHER_BAKEOFF_RESULTS.md).
-Reproduce with `python scripts/phase2_report.py` (needs the `results/fixes/*.jsonl` files).
+Reproduce with `python scripts/teacher/phase2_report.py` (needs the `results/fixes/*.jsonl` files).
 
 ![Phase 2 by domain](img/phase2_by_domain.png)
 

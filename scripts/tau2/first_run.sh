@@ -4,7 +4,7 @@
 #   just tau2-first-run              # 2 retail train tasks (just loads .env for you)
 #   just tau2-first-run telecom      # telecom: works with an OpenRouter key alone
 #
-# Without just: set -a; source .env; set +a; DOMAIN=retail bash scripts/tau2_first_run.sh
+# Without just: set -a; source .env; set +a; DOMAIN=retail bash scripts/tau2/first_run.sh
 #
 # Keys (in .env, copied from .env.example; never commit .env):
 #   - Agent + simulated customer: OPENAI_API_KEY or OPENROUTER_API_KEY.
@@ -61,13 +61,13 @@ if [[ -e "$PREV" ]]; then
 fi
 
 echo "== 1. Plan only (no API calls)"
-python "$(dirname "$0")/tau2_cli.py" run --domain "$DOMAIN" --task-split-name train "${SELECT[@]}" --num-trials 1 \
+python "$(dirname "$0")/cli.py" run --domain "$DOMAIN" --task-split-name train "${SELECT[@]}" --num-trials 1 \
   --agent-llm "$AGENT_LLM" --user-llm "$USER_LLM" --save-to "$OUT" --dry-run
 
 echo "== 2. Real run: $NUM_TASKS $DOMAIN train tasks"
-python "$(dirname "$0")/tau2_cli.py" run --domain "$DOMAIN" --task-split-name train "${SELECT[@]}" --num-trials 1 \
+python "$(dirname "$0")/cli.py" run --domain "$DOMAIN" --task-split-name train "${SELECT[@]}" --num-trials 1 \
   --agent-llm "$AGENT_LLM" --user-llm "$USER_LLM" --save-to "$OUT"
 
 echo "== 3. Official scores, tokens and cost per task"
-python "$(dirname "$0")/tau2_report.py" "$OUT"
+python "$(dirname "$0")/run_report.py" "$OUT"
 echo "Browse the run with: tau2 view"

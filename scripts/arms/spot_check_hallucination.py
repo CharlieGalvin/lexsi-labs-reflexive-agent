@@ -1,7 +1,7 @@
 """Spot-check the hallucination classifier (SEL-12): sample findings to label by hand.
 
-    python scripts/spot_check_hallucination.py results/episodes/arms/*-telecom-train.jsonl
-    python scripts/spot_check_hallucination.py FILES --labels docs/experiments/hallucination_labels.json
+    python scripts/arms/spot_check_hallucination.py results/episodes/arms/*-telecom-train.jsonl
+    python scripts/arms/spot_check_hallucination.py FILES --labels docs/experiments/hallucination_labels.json
 
 Samples ``--per-type`` findings (default 10) of each type, TOOL, ARG and LOOP, from **failed**
 conversations, one finding per conversation, spread across the kinds within each type, with a
@@ -19,7 +19,7 @@ import random
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 
 from reflexive.hallucination import FailureType, agent_view_of, classify_record  # noqa: E402
@@ -92,7 +92,8 @@ def main() -> int:
     a = p.parse_args()
     if missing_files := [str(f) for f in a.files if not f.exists()]:
         print(f"⛔ not found: {', '.join(missing_files)}. Rollouts are local (results/ is gitignored):")
-        print("   pass your own, e.g. `python scripts/spot_check_hallucination.py results/fixes/aya.jsonl`")
+        print("   pass your own, e.g.")
+        print("   `python scripts/arms/spot_check_hallucination.py results/fixes/aya.jsonl`")
         return 1
     items = sample(a.files, a.per_type)
     if not a.labels:

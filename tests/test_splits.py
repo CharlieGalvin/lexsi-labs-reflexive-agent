@@ -1,10 +1,10 @@
 """The frozen splits (SEL-36): sizes, no overlaps, and τ²-bench's own splits kept intact."""
 
 import json
-import sys
 from pathlib import Path
 
 import pytest
+from _scripts import load_script
 
 from reflexive import splits
 
@@ -49,7 +49,6 @@ def test_matches_official(domain):
 @pytest.mark.skipif(not TAU2.exists(), reason="needs the τ²-bench checkout in third_party/")
 def test_rebuild_matches_committed():
     """The dev pick is reproducible from the seed: nobody hand-edited it."""
-    sys.path.insert(0, str(ROOT / "scripts"))
-    import make_splits
+    make_splits = load_script("data/make_splits")
 
     assert make_splits.build()["domains"] == splits.load()["domains"]

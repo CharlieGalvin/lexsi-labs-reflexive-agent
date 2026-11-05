@@ -22,7 +22,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 
 from reflexive import golden, splits  # noqa: E402
@@ -237,7 +237,7 @@ Sizes per training record: {sizes['turns']['min']}–{sizes['turns']['max']} tur
   original turns, tool calls, arguments and tool results.
 - **Cost:** $11.20 for the teacher run on all 178 train tasks.
 
-Code: `src/reflexive/golden.py`, `scripts/build_golden.py`, `scripts/publish_golden.py` in the
+Code: `src/reflexive/golden.py`, `scripts/data/build_golden.py`, `scripts/data/publish_golden.py` in the
 ReAgent repo (commit `{git_commit()}`). τ²-bench commit `{tau2_commit}`.
 
 ## Limitations

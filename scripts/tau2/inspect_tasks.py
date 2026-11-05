@@ -1,7 +1,7 @@
 """Inspect τ²-bench without any API calls: splits, prompt sizes and context fit (SEL-31).
 
     pip install -e ".[bench]"
-    python scripts/tau2_inspect.py --context 8192
+    python scripts/tau2/inspect_tasks.py --context 8192
 
 Token counts are approximate (characters / 4); Tiny Aya's own tokenizer will differ by
 roughly ±15%. "Gold tool I/O" replays each task's reference actions against a fresh

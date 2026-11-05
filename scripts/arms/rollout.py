@@ -1,7 +1,7 @@
 """Run one experiment arm (configs/arms.yaml) on τ²-bench tasks and save the trajectories (SEL-41).
 
-    python scripts/rollout.py A retail --split train --limit 5
-    python scripts/rollout.py C telecom --task-ids <id> <id> --samples 3
+    python scripts/arms/rollout.py A retail --split train --limit 5
+    python scripts/arms/rollout.py C telecom --task-ids <id> <id> --samples 3
 
 One JSON line per conversation in ``results/episodes/arms/<arm>-<domain>-<split>.jsonl``, in the
 `Tau2Episode.record()` format plus ``arm``, ``sample`` and diagnostics. An interrupted run

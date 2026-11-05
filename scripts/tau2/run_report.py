@@ -1,6 +1,6 @@
 """Print reward, token usage and cost per task for a τ²-bench run (used by tau2_first_run.sh).
 
-    python scripts/tau2_report.py <save-to name or path>
+    python scripts/tau2/run_report.py <save-to name or path>
 
 Cost is the sum of each message's own cost. τ²-bench's per-run `agent_cost` is left empty
 whenever any one agent message has no cost (in v2.0.0 the scripted greeting never has one),

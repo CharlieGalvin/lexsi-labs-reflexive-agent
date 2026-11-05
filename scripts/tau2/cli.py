@@ -1,6 +1,6 @@
 """Run the τ²-bench CLI with OpenRouter model prices registered in LiteLLM.
 
-    python scripts/tau2_cli.py run --domain telecom ...     # same arguments as `tau2`
+    python scripts/tau2/cli.py run --domain telecom ...     # same arguments as `tau2`
 
 LiteLLM's price list knows `gpt-4.1` but not OpenRouter's names for it, so τ²-bench logs
 "This model isn't mapped yet" on every message and records the cost as $0. Before starting
@@ -14,7 +14,7 @@ from __future__ import annotations
 import pathlib
 import sys
 
-sys.path.insert(0, str(pathlib.Path(__file__).parents[1] / "src"))
+sys.path.insert(0, str(pathlib.Path(__file__).parents[2] / "src"))
 from reflexive.llm import register_openrouter_prices  # noqa: E402
 
 

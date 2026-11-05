@@ -189,13 +189,13 @@ src/reflexive/           Python package: each role adds its modules here
   splits.py              load the frozen splits; split_of(), assert_not_test()
   teacher.py             Cohere `Action:` prompt format (to_prompted) and tool-call parsing; Cohere client
   golden.py              golden trajectories v1: agent's view, clean-pass pick, Cohere conversion, checks
-scripts/rollout.py       run an arm on a domain's tasks: `just rollout A retail` (Arm A), `just rollout C ...`
-scripts/tau2_*           τ²-bench: first run, cost report, context-fit check, OpenRouter pricing
-scripts/teacher_*        teacher bake-off (teacher_sample) and the fix run (teacher_fixes)
-scripts/*_report.py      bake-off and phase 2 statistics; student_review.py: Aya's failure types
-scripts/make_splits.py   froze configs/splits.json (run once; --check verifies it)
-scripts/build_golden.py  golden trajectories v1 → data/golden/v1/ (just golden)
-scripts/publish_golden.py  private upload to the team HF org with a data card (just golden-publish)
+scripts/                 command-line tools, one folder per job (scripts/README.md lists each one)
+  tau2/                  τ²-bench: first run, cost report, scorer checks, tool schemas
+  teacher/               the teacher bake-off and the fix run that made the golden trajectories
+  student/               Aya's failure review
+  arms/                  experiment arms: rollouts (`just rollout A retail`), classifier spot check
+  data/                  frozen splits, golden trajectories v1, the Hugging Face upload
+  archive/               early probes, kept for the record
 third_party/             τ²-bench v2.0.0 (with data) and AgentTune, cloned by `just setup-dev` / `just setup`
 tests/                   offline tests (no GPU) — run in CI on every PR
 docs/DATA_CONTRACT.md    what the Curator hands over: the five rules, the files and the record format

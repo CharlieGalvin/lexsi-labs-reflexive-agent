@@ -31,7 +31,7 @@ just golden --sample 5      # expect 30/30 · 127 of 142 · 31 of 36
 | → **dev reference** (`golden_dev_reference.jsonl`) | **31 of 36** | retail 11/15, airline 5/6, telecom 15/15 |
 | → test | 0 | no test task was ever run by the teacher |
 
-## The four steps (`scripts/build_golden.py`, `src/reflexive/golden.py`)
+## The four steps (`scripts/data/build_golden.py`, `src/reflexive/golden.py`)
 
 Each step stops the build if it fails.
 
@@ -55,7 +55,7 @@ Each step stops the build if it fails.
 
 ## Publishing (`just golden-publish`, SEL-48)
 
-`scripts/publish_golden.py` refuses to upload unless all of these hold:
+`scripts/data/publish_golden.py` refuses to upload unless all of these hold:
 
 - every record is well formed (a malformed record is reported, never a crash), IDs are
   unique, each file holds only its own split, and no task is in both files;

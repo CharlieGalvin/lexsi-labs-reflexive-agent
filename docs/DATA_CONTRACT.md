@@ -2,7 +2,7 @@
 
 What the Curator hands the Trainer and the Architect, and the rules it follows. Agreed by
 Charlie and Chiara on 4 Nov. Implemented in `src/reflexive/golden.py` and
-`scripts/build_golden.py` (SEL-9), and published as the private Hugging Face dataset
+`scripts/data/build_golden.py` (SEL-9), and published as the private Hugging Face dataset
 [`reagent-lexsi/tau2-golden-trajectories`](https://huggingface.co/datasets/reagent-lexsi/tau2-golden-trajectories),
 tag `v1` (SEL-48). How it was built and checked: [`experiments/GOLDEN_TRAJECTORIES_V1.md`](experiments/GOLDEN_TRAJECTORIES_V1.md).
 

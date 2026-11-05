@@ -1,18 +1,15 @@
-"""scripts/teacher_sample.py: the fixed task sample, the agents' plumbing and the summary."""
+"""scripts/teacher/bakeoff.py: the fixed task sample, the agents' plumbing and the summary."""
 
 from __future__ import annotations
 
-import importlib.util
 import json
-import pathlib
 import sys
 from types import SimpleNamespace as NS
 
 import pytest
+from _scripts import load_script
 
 from reflexive.teacher import tool_errors
-
-_PATH = pathlib.Path(__file__).parents[1] / "scripts" / "teacher_sample.py"
 
 
 def fake_module(monkeypatch, name, **attrs):
@@ -26,10 +23,7 @@ def fake_module(monkeypatch, name, **attrs):
 
 
 def load():
-    spec = importlib.util.spec_from_file_location("teacher_sample", _PATH)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
+    return load_script("teacher/bakeoff")
 
 
 def test_wilson_matches_the_table_we_planned_with():

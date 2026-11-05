@@ -39,7 +39,7 @@ The refactor must not change any result. Save each output **before** touching co
 mkdir -p /tmp/before
 just teacher-fixes --report            > /tmp/before/fixes_report.txt
 just bakeoff-report                    > /tmp/before/bakeoff.txt
-python scripts/phase2_report.py        > /tmp/before/phase2.txt
+python scripts/teacher/phase2_report.py        > /tmp/before/phase2.txt
 just student-review                    > /tmp/before/student.txt
 just golden                            > /tmp/before/golden.txt
 sha256sum data/golden/v1/*.jsonl       > /tmp/before/golden.sha
@@ -133,8 +133,8 @@ scripts/
 - [ ] Move `load`/`sha256` from `build_golden.py` into the package (the publish script imports a script)
 - [ ] `Tau2Episode`'s default `max_context=8192` (the Tiny Aya leftover) → 128K, or make it required
   (a GRPO loop building episodes directly would cut telecom short)
-- [ ] Wait for #40 (Chiara's classifier): it adds `scripts/dump_tool_schemas.py`,
-  `scripts/spot_check_hallucination.py` and `docs/experiments/HALLUCINATION_CLASSIFIER.md`.
+- [ ] Wait for #40 (Chiara's classifier): it adds `scripts/tau2/dump_tool_schemas.py`,
+  `scripts/arms/spot_check_hallucination.py` and `docs/experiments/HALLUCINATION_CLASSIFIER.md`.
   Move, type and format them with the rest, and add the page to `docs/experiments/README.md`
 - [ ] `TeacherClient` records the API's `finish_reason`, so a reply cut by `max_tokens` is visible
 

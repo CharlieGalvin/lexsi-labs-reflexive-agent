@@ -1,7 +1,7 @@
 """Build golden trajectories v1 (SEL-9) from the teacher's fix run. No API calls, no spend.
 
-    python scripts/build_golden.py                    # results/fixes/glm53f.jsonl → data/golden/v1/
-    python scripts/build_golden.py --sample 5         # also write 5 records to read (markdown)
+    python scripts/data/build_golden.py                    # results/fixes/glm53f.jsonl → data/golden/v1/
+    python scripts/data/build_golden.py --sample 5         # also write 5 records to read (markdown)
 
 Steps, each one stops the build if it fails:
 
@@ -27,7 +27,7 @@ import shutil
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 
 from reflexive import golden, splits  # noqa: E402

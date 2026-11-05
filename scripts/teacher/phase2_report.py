@@ -1,7 +1,7 @@
 """Teacher bake-off phase 2: GLM-5.3-Flash vs Qwen3.8 27B (thinking off), paired (SEL-58).
 
-    python scripts/phase2_report.py                       # reads results/fixes/{glm53f,qwen38nt}.jsonl
-    python scripts/phase2_report.py --plot docs/experiments/img/phase2_by_domain.png   # needs matplotlib
+    python scripts/teacher/phase2_report.py               # reads results/fixes/{glm53f,qwen38nt}.jsonl
+    python scripts/teacher/phase2_report.py --plot docs/experiments/img/phase2_by_domain.png  # matplotlib
 
 Attempt 1 only (temperature 0), judges on, on the train tasks both models finished. Paired exact
 McNemar tests and paired bootstrap intervals per domain, plus failure patterns (how failed
