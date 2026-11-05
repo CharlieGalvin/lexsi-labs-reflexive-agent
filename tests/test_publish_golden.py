@@ -23,10 +23,14 @@ def rows():
 
 def report(n_train=1, n_dev=1, unsolved_train=(), unsolved_dev=()):
     z = {"tasks": 0, "trajectories": 0, "unsolved": []}
-    retail = {"train": {**z, "trajectories": n_train, "unsolved": list(unsolved_train)},
-              "dev": {**z, "trajectories": n_dev, "unsolved": list(unsolved_dev)}}
-    return {"domains": {"retail": retail},
-            "train_sizes": {k: {"min": 1, "median": 1, "max": 1} for k in ("turns", "targets", "chars")}}
+    retail = {
+        "train": {**z, "trajectories": n_train, "unsolved": list(unsolved_train)},
+        "dev": {**z, "trajectories": n_dev, "unsolved": list(unsolved_dev)},
+    }
+    return {
+        "domains": {"retail": retail},
+        "train_sizes": {k: {"min": 1, "median": 1, "max": 1} for k in ("turns", "targets", "chars")},
+    }
 
 
 def test_clean_rows_pass():

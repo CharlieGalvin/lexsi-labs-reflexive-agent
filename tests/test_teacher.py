@@ -34,9 +34,12 @@ def fake_completion(replies):
         if isinstance(r, str):
             msg = NS(content=r, tool_calls=None)
         else:  # native tool calls
-            msg = NS(content=None, tool_calls=[
-                NS(id=c["id"], function=NS(name=c["name"], arguments=json.dumps(c["args"])))
-                for c in r])
+            msg = NS(
+                content=None,
+                tool_calls=[
+                    NS(id=c["id"], function=NS(name=c["name"], arguments=json.dumps(c["args"]))) for c in r
+                ],
+            )
         return NS(choices=[NS(message=msg)], usage=NS(prompt_tokens=1000, completion_tokens=50))
 
     completion.calls = calls  # ty: ignore[unresolved-attribute]  # the test reads it back
@@ -51,52 +54,80 @@ def test_to_prompted_puts_tools_in_system_and_folds_results():
         {"role": "system", "content": "POLICY"},
         {"role": "assistant", "content": "Hi! How can I help you today?"},
         {"role": "user", "content": "Where's my order?"},
-        {"role": "assistant", "content": None, "tool_calls": [
-            {"id": "c1", "type": "function",
-             "function": {"name": "get_order_details", "arguments": '{"order_id": "#W1"}'}}]},
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "c1",
+                    "type": "function",
+                    "function": {"name": "get_order_details", "arguments": '{"order_id": "#W1"}'},
+                }
+            ],
+        },
         {"role": "tool", "tool_call_id": "c1", "content": '{"status":"pending"}'},
     ]
     out = to_prompted(convo, TOOLS)
     assert out[0]["role"] == "system" and out[0]["content"].startswith("POLICY")
     assert "get_order_details" in out[0]["content"] and '"tool_name"' in out[0]["content"]
     assert json.loads(out[3]["content"]) == [
-        {"tool_name": "get_order_details", "parameters": {"order_id": "#W1"}}]
-    assert out[4] == {"role": "user", "content": TOOL_RESULT.format(
-        name="get_order_details", content='{"status":"pending"}')}
+        {"tool_name": "get_order_details", "parameters": {"order_id": "#W1"}}
+    ]
+    assert out[4] == {
+        "role": "user",
+        "content": TOOL_RESULT.format(name="get_order_details", content='{"status":"pending"}'),
+    }
     assert all(m["role"] != "tool" for m in out)
 
 
 def test_to_prompted_merges_adjacent_turns_from_the_same_role():
-    convo = [{"role": "assistant", "content": None, "tool_calls": [
-        {"id": "a", "function": {"name": "x", "arguments": {}}},
-        {"id": "b", "function": {"name": "y", "arguments": {}}}]},
+    convo = [
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {"id": "a", "function": {"name": "x", "arguments": {}}},
+                {"id": "b", "function": {"name": "y", "arguments": {}}},
+            ],
+        },
         {"role": "tool", "tool_call_id": "a", "content": "1"},
-        {"role": "tool", "tool_call_id": "b", "content": "2"}]
+        {"role": "tool", "tool_call_id": "b", "content": "2"},
+    ]
     out = to_prompted(convo, TOOLS)
     assert [m["role"] for m in out] == ["assistant", "user"]
     assert "Tool result for x: 1" in out[1]["content"] and "Tool result for y: 2" in out[1]["content"]
 
 
-@pytest.mark.parametrize("text,expected", [
-    ('[{"tool_name": "get_order_details", "parameters": {"order_id": "#W1"}}]',
-     [("get_order_details", {"order_id": "#W1"})]),
-    ('{"tool_name": "get_order_details", "parameters": {}}', [("get_order_details", {})]),
-    ('```json\n[{"name": "get_order_details", "arguments": {"order_id": "#W2"}}]\n```',
-     [("get_order_details", {"order_id": "#W2"})]),
-    ('[{"tool_name": "made_up_tool", "parameters": {}}]', [("made_up_tool", {})]),  # kept
-])
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        (
+            '[{"tool_name": "get_order_details", "parameters": {"order_id": "#W1"}}]',
+            [("get_order_details", {"order_id": "#W1"})],
+        ),
+        ('{"tool_name": "get_order_details", "parameters": {}}', [("get_order_details", {})]),
+        (
+            '```json\n[{"name": "get_order_details", "arguments": {"order_id": "#W2"}}]\n```',
+            [("get_order_details", {"order_id": "#W2"})],
+        ),
+        ('[{"tool_name": "made_up_tool", "parameters": {}}]', [("made_up_tool", {})]),  # kept
+    ],
+)
 def test_parse_prompted_reads_tool_calls(text, expected):
     calls = parse_prompted(text)
     assert calls is not None
     assert [(c["function"]["name"], json.loads(c["function"]["arguments"])) for c in calls] == expected
 
 
-@pytest.mark.parametrize("text", [
-    "Your order #W1 is pending.",
-    'I can look that up. Send me {"order_id": ...} please.',  # mentions JSON, doesn't start with it
-    "[not json",
-    '[{"parameters": {}}]',  # no tool name
-])
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Your order #W1 is pending.",
+        'I can look that up. Send me {"order_id": ...} please.',  # mentions JSON, doesn't start with it
+        "[not json",
+        '[{"parameters": {}}]',  # no tool name
+    ],
+)
 def test_parse_prompted_leaves_messages_alone(text):
     assert parse_prompted(text) is None
 
@@ -144,14 +175,18 @@ The certificate has been successfully sent to your registered email address, Emm
 TELECOM_REPLY = (
     "Please provide me with your account details so I can transfer you to a human agent.\n\n"
     '[{"tool_name": "transfer_to_human_agents", "parameters": {"summary": "MMS still failing."}}]'
-    "\n\nYOU ARE BEING TRANSFERRED TO A HUMAN AGENT. PLEASE HOLD ON.")
+    "\n\nYOU ARE BEING TRANSFERRED TO A HUMAN AGENT. PLEASE HOLD ON."
+)
 
 
-@pytest.mark.parametrize("text,name", [
-    (RETAIL_REPLY, "exchange_delivered_order_items"),
-    (AIRLINE_REPLY, "send_certificate"),
-    (TELECOM_REPLY, "transfer_to_human_agents"),
-])
+@pytest.mark.parametrize(
+    "text,name",
+    [
+        (RETAIL_REPLY, "exchange_delivered_order_items"),
+        (AIRLINE_REPLY, "send_certificate"),
+        (TELECOM_REPLY, "transfer_to_human_agents"),
+    ],
+)
 def test_tool_calls_embedded_in_prose_are_found(text, name):
     calls, embedded = find_prompted_calls(text)
     assert calls is not None and embedded and [c["function"]["name"] for c in calls] == [name]
@@ -162,7 +197,9 @@ def test_embedded_call_drops_the_prose_and_any_made_up_result():
     turn = t.turn([{"role": "user", "content": "go ahead"}], TOOLS)
     assert turn["content"] is None  # not "...successfully sent..." to the customer
     assert json.loads(turn["tool_calls"][0]["function"]["arguments"]) == {
-        "user_id": "emma_kim_9957", "amount": 200}
+        "user_id": "emma_kim_9957",
+        "amount": 200,
+    }
     assert t.usage.embedded == 1 and t.usage.as_dict()["embedded"] == 1
 
 
@@ -178,12 +215,21 @@ def test_reply_that_is_only_json_is_not_counted_as_embedded():
 
 # --- Aya's own (Cohere) prompt style -----------------------------------------------------------
 
-ORDER_TOOL = {"type": "function", "function": {
-    "name": "get_order_details", "description": "Get the status of an order.\nMore detail here.",
-    "parameters": {"type": "object", "properties": {
-        "order_id": {"type": "string", "description": "The order id."},
-        "item_ids": {"type": "array", "items": {"type": "string"}, "description": "Items."}},
-        "required": ["order_id"]}}}
+ORDER_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "get_order_details",
+        "description": "Get the status of an order.\nMore detail here.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "order_id": {"type": "string", "description": "The order id."},
+                "item_ids": {"type": "array", "items": {"type": "string"}, "description": "Items."},
+            },
+            "required": ["order_id"],
+        },
+    },
+}
 
 
 def test_tool_stub_renders_python_signature_and_args():
@@ -197,21 +243,28 @@ def test_tool_stub_renders_python_signature_and_args():
 def test_cohere_style_uses_action_format_and_results_tags():
     convo = [
         {"role": "system", "content": "POLICY"},
-        {"role": "assistant", "content": None, "tool_calls": [
-            {"id": "c1", "function": {"name": "get_order_details", "arguments": '{"order_id": "#W1"}'}}]},
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {"id": "c1", "function": {"name": "get_order_details", "arguments": '{"order_id": "#W1"}'}}
+            ],
+        },
         {"role": "tool", "tool_call_id": "c1", "content": "pending"},
     ]
     out = to_prompted(convo, [ORDER_TOOL], "cohere")
     assert out[0]["content"].startswith("POLICY\n\n## Available Tools")
     assert "def get_order_details(" in out[0]["content"] and "Write 'Action:'" in out[0]["content"]
     assert out[1]["content"].startswith("Action: ```json")
-    assert out[2]["content"] == ("<results>\nDocument: 0\ntool_name: get_order_details\n"
-                                 "result: pending\n</results>")
+    assert out[2]["content"] == (
+        "<results>\nDocument: 0\ntool_name: get_order_details\nresult: pending\n</results>"
+    )
 
 
 def test_action_prefixed_reply_is_a_call_not_embedded():
     calls, embedded = find_prompted_calls(
-        'Action: ```json\n[{"tool_name": "get_order_details", "parameters": {"order_id": "#W1"}}]\n```')
+        'Action: ```json\n[{"tool_name": "get_order_details", "parameters": {"order_id": "#W1"}}]\n```'
+    )
     assert calls and not embedded
 
 
@@ -225,8 +278,10 @@ def test_cohere_turn_sends_stop_sequences():
 
 
 def test_directly_answer_with_prose_becomes_a_message():
-    reply = ('Your order is on its way!\n\nAction: ```json\n'
-             '[{"tool_name": "directly-answer", "parameters": {}}]\n```')
+    reply = (
+        "Your order is on its way!\n\nAction: ```json\n"
+        '[{"tool_name": "directly-answer", "parameters": {}}]\n```'
+    )
     t = CohereClient("prompted", completion=fake_completion([reply]), rpm=0)
     turn = t.turn([{"role": "user", "content": "thanks"}], [ORDER_TOOL])
     assert turn == {"role": "assistant", "content": "Your order is on its way!"}
@@ -234,8 +289,12 @@ def test_directly_answer_with_prose_becomes_a_message():
 
 
 def test_directly_answer_alone_asks_once_for_the_reply():
-    fc = fake_completion(['Action: ```json\n[{"tool_name": "directly-answer", "parameters": {}}]\n```',
-                          "You're welcome, have a nice day!"])
+    fc = fake_completion(
+        [
+            'Action: ```json\n[{"tool_name": "directly-answer", "parameters": {}}]\n```',
+            "You're welcome, have a nice day!",
+        ]
+    )
     t = CohereClient("prompted", completion=fc, rpm=0)
     turn = t.turn([{"role": "user", "content": "thanks"}], [ORDER_TOOL])
     assert turn == {"role": "assistant", "content": "You're welcome, have a nice day!"}
@@ -268,18 +327,48 @@ def test_unseen_arguments_flags_invented_ids_from_a_real_transcript():
     # the user ID from a tool result, but the item IDs and payment method were invented.
     convo = [
         {"role": "user", "content": "order number W2378156 ... Yusuf Rossi, zip code 19122"},
-        {"role": "assistant", "content": None, "tool_calls": [{"id": "a", "function": {
-            "name": "find_user_id_by_name_zip",
-            "arguments": '{"first_name": "Yusuf", "last_name": "Rossi", "zip": "19122"}'}}]},
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "a",
+                    "function": {
+                        "name": "find_user_id_by_name_zip",
+                        "arguments": '{"first_name": "Yusuf", "last_name": "Rossi", "zip": "19122"}',
+                    },
+                }
+            ],
+        },
         {"role": "tool", "tool_call_id": "a", "content": "yusuf_rossi_9620"},
-        {"role": "assistant", "content": None, "tool_calls": [{"id": "b", "function": {
-            "name": "exchange_delivered_order_items", "arguments": json.dumps({
-                "order_id": "#W2378156", "item_ids": ["1012345678", "9876543210"],
-                "new_item_ids": ["1012345679", "9876543211"],
-                "payment_method_id": "credit_card_0000000"})}}]},
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "b",
+                    "function": {
+                        "name": "exchange_delivered_order_items",
+                        "arguments": json.dumps(
+                            {
+                                "order_id": "#W2378156",
+                                "item_ids": ["1012345678", "9876543210"],
+                                "new_item_ids": ["1012345679", "9876543211"],
+                                "payment_method_id": "credit_card_0000000",
+                            }
+                        ),
+                    },
+                }
+            ],
+        },
     ]
-    assert unseen_arguments(convo) == ["1012345678", "9876543210", "1012345679", "9876543211",
-                                       "credit_card_0000000"]
+    assert unseen_arguments(convo) == [
+        "1012345678",
+        "9876543210",
+        "1012345679",
+        "9876543211",
+        "credit_card_0000000",
+    ]
 
 
 def test_pseudo_tool_call_text_is_counted_as_unparsed():
@@ -290,10 +379,13 @@ def test_pseudo_tool_call_text_is_counted_as_unparsed():
     assert "tool_calls" not in turn and t.usage.unparsed == 1
 
 
-@pytest.mark.parametrize("text,args", [
-    ('Action: get_order_details({"order_id": "#W2378156"})', {"order_id": "#W2378156"}),  # Tiny Aya
-    ("get_order_details()", {}),
-])
+@pytest.mark.parametrize(
+    "text,args",
+    [
+        ('Action: get_order_details({"order_id": "#W2378156"})', {"order_id": "#W2378156"}),  # Tiny Aya
+        ("get_order_details()", {}),
+    ],
+)
 def test_function_call_style_is_read(text, args):
     calls, embedded = find_prompted_calls(text)
     assert calls is not None
@@ -342,8 +434,9 @@ def test_too_many_tokens_becomes_context_too_long():
 
 
 def test_prompted_turn_returns_tool_calls_and_counts_usage():
-    fc = fake_completion(['[{"tool_name": "get_order_details", "parameters": {"order_id": "#W1"}}]',
-                          "Your order is pending."])
+    fc = fake_completion(
+        ['[{"tool_name": "get_order_details", "parameters": {"order_id": "#W1"}}]', "Your order is pending."]
+    )
     t = CohereClient("prompted", completion=fc, rpm=0)
     turn = t.turn([{"role": "system", "content": "P"}, {"role": "user", "content": "hi"}], TOOLS)
     assert turn["content"] is None and turn["tool_calls"][0]["function"]["name"] == "get_order_details"
@@ -365,8 +458,7 @@ def test_native_turn_passes_tools_and_reads_structured_calls():
 
 
 def test_unparsable_json_reply_is_sent_as_a_message_and_counted():
-    t = CohereClient("prompted", completion=fake_completion(['[{"tool_name": "x", "parameters": ']),
-                      rpm=0)
+    t = CohereClient("prompted", completion=fake_completion(['[{"tool_name": "x", "parameters": ']), rpm=0)
     turn = t.turn([{"role": "user", "content": "hi"}], TOOLS)
     assert "tool_calls" not in turn and t.usage.unparsed == 1
 
@@ -445,13 +537,20 @@ def test_prompted_teacher_solves_a_task_through_the_episode():
 
     logger.disable("tau2")
     gold = [m for m in scorer("retail").gold_trajectory("0") if m["role"] == "assistant"]
-    replies = [json.dumps([{"tool_name": tc["name"], "parameters": tc["arguments"]}
-                           for tc in m["tool_calls"]]) for m in gold]
+    replies = [
+        json.dumps([{"tool_name": tc["name"], "parameters": tc["arguments"]} for tc in m["tool_calls"]])
+        for m in gold
+    ]
     replies.append("Your exchange is confirmed. ###STOP###")  # τ²-bench's agent stop
     teacher = CohereClient("prompted", completion=fake_completion(replies), rpm=0)
-    ep = Tau2Episode("retail", "0", user_llm="gpt-4.1",
-                     user_llm_args={"mock_response": "Yes, please go ahead."},
-                     max_context=128_000, reserve=4_096)
+    ep = Tau2Episode(
+        "retail",
+        "0",
+        user_llm="gpt-4.1",
+        user_llm_args={"mock_response": "Yes, please go ahead."},
+        max_context=128_000,
+        reserve=4_096,
+    )
     ep.reset()
     while not ep.done:
         ep.step(teacher.turn(ep.prompt(), ep.tool_schemas))
@@ -465,10 +564,23 @@ def test_prompted_teacher_solves_a_task_through_the_episode():
 def test_dates_are_not_invented_ids():
     from reflexive.teacher import unseen_arguments
 
-    msgs = [{"role": "user", "content": "I want to fly next Friday"},
-            {"role": "assistant", "content": None, "tool_calls": [{"id": "a", "type": "function",
-             "function": {"name": "search_direct_flight",
-                          "arguments": '{"date": "2024-05-24", "user_id": "mia_li_3668"}'}}]}]
+    msgs = [
+        {"role": "user", "content": "I want to fly next Friday"},
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "a",
+                    "type": "function",
+                    "function": {
+                        "name": "search_direct_flight",
+                        "arguments": '{"date": "2024-05-24", "user_id": "mia_li_3668"}',
+                    },
+                }
+            ],
+        },
+    ]
     assert unseen_arguments(msgs) == ["mia_li_3668"]
 
 
@@ -481,8 +593,11 @@ def test_the_old_name_still_works() -> None:
 
 def test_tool_errors_counts_unknown_tools_and_retried_failures() -> None:
     def call(i, name, args):
-        return {"role": "assistant", "content": None,
-                "tool_calls": [{"id": i, "function": {"name": name, "arguments": json.dumps(args)}}]}
+        return {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [{"id": i, "function": {"name": name, "arguments": json.dumps(args)}}],
+        }
 
     msgs = [
         call("a", "check_apn_settings", {}),

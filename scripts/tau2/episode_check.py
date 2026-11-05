@@ -33,9 +33,14 @@ def agent_turn(model: str, messages: list[dict], tools: list[dict]) -> dict:
 
     resp = litellm.completion(model=model, messages=messages, tools=tools, temperature=0.0)
     msg = resp.choices[0].message
-    calls = [{"id": tc.id, "type": "function",
-              "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
-             for tc in (msg.tool_calls or [])]
+    calls = [
+        {
+            "id": tc.id,
+            "type": "function",
+            "function": {"name": tc.function.name, "arguments": tc.function.arguments},
+        }
+        for tc in (msg.tool_calls or [])
+    ]
     if calls:  # τ²-bench's rule: a tool call or a message, not both
         return {"role": "assistant", "content": None, "tool_calls": calls}
     return {"role": "assistant", "content": msg.content or ""}
@@ -56,8 +61,12 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("domain")
     ap.add_argument("task_ids", nargs="*")
-    ap.add_argument("--task-ids", dest="task_ids_str", default="",
-                    help="space-separated task IDs in one string (IDs contain | and [ ])")
+    ap.add_argument(
+        "--task-ids",
+        dest="task_ids_str",
+        default="",
+        help="space-separated task IDs in one string (IDs contain | and [ ])",
+    )
     ap.add_argument("--agent-llm", default=None, help="default: GPT-4.1 via OpenAI or OpenRouter")
     ap.add_argument("--out", default=None)
     a = ap.parse_args()
@@ -79,8 +88,10 @@ def main() -> None:
             n_agent = sum(len(m.get("tool_calls") or []) for m in msgs if m["role"] == "assistant")
             n_cust = sum(len(m.get("tool_calls") or []) for m in msgs if m["role"] == "user")
             rows.append(rec)
-            print(f"{tid[:62]:<62} {rec['termination']:<24} {rec['outcome']['reward']:>6.1f} "
-                  f"{n_agent:>8}/{n_cust:<7} {rec['flags']['peak_prompt_tokens']:>9,}")
+            print(
+                f"{tid[:62]:<62} {rec['termination']:<24} {rec['outcome']['reward']:>6.1f} "
+                f"{n_agent:>8}/{n_cust:<7} {rec['flags']['peak_prompt_tokens']:>9,}"
+            )
     passed = sum(r["outcome"]["passed"] for r in rows)
     over = sum(r["flags"]["peak_prompt_tokens"] > 8192 for r in rows)
     print(f"\n{passed}/{len(rows)} passed · {over}/{len(rows)} would exceed Tiny Aya's 8,192 tokens")

@@ -70,14 +70,19 @@ def main() -> int:
 
     kept: list[str] = []  # clean records from earlier runs; crashed ones are dropped and re-run
     if out.exists() and not a.fresh:
-        kept = [line for line in out.read_text().splitlines()
-                if line.strip() and not json.loads(line).get("error")]
+        kept = [
+            line
+            for line in out.read_text().splitlines()
+            if line.strip() and not json.loads(line).get("error")
+        ]
     done = {(r["task_id"], r.get("sample", 0)) for r in map(json.loads, kept)}
     todo = [(t, s) for t in tasks for s in range(a.samples) if (t, s) not in done]
     rpm = a.rpm if a.rpm is not None else arm.student.get("rpm") or 0
-    print(f"Arm {arm.key} ({arm.name}), {arm.student['name']}, {a.domain} {a.split}: "
-          f"{len(todo)} conversations to run ({len(done)} already in {out}); judges "
-          f"{'on' if judges else 'off'}; student rpm {rpm or 'unlimited'}")
+    print(
+        f"Arm {arm.key} ({arm.name}), {arm.student['name']}, {a.domain} {a.split}: "
+        f"{len(todo)} conversations to run ({len(done)} already in {out}); judges "
+        f"{'on' if judges else 'off'}; student rpm {rpm or 'unlimited'}"
+    )
     if not todo:
         return 0
 
@@ -91,8 +96,9 @@ def main() -> int:
     passed = errors = overflows = 0
 
     def one(task_id: str, sample: int) -> dict:
-        return run_episode(arm, make_student(arm.student, limiter=limiter), a.domain, task_id,
-                           judges=judges, sample=sample)
+        return run_episode(
+            arm, make_student(arm.student, limiter=limiter), a.domain, task_id, judges=judges, sample=sample
+        )
 
     if out.exists() and not a.fresh:  # rewrite without the crashed records being re-run
         out.write_text("".join(f"{line}\n" for line in kept))
@@ -108,11 +114,15 @@ def main() -> int:
             overflows += rec["flags"].get("context_overflow", False)
             t, s = futures[fut]
             mark = "PASS" if rec["outcome"]["passed"] else "fail"
-            print(f"[{i}/{len(todo)}] {mark} {t} #{s} ({rec['termination']}, {rec['wall_s']}s)"
-                  + (f" ERROR {rec['error']}" if rec.get("error") else ""))
+            print(
+                f"[{i}/{len(todo)}] {mark} {t} #{s} ({rec['termination']}, {rec['wall_s']}s)"
+                + (f" ERROR {rec['error']}" if rec.get("error") else "")
+            )
 
-    print(f"\nThis run: {passed}/{len(todo) - errors} passed, {overflows} context overflows, "
-          f"{errors} crashed (not scored; a re-run retries them). Saved to {out}")
+    print(
+        f"\nThis run: {passed}/{len(todo) - errors} passed, {overflows} context overflows, "
+        f"{errors} crashed (not scored; a re-run retries them). Saved to {out}"
+    )
     return 1 if errors else 0
 
 

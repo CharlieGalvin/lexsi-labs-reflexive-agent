@@ -35,11 +35,36 @@ import html
 import json
 import pathlib
 
-WRITE_PREFIXES = ("cancel_", "modify_", "exchange_", "return_", "book_", "update_", "send_",
-                  "enable_", "disable_", "refuel_", "suspend_", "resume_", "toggle_")
-ORDER = ["broken", "format", "no tools", "unknown tool", "invented ID", "repeated failed call",
-         "handed to a human", "ran out of steps / context", "no change made", "wrong change",
-         "told the customer wrongly", "device not fixed", "other"]
+WRITE_PREFIXES = (
+    "cancel_",
+    "modify_",
+    "exchange_",
+    "return_",
+    "book_",
+    "update_",
+    "send_",
+    "enable_",
+    "disable_",
+    "refuel_",
+    "suspend_",
+    "resume_",
+    "toggle_",
+)
+ORDER = [
+    "broken",
+    "format",
+    "no tools",
+    "unknown tool",
+    "invented ID",
+    "repeated failed call",
+    "handed to a human",
+    "ran out of steps / context",
+    "no change made",
+    "wrong change",
+    "told the customer wrongly",
+    "device not fixed",
+    "other",
+]
 NOTES = ["call inside prose"]  # tagged, but not a reason for failing
 JUDGED = {"NL_ASSERTION", "COMMUNICATE"}
 
@@ -87,7 +112,8 @@ def tags_for(rec: dict) -> list[str]:
     if any(tool_name(tc) == "transfer_to_human_agents" for tc in calls):
         tags.append("handed to a human")
     if rec.get("termination") in ("max_steps", "context_window_exceeded") or (rec.get("flags") or {}).get(
-            "context_overflow"):
+        "context_overflow"
+    ):
         tags.append("ran out of steps / context")
     if not o.get("passed"):
         writes = [tc for tc in calls if tool_name(tc).startswith(WRITE_PREFIXES)]
@@ -107,9 +133,16 @@ def main_reason(tags: list[str]) -> str | None:
 
 
 def summarise(recs: list[dict]) -> dict:
-    out = {"n": len(recs), "passed": sum(r["outcome"]["passed"] for r in recs), "by_domain": {},
-           "main": collections.Counter(), "any": collections.Counter(), "invented_examples": [],
-           "unknown_tools": collections.Counter(), "failed_lookups": collections.Counter()}
+    out = {
+        "n": len(recs),
+        "passed": sum(r["outcome"]["passed"] for r in recs),
+        "by_domain": {},
+        "main": collections.Counter(),
+        "any": collections.Counter(),
+        "invented_examples": [],
+        "unknown_tools": collections.Counter(),
+        "failed_lookups": collections.Counter(),
+    }
     for d in ("retail", "airline", "telecom"):
         rr = [r for r in recs if r["domain"] == d]
         if rr:
@@ -123,7 +156,9 @@ def summarise(recs: list[dict]) -> dict:
         for v in _current_unseen(r):
             if len(out["invented_examples"]) < 12:
                 out["invented_examples"].append((r["domain"], r["task_id"], v))
-        results = {m.get("tool_call_id"): str(m.get("content") or "") for m in r["messages"] if m["role"] == "tool"}
+        results = {
+            m.get("tool_call_id"): str(m.get("content") or "") for m in r["messages"] if m["role"] == "tool"
+        }
         for tc in agent_calls(r):
             res = results.get(tc.get("id"), "")
             if res.startswith("Error: Tool"):
@@ -145,7 +180,9 @@ def view_check(recs: list[dict]) -> tuple[int, int, int]:
         if view is None or r["domain"] != "telecom":
             continue
         checked += 1
-        ids = {tc.get("id") for m in r["messages"] if m["role"] == "user" for tc in (m.get("tool_calls") or [])}
+        ids = {
+            tc.get("id") for m in r["messages"] if m["role"] == "user" for tc in (m.get("tool_calls") or [])
+        }
         if ids:
             with_user_calls += 1
             seen = {tc.get("id") for m in view for tc in (m.get("tool_calls") or [])}
@@ -155,8 +192,11 @@ def view_check(recs: list[dict]) -> tuple[int, int, int]:
 
 
 def print_summary(name: str, s: dict) -> None:
-    print(f"\n=== {name}: {s['passed']}/{s['n']} passed "
-          + " · ".join(f"{d} {k}/{n}" for d, (k, n) in s["by_domain"].items()) + " ===")
+    print(
+        f"\n=== {name}: {s['passed']}/{s['n']} passed "
+        + " · ".join(f"{d} {k}/{n}" for d, (k, n) in s["by_domain"].items())
+        + " ==="
+    )
     fails = s["n"] - s["passed"]
     print(f"\nMain reason for each of the {fails} failures:")
     for t in ORDER:
@@ -167,13 +207,22 @@ def print_summary(name: str, s: dict) -> None:
         if s["any"][t]:
             print(f"  {t:<28} {s['any'][t]:>4}  ({s['any'][t] / s['n']:.0%})")
     if s["invented_examples"]:
-        print("\nExamples of invented IDs:", ", ".join(f"{d}:{t[:20]} → {v}" for d, t, v in s["invented_examples"]))
+        print(
+            "\nExamples of invented IDs:",
+            ", ".join(f"{d}:{t[:20]} → {v}" for d, t, v in s["invented_examples"]),
+        )
     if s["unknown_tools"]:
-        print(f"Tools called that the agent doesn't have ({sum(s['unknown_tools'].values())} calls; "
-              "8 commonest):", dict(s["unknown_tools"].most_common(8)))
+        print(
+            f"Tools called that the agent doesn't have ({sum(s['unknown_tools'].values())} calls; "
+            "8 commonest):",
+            dict(s["unknown_tools"].most_common(8)),
+        )
     if s["failed_lookups"]:
-        print(f"Lookups that came back 'not found' ({sum(s['failed_lookups'].values())} calls; 8 commonest; "
-              "usually a wrong or invented ID):", dict(s["failed_lookups"].most_common(8)))
+        print(
+            f"Lookups that came back 'not found' ({sum(s['failed_lookups'].values())} calls; 8 commonest; "
+            "usually a wrong or invented ID):",
+            dict(s["failed_lookups"].most_common(8)),
+        )
 
 
 # --- HTML log page -------------------------------------------------------------------------------
@@ -206,41 +255,57 @@ def _msg_html(m: dict) -> str:
         parts.append(html.escape(str(txt)))
     for tc in m.get("tool_calls") or []:
         fn = tc.get("function") or tc
-        parts.append(f"<pre>{html.escape(fn.get('name', ''))}({html.escape(str(fn.get('arguments', '')))})</pre>")
+        parts.append(
+            f"<pre>{html.escape(fn.get('name', ''))}({html.escape(str(fn.get('arguments', '')))})</pre>"
+        )
     return f'<div class="msg {role}"><span class="role">{who}</span>{"".join(parts)}</div>'
 
 
 def write_html(name: str, recs: list[dict], s: dict, dst: pathlib.Path) -> None:
-    rows = "".join(f"<tr><td>{t}</td><td>{s['main'][t]}</td><td>{s['any'][t]}</td></tr>" for t in ORDER + NOTES if s["any"][t])
+    rows = "".join(
+        f"<tr><td>{t}</td><td>{s['main'][t]}</td><td>{s['any'][t]}</td></tr>"
+        for t in ORDER + NOTES
+        if s["any"][t]
+    )
     convs = []
     for r in sorted(recs, key=lambda r: (r["outcome"]["passed"], r["domain"], r["task_id"])):
         tags = tags_for(r)
         main = main_reason(tags) if not r["outcome"]["passed"] else None
-        badge = '<span class="pass">PASS</span>' if r["outcome"]["passed"] else '<span class="fail">FAIL</span>'
+        badge = (
+            '<span class="pass">PASS</span>' if r["outcome"]["passed"] else '<span class="fail">FAIL</span>'
+        )
         tagh = "".join(f'<span class="tag">{html.escape(t)}</span>' for t in tags)
         checks = html.escape(json.dumps(r["outcome"].get("checks")))
         inv = _current_unseen(r)
-        raw = "".join(f'<div class="raw"><span class="role">turn {t["turn"]}: {html.escape(t["kind"])}</span>'
-                      f'<pre>{html.escape(t["reply"])}</pre></div>' for t in r.get("raw_turns") or [])
+        raw = "".join(
+            f'<div class="raw"><span class="role">turn {t["turn"]}: {html.escape(t["kind"])}</span>'
+            f"<pre>{html.escape(t['reply'])}</pre></div>"
+            for t in r.get("raw_turns") or []
+        )
         convs.append(
             f'<details class="conv" data-text="{html.escape(" ".join([r["domain"], r["task_id"], *tags]).lower())}">'
-            f'<summary>{badge} <b>{r["domain"]}:{html.escape(r["task_id"][:70])}</b> '
-            f'{"— main reason: <b>" + html.escape(main) + "</b> " if main else ""}{tagh}</summary>'
+            f"<summary>{badge} <b>{r['domain']}:{html.escape(r['task_id'][:70])}</b> "
+            f"{'— main reason: <b>' + html.escape(main) + '</b> ' if main else ''}{tagh}</summary>"
             f'<p class="muted">checks {checks} · ended: {html.escape(str(r.get("termination")))} · '
-            f'{(r.get("diagnostics") or {}).get("tools_ran", 0)} tool calls'
-            f'{" · invented: " + html.escape(", ".join(inv)) if inv else ""}</p>'
+            f"{(r.get('diagnostics') or {}).get('tools_ran', 0)} tool calls"
+            f"{' · invented: ' + html.escape(', '.join(inv)) if inv else ''}</p>"
             + "".join(_msg_html(m) for m in r["messages"])
-            + (f"<details><summary>Aya's raw replies ({len(r['raw_turns'])})</summary>{raw}</details>" if raw else "")
-            + "</details>")
+            + (
+                f"<details><summary>Aya's raw replies ({len(r['raw_turns'])})</summary>{raw}</details>"
+                if raw
+                else ""
+            )
+            + "</details>"
+        )
     doms = " · ".join(f"{d} {k}/{n}" for d, (k, n) in s["by_domain"].items())
     page = f"""<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{html.escape(name)} review</title><style>{CSS}</style></head><body>
 <h1>{html.escape(name)}: where it goes wrong</h1>
-<p class="muted">{s['passed']}/{s['n']} passed · {doms}. Failures first. Click a conversation to read it; "Aya's raw
+<p class="muted">{s["passed"]}/{s["n"]} passed · {doms}. Failures first. Click a conversation to read it; "Aya's raw
 replies" shows exactly what the model wrote before our parser read it.</p>
 <h2>Problems</h2><table><tr><th>Problem</th><th>Main reason for (failures)</th><th>Seen in (all conversations)</th></tr>{rows}</table>
 <h2>Conversations</h2><input id="q" placeholder="Filter: e.g. invented, telecom, retail:41">
-{''.join(convs)}
+{"".join(convs)}
 <script>document.getElementById('q').addEventListener('input',e=>{{const q=e.target.value.toLowerCase();
 document.querySelectorAll('details.conv').forEach(d=>d.style.display=d.dataset.text.includes(q)?'':'none')}})</script>
 </body></html>"""
@@ -260,10 +325,15 @@ def main() -> int:
     print_summary(name, s)
     checked, with_calls, leaked = view_check(recs)
     if checked:
-        print(f"\nAgent's view check (telecom): {checked} conversations, {with_calls} with customer phone "
-              f"actions; the agent was shown them in {leaked}. "
-              + ("✅ the agent never sees them: train on agent_view, not messages."
-                 if not leaked else "⚠ the agent does see them: check before converting."))
+        print(
+            f"\nAgent's view check (telecom): {checked} conversations, {with_calls} with customer phone "
+            f"actions; the agent was shown them in {leaked}. "
+            + (
+                "✅ the agent never sees them: train on agent_view, not messages."
+                if not leaked
+                else "⚠ the agent does see them: check before converting."
+            )
+        )
     dst = a.html or pathlib.Path(f"results/reports/{name}_review.html")
     write_html(name, recs, s, dst)
     print(f"\nLog page: {dst}")

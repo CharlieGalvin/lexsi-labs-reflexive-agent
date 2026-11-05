@@ -45,10 +45,19 @@ def summarise(model: str, recs: list[Record]) -> dict[str, Any]:
     k = sum(r["outcome"]["passed"] for r in recs)
     lo, hi = wilson(k, n)
     diag = [r["diagnostics"] for r in recs]
-    by_domain = {d: (sum(r["outcome"]["passed"] for r in recs if r["domain"] == d),
-                     sum(1 for r in recs if r["domain"] == d)) for d in runner.SAMPLE}
+    by_domain = {
+        d: (
+            sum(r["outcome"]["passed"] for r in recs if r["domain"] == d),
+            sum(1 for r in recs if r["domain"] == d),
+        )
+        for d in runner.SAMPLE
+    }
     return {
-        "model": model, "n": n, "passed": k, "rate": k / n if n else 0.0, "ci": (lo, hi),
+        "model": model,
+        "n": n,
+        "passed": k,
+        "rate": k / n if n else 0.0,
+        "ci": (lo, hi),
         "by_domain": by_domain,
         "invented_ids": sum(bool(x["unseen_arguments"]) for x in diag),
         "unknown_tools": sum(bool(x["unknown_tools"]) for x in diag),
@@ -65,9 +74,11 @@ def summarise(model: str, recs: list[Record]) -> dict[str, Any]:
 
 def print_summary(rows: list[dict[str, Any]]) -> None:
     print("\n=== Summary: 30 train tasks that need a state change (DB checks only: a best case) ===")
-    print(f"{'model':<9} {'open':>4} {'passed':>9} {'95% range':>12} {'retail':>7} {'airline':>8} "
-          f"{'invented IDs':>13} {'unknown tool':>13} {'retried fail':>13} {'no tools':>9} "
-          f"{'over 8K':>8} {'errors':>7} {'cost':>7} {'$/pass':>7}")
+    print(
+        f"{'model':<9} {'open':>4} {'passed':>9} {'95% range':>12} {'retail':>7} {'airline':>8} "
+        f"{'invented IDs':>13} {'unknown tool':>13} {'retried fail':>13} {'no tools':>9} "
+        f"{'over 8K':>8} {'errors':>7} {'cost':>7} {'$/pass':>7}"
+    )
     for s in rows:
         if not s["n"]:
             print(f"{s['model'][:9]:<9}  (no finished runs)")
@@ -76,37 +87,49 @@ def print_summary(rows: list[dict[str, Any]]) -> None:
         dom = s["by_domain"]
         ow = {True: "yes", False: "no", None: "?"}[s["open_weights"]]
         per = f"${s['agent_cost'] / s['passed']:.3f}" if s["passed"] else "-"
-        print(f"{s['model'][:9]:<9} {ow:>4} {s['passed']:>3}/{s['n']:<3} ({s['rate']:>4.0%}) "
-              f"{lo:>4.0%}–{hi:<4.0%} {dom['retail'][0]:>3}/{dom['retail'][1]:<3} "
-              f"{dom['airline'][0]:>3}/{dom['airline'][1]:<4} "
-              f"{s['invented_ids']:>9}/{s['n']:<3} {s['unknown_tools']:>9}/{s['n']:<3} "
-              f"{s['repeated_failures']:>9}/{s['n']:<3} {s['no_tools']:>5}/{s['n']:<3} "
-              f"{s['overflow']:>4}/{s['n']:<3} {s['errors']:>7} ${s['cost']:>6.2f} {per:>7}")
+        print(
+            f"{s['model'][:9]:<9} {ow:>4} {s['passed']:>3}/{s['n']:<3} ({s['rate']:>4.0%}) "
+            f"{lo:>4.0%}–{hi:<4.0%} {dom['retail'][0]:>3}/{dom['retail'][1]:<3} "
+            f"{dom['airline'][0]:>3}/{dom['airline'][1]:<4} "
+            f"{s['invented_ids']:>9}/{s['n']:<3} {s['unknown_tools']:>9}/{s['n']:<3} "
+            f"{s['repeated_failures']:>9}/{s['n']:<3} {s['no_tools']:>5}/{s['n']:<3} "
+            f"{s['overflow']:>4}/{s['n']:<3} {s['errors']:>7} ${s['cost']:>6.2f} {per:>7}"
+        )
     print("Counts in the hallucination columns are conversations with at least one such event.")
-    print("open = weights published (OpenRouter links them on Hugging Face); $/pass = the agent's "
-          "own cost per passed task (customer excluded).")
+    print(
+        "open = weights published (OpenRouter links them on Hugging Face); $/pass = the agent's "
+        "own cost per passed task (customer excluded)."
+    )
     if any(s["model"] == "tiny" for s in rows):
-        print("tiny: cost is the simulated customer only (Tiny Aya's API price isn't published); "
-              "'over 8K' = ended by the context guard (estimated tokens).")
+        print(
+            "tiny: cost is the simulated customer only (Tiny Aya's API price isn't published); "
+            "'over 8K' = ended by the context guard (estimated tokens)."
+        )
     if any(s["errors"] for s in rows):
-        print("⚠ 'errors' are broken runs (API failures, crashes): they count as fails above but say "
-              "nothing about the model. Fix the cause and re-run with --retry-broken.")
+        print(
+            "⚠ 'errors' are broken runs (API failures, crashes): they count as fails above but say "
+            "nothing about the model. Fix the cause and re-run with --retry-broken."
+        )
 
 
 def print_overlap(passed_by: dict[str, set[Task]]) -> None:
     """Teacher vs student: the tasks only the teacher solves are the possible fixes."""
-    teachers = sorted((m for m in passed_by if m not in runner.STUDENTS or m == "aya"),
-                      key=lambda m: -len(passed_by[m]))
-    pairs = [(t, s) for t in teachers for s in runner.STUDENTS
-             if t != s and t in passed_by and s in passed_by]
+    teachers = sorted(
+        (m for m in passed_by if m not in runner.STUDENTS or m == "aya"), key=lambda m: -len(passed_by[m])
+    )
+    pairs = [
+        (t, s) for t in teachers for s in runner.STUDENTS if t != s and t in passed_by and s in passed_by
+    ]
     if not pairs:
         return
     print("\nPossible teacher fixes (tasks the teacher solves and the student doesn't):")
     for t, s in pairs:
         teacher, student = passed_by[t], passed_by[s]
         fix = sorted(teacher - student)
-        print(f"  {t[:9]:>9} → {s:<5} {len(fix):>2}   ({len(student - teacher)} the other way, "
-              f"{len(teacher & student)} both)  {', '.join(f'{d}:{i}' for d, i in fix) or '-'}")
+        print(
+            f"  {t[:9]:>9} → {s:<5} {len(fix):>2}   ({len(student - teacher)} the other way, "
+            f"{len(teacher & student)} both)  {', '.join(f'{d}:{i}' for d, i in fix) or '-'}"
+        )
 
 
 # --- Running one model --------------------------------------------------------------------------
@@ -133,25 +156,33 @@ def enough_credits(model: str) -> bool:
         return True
     print(f"   OpenRouter credits left: ${left:.2f}")
     if left < runner.MIN_CREDITS:
-        print(f"   ⛔ under ${runner.MIN_CREDITS:.0f}: add credits at "
-              "https://openrouter.ai/settings/credits, then run the same command again")
+        print(
+            f"   ⛔ under ${runner.MIN_CREDITS:.0f}: add credits at "
+            "https://openrouter.ai/settings/credits, then run the same command again"
+        )
         return False
     return True
 
 
 def _flags(rec: Record) -> list[str]:
     x = rec["diagnostics"]
-    return [s for s, on in (("invented IDs", x["unseen_arguments"]),
-                            ("unknown tool", x["unknown_tools"]),
-                            ("retried a failed call", x["repeated_failures"]),
-                            ("no tools ran", not x["tools_ran"]),
-                            ("over 8K", (rec.get("flags") or {}).get("context_overflow")),
-                            (f"BROKEN RUN ({rec['termination']}): {rec.get('error') or ''}",
-                             is_broken(rec))) if on]
+    return [
+        s
+        for s, on in (
+            ("invented IDs", x["unseen_arguments"]),
+            ("unknown tool", x["unknown_tools"]),
+            ("retried a failed call", x["repeated_failures"]),
+            ("no tools ran", not x["tools_ran"]),
+            ("over 8K", (rec.get("flags") or {}).get("context_overflow")),
+            (f"BROKEN RUN ({rec['termination']}): {rec.get('error') or ''}", is_broken(rec)),
+        )
+        if on
+    ]
 
 
-def run_model(model: str, todo: list[Task], done: dict[Task, Record], out: pathlib.Path, *,
-              workers: int, fresh: bool) -> bool:
+def run_model(
+    model: str, todo: list[Task], done: dict[Task, Record], out: pathlib.Path, *, workers: int, fresh: bool
+) -> bool:
     """Run the missing conversations, saving each as it finishes. False: stop the whole run."""
     with out.open("w" if fresh else "a") as f, ThreadPoolExecutor(workers) as pool:
         futures = {pool.submit(runner.run_one, model, d, t): (d, t) for d, t in todo}
@@ -161,8 +192,10 @@ def run_model(model: str, todo: list[Task], done: dict[Task, Record], out: pathl
             if runner.out_of_credits(rec):  # every other call would fail too, for every model
                 for other in futures:
                     other.cancel()
-                print("   ⛔ OpenRouter is out of credits: stopping. Add credits, then run the same "
-                      "command with --retry-broken (finished tasks are kept)")
+                print(
+                    "   ⛔ OpenRouter is out of credits: stopping. Add credits, then run the same "
+                    "command with --retry-broken (finished tasks are kept)"
+                )
                 return False
             if runner.model_gone(rec):
                 for other in futures:
@@ -172,9 +205,11 @@ def run_model(model: str, todo: list[Task], done: dict[Task, Record], out: pathl
             f.write(json.dumps(rec) + "\n")
             f.flush()
             done[(d, t)] = rec
-            print(f"   {'✅' if rec['outcome']['passed'] else '❌'} {d}:{t:<6} "
-                  f"{rec['diagnostics']['tools_ran']:>2} tools  {rec['wall_s']:>5.0f}s  "
-                  f"{'; '.join(_flags(rec))}")
+            print(
+                f"   {'✅' if rec['outcome']['passed'] else '❌'} {d}:{t:<6} "
+                f"{rec['diagnostics']['tools_ran']:>2} tools  {rec['wall_s']:>5.0f}s  "
+                f"{'; '.join(_flags(rec))}"
+            )
     return True
 
 
@@ -193,16 +228,20 @@ def _quiet_tau2() -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--models", nargs="+", default=["aya", "qwen"],
-                    help=f"any of {', '.join(runner.MODELS)}; 'bakeoff' for the whole slate; "
-                         "or:<openrouter slug>")
+    ap.add_argument(
+        "--models",
+        nargs="+",
+        default=["aya", "qwen"],
+        help=f"any of {', '.join(runner.MODELS)}; 'bakeoff' for the whole slate; or:<openrouter slug>",
+    )
     ap.add_argument("--json", type=pathlib.Path, help="also write the summary rows to this file")
     ap.add_argument("--workers", type=int, default=4, help="conversations run at once per model")
     ap.add_argument("--fresh", action="store_true", help="ignore earlier results and start again")
     ap.add_argument("--list", action="store_true", help="only print the task sample")
     ap.add_argument("--limit", type=int, help="run only the first N tasks (a quick smoke test)")
-    ap.add_argument("--retry-broken", action="store_true",
-                    help="re-run conversations that broke (API failures, crashes)")
+    ap.add_argument(
+        "--retry-broken", action="store_true", help="re-run conversations that broke (API failures, crashes)"
+    )
     a = ap.parse_args()
     a.models = runner.resolve_models(a.models)
     bad = [m for m in a.models if m not in runner.MODELS and not m.startswith("or:")]
@@ -211,7 +250,7 @@ def main() -> int:
 
     _quiet_tau2()
     tasks = runner.sample_tasks()  # also loads each domain's tasks once, before the worker threads
-    tasks = tasks[:a.limit] if a.limit else tasks
+    tasks = tasks[: a.limit] if a.limit else tasks
     from tau2.gym import register_gym_agent
 
     import reflexive.episode as episode

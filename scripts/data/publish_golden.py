@@ -90,14 +90,20 @@ def splits_order(domain: str, ids: list[str]) -> list[str]:
 
 def _ids_md(by_domain: dict[str, list[str]]) -> str:
     return "\n".join(
-        f"  - {k} ({len(v)}): " + (", ".join(v) if k != "telecom" else
-                                   "".join(f"\n    - `{t}`" for t in v)) for k, v in by_domain.items() if v)
+        f"  - {k} ({len(v)}): " + (", ".join(v) if k != "telecom" else "".join(f"\n    - `{t}`" for t in v))
+        for k, v in by_domain.items()
+        if v
+    )
 
 
 def git_commit() -> str | None:
     try:
-        return subprocess.run(["git", "-C", str(ROOT), "rev-parse", "--short", "HEAD"],
-                              capture_output=True, text=True, check=True).stdout.strip()
+        return subprocess.run(
+            ["git", "-C", str(ROOT), "rev-parse", "--short", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
     except (OSError, subprocess.CalledProcessError):
         return None
 
@@ -115,20 +121,29 @@ def card(rows: dict[str, list[dict]], report: dict, repo: str, shas: dict[str, s
     unsolved_dev = {k: splits_order(k, v["dev"]["unsolved"]) for k, v in d.items()}
     n_unsolved, n_unsolved_dev = sum(map(len, unsolved.values())), sum(map(len, unsolved_dev.values()))
     unsolved_md = _ids_md(unsolved)
-    unsolved_dev_md = (f"- **{n_unsolved_dev} dev tasks have no reference trajectory either:**\n"
-                       f"{_ids_md(unsolved_dev)}\n") if n_unsolved_dev else ""
+    unsolved_dev_md = (
+        (f"- **{n_unsolved_dev} dev tasks have no reference trajectory either:**\n{_ids_md(unsolved_dev)}\n")
+        if n_unsolved_dev
+        else ""
+    )
     tasks_train = sum(v["train"]["tasks"] for v in d.values())
     tasks_dev = sum(v["dev"]["tasks"] for v in d.values())
     max_chars = sizes["chars"]["max"]
     tok_lo, tok_hi = round(max_chars / 4 / 1000), round(max_chars / 3.5 / 1000)  # 3.5–4 chars per token
-    fits = ("Everything fits a 16K context." if max_chars / 3.5 < 16_000 else
-            "**The longest records may not fit a 16K context:** check token counts before choosing a max length.")
-    temps = collections.Counter((r["teacher"]["attempt"], r["teacher"]["temperature"])
-                                for rs in rows.values() for r in rs)
+    fits = (
+        "Everything fits a 16K context."
+        if max_chars / 3.5 < 16_000
+        else "**The longest records may not fit a 16K context:** check token counts before choosing a max length."
+    )
+    temps = collections.Counter(
+        (r["teacher"]["attempt"], r["teacher"]["temperature"]) for rs in rows.values() for r in rs
+    )
     attempts_md = "; ".join(f"{n} from attempt {a} (temperature {t})" for (a, t), n in sorted(temps.items()))
     count_rows = "\n".join(
         f"| {k} | {v['train']['trajectories']} of {v['train']['tasks']} | "
-        f"{v['dev']['trajectories']} of {v['dev']['tasks']} |" for k, v in d.items())
+        f"{v['dev']['trajectories']} of {v['dev']['tasks']} |"
+        for k, v in d.items()
+    )
     n_train, n_dev = len(rows["train"]), len(rows["dev"])
     return f"""---
 pretty_name: ReAgent golden trajectories (τ²-bench) v1
@@ -142,9 +157,9 @@ configs:
 - config_name: default
   data_files:
   - split: train
-    path: {FILES['train']}
+    path: {FILES["train"]}
   - split: dev_reference
-    path: {FILES['dev']}
+    path: {FILES["dev"]}
 ---
 
 # ReAgent golden trajectories (τ²-bench), v1
@@ -177,16 +192,16 @@ marks assistant turns.
 
 | File | Records | Contents |
 |---|---:|---|
-| `{FILES['train']}` | {n_train} | One golden trajectory per solved **train** task. Train on these. |
-| `{FILES['dev']}` | {n_dev} | Trajectories for **dev** tasks: for reference and comparison, **never trained on** |
-| `splits.json` | | The frozen task IDs: train {split_sizes['train']}, dev {split_sizes['dev']}, test {split_sizes['test']} (seed `{seed}`) |
+| `{FILES["train"]}` | {n_train} | One golden trajectory per solved **train** task. Train on these. |
+| `{FILES["dev"]}` | {n_dev} | Trajectories for **dev** tasks: for reference and comparison, **never trained on** |
+| `splits.json` | | The frozen task IDs: train {split_sizes["train"]}, dev {split_sizes["dev"]}, test {split_sizes["test"]} (seed `{seed}`) |
 
 | Domain | Train: tasks with a trajectory | Dev: tasks with a trajectory |
 |---|---:|---:|
 {count_rows}
 | **Total** | **{n_train} of {tasks_train}** | **{n_dev} of {tasks_dev}** |
 
-The test split ({split_sizes['test']} tasks) is τ²-bench's own test split, unchanged. No test task was ever run by
+The test split ({split_sizes["test"]} tasks) is τ²-bench's own test split, unchanged. No test task was ever run by
 the teacher or appears here.
 
 ## One record
@@ -209,9 +224,9 @@ In `messages`:
 - **A tool result** comes back as a user turn: `<results>\\nDocument: N\\ntool_name: ...\\nresult: ...\\n</results>`.
 - **Anything else** is a message to or from the customer.
 
-Sizes per training record: {sizes['turns']['min']}–{sizes['turns']['max']} turns (median
-{sizes['turns']['median']}), {sizes['targets']['min']}–{sizes['targets']['max']} targets
-(median {sizes['targets']['median']}), and at most {max_chars:,} characters
+Sizes per training record: {sizes["turns"]["min"]}–{sizes["turns"]["max"]} turns (median
+{sizes["turns"]["median"]}), {sizes["targets"]["min"]}–{sizes["targets"]["max"]} targets
+(median {sizes["targets"]["median"]}), and at most {max_chars:,} characters
 (about {tok_lo}–{tok_hi}K tokens). {fits}
 
 ## How it was made
@@ -220,7 +235,7 @@ Sizes per training record: {sizes['turns']['min']}–{sizes['turns']['max']} tur
   bake-off (it beat Qwen3.8 27B with thinking off decisively on telecom). It ran as the agent with
   native tool calls; each kept trajectory is the task's first clean pass: {attempts_md}.
   Providers: {", ".join(f"{k} {v}" for k, v in providers.most_common())}.
-- **Customer:** τ²-bench's user simulator, played by {', '.join(f'`{k}`' for k in customers)}.
+- **Customer:** τ²-bench's user simulator, played by {", ".join(f"`{k}`" for k in customers)}.
 - **Scoring:** τ²-bench's own evaluator with judges on. Retail and airline add LLM judges for
   what the agent told the customer; telecom checks the phone's final state.
 - **Selection:** the first clean pass per task. Clean means it passed every check, never retried
@@ -261,7 +276,7 @@ This v1 is private to the team.
 
 ## Checksums (SHA-256)
 
-{chr(10).join(f'- `{k}`: `{v}`' for k, v in shas.items())}
+{chr(10).join(f"- `{k}`: `{v}`" for k, v in shas.items())}
 
 *Version {TAG}, built {dt.date.today().isoformat()}.*
 """
@@ -311,17 +326,23 @@ def main() -> int:
             return 1
         tagged = any(t.name == TAG for t in api.list_repo_refs(a.repo, repo_type="dataset").tags)
         if tagged and not a.retag:
-            print(f"⛔ {a.repo} already has tag {TAG}; not uploading. Pass --retag to move {TAG} "
-                  "to the new data (anyone loading revision v1 will then get it).")
+            print(
+                f"⛔ {a.repo} already has tag {TAG}; not uploading. Pass --retag to move {TAG} "
+                "to the new data (anyone loading revision v1 will then get it)."
+            )
             return 1
     except RepositoryNotFoundError:
         tagged = False
         api.create_repo(a.repo, repo_type="dataset", private=True)
         print(f"created {a.repo} (private)")
-    api.upload_folder(repo_id=a.repo, repo_type="dataset", folder_path=str(a.dir),
-                      allow_patterns=[*names, "README.md"],
-                      commit_message=f"Golden trajectories v1 ({len(rows['train'])} train, "
-                                     f"{len(rows['dev'])} dev reference)")
+    api.upload_folder(
+        repo_id=a.repo,
+        repo_type="dataset",
+        folder_path=str(a.dir),
+        allow_patterns=[*names, "README.md"],
+        commit_message=f"Golden trajectories v1 ({len(rows['train'])} train, "
+        f"{len(rows['dev'])} dev reference)",
+    )
     if tagged:
         api.delete_tag(a.repo, repo_type="dataset", tag=TAG)
     api.create_tag(a.repo, repo_type="dataset", tag=TAG)

@@ -25,16 +25,20 @@ def test_native_agent_adds_no_think_and_reads_tool_calls(monkeypatch):
 
     def fake(**kw):
         seen.update(kw)
-        msg = NS(content=None, tool_calls=[NS(id="q1", function=NS(name="get_order_details",
-                                                                 arguments='{"order_id": "#W1"}'))])
+        msg = NS(
+            content=None,
+            tool_calls=[NS(id="q1", function=NS(name="get_order_details", arguments='{"order_id": "#W1"}'))],
+        )
         return NS(choices=[NS(message=msg)], usage=NS(prompt_tokens=1000, completion_tokens=10))
 
     litellm = fake_module(monkeypatch, "litellm", suppress_debug_info=False, completion=None)
 
     monkeypatch.setattr(litellm, "completion", fake)
     agent = runner.NativeAgent("openrouter/qwen/qwen3-32b", runner.PRICES["qwen"], no_think=True)
-    turn = agent.turn([{"role": "system", "content": "POLICY"}, {"role": "user", "content": "hi"}],
-                      [{"type": "function", "function": {"name": "get_order_details"}}])
+    turn = agent.turn(
+        [{"role": "system", "content": "POLICY"}, {"role": "user", "content": "hi"}],
+        [{"type": "function", "function": {"name": "get_order_details"}}],
+    )
     assert seen["messages"][0]["content"].endswith("/no_think") and seen["tools"]
     assert turn["tool_calls"][0]["function"]["name"] == "get_order_details"
     assert agent.usage_dict()["est_cost"] == pytest.approx(1000 * 0.08e-6 + 10 * 0.28e-6, abs=1e-4)
@@ -60,7 +64,9 @@ def test_qwen_retries_an_empty_reply(monkeypatch):
     monkeypatch.setattr(litellm, "completion", fake)
     agent = runner.NativeAgent("openrouter/qwen/qwen3-32b", runner.PRICES["qwen"], no_think=True)
     assert agent.turn([{"role": "user", "content": "hi"}], []) == {
-        "role": "assistant", "content": "How can I help?"}
+        "role": "assistant",
+        "content": "How can I help?",
+    }
     assert agent.usage["calls"] == 2 and agent.usage["empty"] == 1
 
 
@@ -70,11 +76,17 @@ def test_tiny_counts_tokens_more_cautiously():
 
 
 FAKE_LIST = {
-    "z-ai/glm-4.7-flash": {"id": "z-ai/glm-4.7-flash", "hugging_face_id": "zai-org/GLM-4.7-Flash",
-                           "pricing": {"prompt": "0.00000007", "completion": "0.0000004"}},
-    "anthropic/claude-haiku-5.5": {"id": "anthropic/claude-haiku-5.5", "hugging_face_id": "",
-                                   "supported_parameters": ["tools", "tool_choice", "max_tokens"],
-                                   "pricing": {"prompt": "0.000001", "completion": "0.000005"}},
+    "z-ai/glm-4.7-flash": {
+        "id": "z-ai/glm-4.7-flash",
+        "hugging_face_id": "zai-org/GLM-4.7-Flash",
+        "pricing": {"prompt": "0.00000007", "completion": "0.0000004"},
+    },
+    "anthropic/claude-haiku-5.5": {
+        "id": "anthropic/claude-haiku-5.5",
+        "hugging_face_id": "",
+        "supported_parameters": ["tools", "tool_choice", "max_tokens"],
+        "pricing": {"prompt": "0.000001", "completion": "0.000005"},
+    },
 }
 
 
@@ -102,8 +114,7 @@ def test_temperature_is_only_sent_when_the_model_accepts_it(monkeypatch):
     sent = []
     msg = types.SimpleNamespace(tool_calls=None, content="Hello")
     resp = types.SimpleNamespace(choices=[types.SimpleNamespace(message=msg)], usage=None)
-    fake = types.SimpleNamespace(suppress_debug_info=False,
-                                 completion=lambda **kw: sent.append(kw) or resp)
+    fake = types.SimpleNamespace(suppress_debug_info=False, completion=lambda **kw: sent.append(kw) or resp)
     monkeypatch.setitem(sys.modules, "litellm", fake)
     runner.NativeAgent("openrouter/a/b", (0, 0), supported={"tools"}).turn([], [])
     runner.NativeAgent("openrouter/a/c", (0, 0), supported={"tools", "temperature"}).turn([], [])
@@ -116,10 +127,20 @@ def test_openrouter_agent_hands_reasoning_back_and_retries_provider_errors(monke
     monkeypatch.setattr(runner.time, "sleep", lambda s: None)
     replies = [
         {"choices": [{"finish_reason": "error", "message": {}}]},  # Gemini-style failure: retried
-        {"provider": "Google", "usage": {"prompt_tokens": 10, "completion_tokens": 5, "cost": 0.001},
-         "choices": [{"finish_reason": "tool_calls", "message": {
-             "content": None, "reasoning_details": [{"type": "reasoning.encrypted", "data": "sig"}],
-             "tool_calls": [{"id": "c1", "function": {"name": "find_user", "arguments": "{}"}}]}}]},
+        {
+            "provider": "Google",
+            "usage": {"prompt_tokens": 10, "completion_tokens": 5, "cost": 0.001},
+            "choices": [
+                {
+                    "finish_reason": "tool_calls",
+                    "message": {
+                        "content": None,
+                        "reasoning_details": [{"type": "reasoning.encrypted", "data": "sig"}],
+                        "tool_calls": [{"id": "c1", "function": {"name": "find_user", "arguments": "{}"}}],
+                    },
+                }
+            ],
+        },
         {"provider": "Google", "usage": {}, "choices": [{"message": {"content": "Done."}}]},
     ]
     bodies = []
@@ -135,13 +156,16 @@ def test_openrouter_agent_hands_reasoning_back_and_retries_provider_errors(monke
             pass
 
     httpx = fake_module(monkeypatch, "httpx", HTTPError=Exception, post=None)
-    monkeypatch.setattr(httpx, "post",
-                        lambda url, json, headers, timeout: bodies.append(json) or R(replies.pop(0)))
+    monkeypatch.setattr(
+        httpx, "post", lambda url, json, headers, timeout: bodies.append(json) or R(replies.pop(0))
+    )
     agent = runner.OpenRouterAgent("google/x", (0.0, 0.0), supported={"tools"})
     first = agent.turn([{"role": "user", "content": "hi"}], [])
     assert first["tool_calls"][0]["id"] == "c1" and "temperature" not in bodies[0]
-    agent.turn([{"role": "user", "content": "hi"}, first,
-                {"role": "tool", "tool_call_id": "c1", "content": "{}"}], [])
+    agent.turn(
+        [{"role": "user", "content": "hi"}, first, {"role": "tool", "tool_call_id": "c1", "content": "{}"}],
+        [],
+    )
     assert bodies[-1]["messages"][1]["reasoning_details"][0]["data"] == "sig"
     assert agent.usage_dict()["est_cost"] == 0.001 and agent.usage["providers"] == {"Google": 2}
 

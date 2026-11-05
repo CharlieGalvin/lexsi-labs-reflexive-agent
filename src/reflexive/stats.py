@@ -32,8 +32,9 @@ def binom_two_sided(k: int, n: int) -> float:
     if n == 0:
         return 1.0
     pk = math.comb(n, k) / 2**n
-    return min(1.0, sum(math.comb(n, i) / 2**n for i in range(n + 1)
-                        if math.comb(n, i) / 2**n <= pk * (1 + 1e-9)))
+    return min(
+        1.0, sum(math.comb(n, i) / 2**n for i in range(n + 1) if math.comb(n, i) / 2**n <= pk * (1 + 1e-9))
+    )
 
 
 def mcnemar[K](a: Mapping[K, bool], b: Mapping[K, bool]) -> tuple[int, int, float]:

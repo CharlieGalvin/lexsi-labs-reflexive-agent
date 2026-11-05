@@ -31,8 +31,11 @@ def _task_id(domain, task_id):
     if task_id is not None:
         return task_id
     sc = scorer(domain)  # a telecom task whose reward also includes ACTION
-    return next(t.id for t in sc.tasks.values() if t.evaluation_criteria
-                and "ACTION" in {b.value for b in t.evaluation_criteria.reward_basis})
+    return next(
+        t.id
+        for t in sc.tasks.values()
+        if t.evaluation_criteria and "ACTION" in {b.value for b in t.evaluation_criteria.reward_basis}
+    )
 
 
 @pytest.mark.parametrize("domain,task_id", CASES)
@@ -78,16 +81,29 @@ def test_judged_checks_are_skipped_and_reported():
 
 
 def test_from_openai_shapes():
-    msgs = from_openai([
-        {"role": "system", "content": "policy"},  # dropped
-        {"role": "assistant", "content": None, "tool_calls": [
-            {"id": "a1", "type": "function",
-             "function": {"name": "get_user_details", "arguments": json.dumps({"user_id": "u"})}}]},
-        {"role": "tool", "tool_call_id": "a1", "content": {"name": "x"}},
-        {"role": "user", "content": "done", "tool_calls": [
-            {"id": "u1", "name": "toggle_airplane_mode", "arguments": {}}]},
-        {"role": "tool", "tool_call_id": "u1", "content": "ok"},
-    ])
+    msgs = from_openai(
+        [
+            {"role": "system", "content": "policy"},  # dropped
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {
+                        "id": "a1",
+                        "type": "function",
+                        "function": {"name": "get_user_details", "arguments": json.dumps({"user_id": "u"})},
+                    }
+                ],
+            },
+            {"role": "tool", "tool_call_id": "a1", "content": {"name": "x"}},
+            {
+                "role": "user",
+                "content": "done",
+                "tool_calls": [{"id": "u1", "name": "toggle_airplane_mode", "arguments": {}}],
+            },
+            {"role": "tool", "tool_call_id": "u1", "content": "ok"},
+        ]
+    )
     assert [m.role for m in msgs] == ["assistant", "tool", "user", "tool"]
     assert msgs[0].tool_calls[0].arguments == {"user_id": "u"}
     assert msgs[0].tool_calls[0].requestor == "assistant"
@@ -106,8 +122,14 @@ def test_to_openai_expands_a_bundle_of_tool_results():
     # τ²-bench bundles several results into a MultiToolMessage (seen 3 Nov, ending a run)
     from tau2.data_model.message import MultiToolMessage, ToolMessage
 
-    bundle = MultiToolMessage(role="tool", tool_messages=[
-        ToolMessage(id="a", role="tool", content="1", requestor="assistant"),
-        ToolMessage(id="b", role="tool", content="2", requestor="assistant")])
-    assert to_openai([bundle]) == [{"role": "tool", "tool_call_id": "a", "content": "1"},
-                                   {"role": "tool", "tool_call_id": "b", "content": "2"}]
+    bundle = MultiToolMessage(
+        role="tool",
+        tool_messages=[
+            ToolMessage(id="a", role="tool", content="1", requestor="assistant"),
+            ToolMessage(id="b", role="tool", content="2", requestor="assistant"),
+        ],
+    )
+    assert to_openai([bundle]) == [
+        {"role": "tool", "tool_call_id": "a", "content": "1"},
+        {"role": "tool", "tool_call_id": "b", "content": "2"},
+    ]

@@ -28,11 +28,21 @@ from typing import Any
 from reflexive.stats import holm, mcnemar, mcnemar_power, paired_bootstrap, wilson
 
 LABELS = {
-    "qwen38": "Qwen3.8 27B", "sonnet": "Claude Sonnet 5.5", "glm53f": "GLM-5.3-Flash",
-    "dsv4f": "DeepSeek V4 Flash", "mimo": "MiMo-V2.6-Flash", "gem38f": "Gemini 3.8 Flash",
-    "gemma4": "Gemma 4 31B", "haiku": "Claude Haiku 5.5", "gptoss": "gpt-oss-120b",
-    "glm": "GLM-4.7-Flash", "gpt51": "GPT-5.1", "opus": "Claude Opus 5.5",
-    "qwen": "Qwen3 32B", "aya": "Aya Expanse 32B", "tiny": "Tiny Aya",
+    "qwen38": "Qwen3.8 27B",
+    "sonnet": "Claude Sonnet 5.5",
+    "glm53f": "GLM-5.3-Flash",
+    "dsv4f": "DeepSeek V4 Flash",
+    "mimo": "MiMo-V2.6-Flash",
+    "gem38f": "Gemini 3.8 Flash",
+    "gemma4": "Gemma 4 31B",
+    "haiku": "Claude Haiku 5.5",
+    "gptoss": "gpt-oss-120b",
+    "glm": "GLM-4.7-Flash",
+    "gpt51": "GPT-5.1",
+    "opus": "Claude Opus 5.5",
+    "qwen": "Qwen3 32B",
+    "aya": "Aya Expanse 32B",
+    "tiny": "Tiny Aya",
 }
 OPEN = {"qwen38", "glm53f", "dsv4f", "mimo", "gemma4", "gptoss", "glm", "qwen", "aya", "tiny"}
 STUDENTS = {"aya", "tiny"}
@@ -41,14 +51,17 @@ SKIP = {"gflite"}  # dropped from the bake-off on 3 Nov
 # How the teacher is used over the project (see docs/experiments/TEACHER_BAKEOFF_RESULTS.md)
 ASSUMPTIONS = {
     "train_tasks": {"retail": 74, "airline": 30, "telecom": 74},  # τ²-bench v2.0 train split
-    "student_fail_rate": 0.97,      # Aya Expanse 32B failed 29/30 of our sample
-    "attempts": 3,                  # best-of-3, stopping at the first verified pass
+    "student_fail_rate": 0.97,  # Aya Expanse 32B failed 29/30 of our sample
+    "attempts": 3,  # best-of-3, stopping at the first verified pass
     "cycle_weights": [1.0, 0.6, 0.4],  # 3 heal cycles, fewer failures each time
-    "telecom_cost_x": 2.0,          # a telecom conversation costs ~2x (Aya check: 182K vs ~90K tokens)
+    "telecom_cost_x": 2.0,  # a telecom conversation costs ~2x (Aya check: 182K vs ~90K tokens)
     "phase2": {"tasks": 60, "telecom_tasks": 10, "attempts": 3},
 }
-SENSITIVITY = {"telecom_cost_x": (1.5, 3.0), "student_fail_rate": (0.85, 1.0),
-               "cycle_weights": ([1.0], [1.0, 0.8, 0.6, 0.4, 0.2])}
+SENSITIVITY = {
+    "telecom_cost_x": (1.5, 3.0),
+    "student_fail_rate": (0.85, 1.0),
+    "cycle_weights": ([1.0], [1.0, 0.8, 0.6, 0.4, 0.2]),
+}
 
 
 # --- Cost projection ----------------------------------------------------------------------------
@@ -65,8 +78,14 @@ def project(p: float, conv_cost: float, a: dict = ASSUMPTIONS) -> dict:
     phase2 = (p2["tasks"] + p2["telecom_tasks"] * a["telecom_cost_x"]) * p2["attempts"] * conv_cost
     total = phase2 + cycle1 * sum(a["cycle_weights"])
     fixes = (rr + tel) * yield_
-    return {"phase2": phase2, "cycle1": cycle1, "total": total, "fixes_cycle1": fixes,
-            "per_fix": cycle1 / fixes if fixes else float("inf"), "attempts_per_task": attempts}
+    return {
+        "phase2": phase2,
+        "cycle1": cycle1,
+        "total": total,
+        "fixes_cycle1": fixes,
+        "per_fix": cycle1 / fixes if fixes else float("inf"),
+        "attempts_per_task": attempts,
+    }
 
 
 def total_range(p: float, conv_cost: float) -> tuple[float, float]:
@@ -105,13 +124,24 @@ def summarise(name: str, recs: list[dict]) -> dict:
     p = k / n if n else 0.0
     proj = project(p, sum(conv) / n) if n else {}
     return {
-        "model": name, "label": LABELS[name], "open": name in OPEN, "n": n, "passed": k, "rate": p,
+        "model": name,
+        "label": LABELS[name],
+        "open": name in OPEN,
+        "n": n,
+        "passed": k,
+        "rate": p,
         "ci": [lo, hi],
-        "by_domain": {d: [sum(r["outcome"]["passed"] for r in recs if r["domain"] == d),
-                          sum(r["domain"] == d for r in recs)] for d in ("retail", "airline")},
+        "by_domain": {
+            d: [
+                sum(r["outcome"]["passed"] for r in recs if r["domain"] == d),
+                sum(r["domain"] == d for r in recs),
+            ]
+            for d in ("retail", "airline")
+        },
         "invented_ids": sum(bool(r["diagnostics"]["unseen_arguments"]) for r in recs),
         "broken": sum(bool(r.get("error")) for r in recs),
-        "agent_per_conv": sum(agent) / n if n else 0.0, "user_per_conv": sum(user) / n if n else 0.0,
+        "agent_per_conv": sum(agent) / n if n else 0.0,
+        "user_per_conv": sum(user) / n if n else 0.0,
         "conv_cost_ci": [boots[int(0.025 * len(boots))], boots[int(0.975 * len(boots)) - 1]],
         "mean_wall_s": sum(r.get("wall_s", 0) for r in recs) / n if n else 0.0,
         "billed": any(r["agent_usage"].get("billed_cost") for r in recs),
@@ -134,8 +164,16 @@ def report(folder: pathlib.Path) -> dict:
     pairs: list[dict[str, Any]] = []
     for a, b in combinations(top, 2):
         oa, ob, p = mcnemar(a["passed_tasks"], b["passed_tasks"])
-        pairs.append({"a": a["label"], "b": b["label"], "only_a": oa, "only_b": ob, "p": p,
-                      "diff_ci": paired_bootstrap(a["passed_tasks"], b["passed_tasks"])})
+        pairs.append(
+            {
+                "a": a["label"],
+                "b": b["label"],
+                "only_a": oa,
+                "only_b": ob,
+                "p": p,
+                "diff_ci": paired_bootstrap(a["passed_tasks"], b["passed_tasks"]),
+            }
+        )
     for pr, adj in zip(pairs, holm([pr["p"] for pr in pairs]), strict=True):
         pr["p_holm"] = adj
 
@@ -148,8 +186,9 @@ def report(folder: pathlib.Path) -> dict:
             if s["model"] == ref:
                 continue
             oa, ob, p = mcnemar(s["passed_tasks"], base[ref]["passed_tasks"])
-            vs_baseline.append({"model": s["label"], "vs": base[ref]["label"], "only_model": oa,
-                                "only_ref": ob, "p": p})
+            vs_baseline.append(
+                {"model": s["label"], "vs": base[ref]["label"], "only_model": oa, "only_ref": ob, "p": p}
+            )
 
     task_fail = {}
     for s in full:
@@ -158,30 +197,45 @@ def report(folder: pathlib.Path) -> dict:
             task_fail[t] += not ok
     hardest = sorted(task_fail.items(), key=lambda kv: -kv[1])[:6]
 
-    power = {f"{a:.0%} vs {b:.0%}": {n: mcnemar_power(a, b, n) for n in (30, 70, 210)}
-             for a, b in ((0.95, 0.85), (0.95, 0.75), (0.90, 0.60))}
-    return {"rows": rows, "top_tier": [s["label"] for s in top], "top_pairs": pairs,
-            "vs_baseline": vs_baseline, "hardest_tasks": hardest, "power": power,
-            "assumptions": ASSUMPTIONS, "sensitivity": SENSITIVITY}
+    power = {
+        f"{a:.0%} vs {b:.0%}": {n: mcnemar_power(a, b, n) for n in (30, 70, 210)}
+        for a, b in ((0.95, 0.85), (0.95, 0.75), (0.90, 0.60))
+    }
+    return {
+        "rows": rows,
+        "top_tier": [s["label"] for s in top],
+        "top_pairs": pairs,
+        "vs_baseline": vs_baseline,
+        "hardest_tasks": hardest,
+        "power": power,
+        "assumptions": ASSUMPTIONS,
+        "sensitivity": SENSITIVITY,
+    }
 
 
 def print_report(r: dict) -> None:
-    print(f"{'model':<20} {'open':>4} {'passed':>7} {'95% CI':>11} {'inv':>4} {'$agent':>7} "
-          f"{'$cust':>6} {'$/fix':>6} {'total':>7} {'range':>13}")
+    print(
+        f"{'model':<20} {'open':>4} {'passed':>7} {'95% CI':>11} {'inv':>4} {'$agent':>7} "
+        f"{'$cust':>6} {'$/fix':>6} {'total':>7} {'range':>13}"
+    )
     for s in r["rows"]:
         if not s["n"]:
             continue
         pr = s["projection"]
-        print(f"{s['label'][:20]:<20} {'yes' if s['open'] else 'no':>4} {s['passed']:>3}/{s['n']:<3} "
-              f"{s['ci'][0]:>4.0%}–{s['ci'][1]:<4.0%} {s['invented_ids']:>4} {s['agent_per_conv']:>7.4f} "
-              f"{s['user_per_conv']:>6.4f} {pr['per_fix']:>6.3f} ${pr['total']:>6.0f} "
-              f"${s['total_range'][0]:>4.0f}–{s['total_range'][1]:<5.0f}")
+        print(
+            f"{s['label'][:20]:<20} {'yes' if s['open'] else 'no':>4} {s['passed']:>3}/{s['n']:<3} "
+            f"{s['ci'][0]:>4.0%}–{s['ci'][1]:<4.0%} {s['invented_ids']:>4} {s['agent_per_conv']:>7.4f} "
+            f"{s['user_per_conv']:>6.4f} {pr['per_fix']:>6.3f} ${pr['total']:>6.0f} "
+            f"${s['total_range'][0]:>4.0f}–{s['total_range'][1]:<5.0f}"
+        )
     print(f"\nTop tier (within the best model's 95% CI, ≤5 invented-ID conversations): {r['top_tier']}")
     print("\nPaired McNemar tests within the top tier (Holm-corrected):")
     for pr in r["top_pairs"]:
         lo, hi = pr["diff_ci"]
-        print(f"  {pr['a']} vs {pr['b']}: {pr['only_a']} vs {pr['only_b']} discordant tasks, "
-              f"p = {pr['p']:.3f} (Holm {pr['p_holm']:.3f}), difference {lo:+.0%} to {hi:+.0%}")
+        print(
+            f"  {pr['a']} vs {pr['b']}: {pr['only_a']} vs {pr['only_b']} discordant tasks, "
+            f"p = {pr['p']:.3f} (Holm {pr['p_holm']:.3f}), difference {lo:+.0%} to {hi:+.0%}"
+        )
     print("\nAgainst the baselines:")
     for v in r["vs_baseline"]:
         print(f"  {v['model']} vs {v['vs']}: {v['only_model']} vs {v['only_ref']}, p = {v['p']:.2g}")

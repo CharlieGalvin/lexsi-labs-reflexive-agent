@@ -101,9 +101,9 @@ def compact_json(text: str | None) -> str | None:
         return text
 
 
-def fit_context(messages: list[dict], budget: int,
-                count_tokens: Callable[[list[dict]], int] = estimate_tokens
-                ) -> tuple[list[dict], int, bool]:
+def fit_context(
+    messages: list[dict], budget: int, count_tokens: Callable[[list[dict]], int] = estimate_tokens
+) -> tuple[list[dict], int, bool]:
     """Trim the oldest tool results until ``messages`` fits in ``budget`` tokens.
 
     Returns ``(messages, n_trimmed, fits)``. The system prompt, every agent and customer turn,
@@ -141,12 +141,22 @@ def _split(domain: str, name: str) -> set[str]:
 class Tau2Episode:
     """One τ²-bench conversation: our code plays the agent, τ²-bench plays everything else."""
 
-    def __init__(self, domain: str, task_id: str, *, user_llm: str | None = None,
-                 user_llm_args: dict[str, Any] | None = None, max_steps: int = DEFAULT_MAX_STEPS,
-                 max_context: int = 8192, reserve: int = 1024,
-                 count_tokens: Callable[[list[dict]], int] = estimate_tokens,
-                 language: str = "en", seed: int | None = None, hints: str = "none",
-                 prompt_variant: str = "default") -> None:
+    def __init__(
+        self,
+        domain: str,
+        task_id: str,
+        *,
+        user_llm: str | None = None,
+        user_llm_args: dict[str, Any] | None = None,
+        max_steps: int = DEFAULT_MAX_STEPS,
+        max_context: int = 8192,
+        reserve: int = 1024,
+        count_tokens: Callable[[list[dict]], int] = estimate_tokens,
+        language: str = "en",
+        seed: int | None = None,
+        hints: str = "none",
+        prompt_variant: str = "default",
+    ) -> None:
         from reflexive.llm import default_model, register_openrouter_prices
 
         if hints not in HINTS:
@@ -169,8 +179,11 @@ class Tau2Episode:
             raise ValueError(f"hints are only allowed on train-split tasks ({domain} {task_id!r})")
         self._env: Any = None  # τ²-bench's Gym environment, made by reset() (a class built at run time)
         self._view: list[Any] = []  # what the agent has seen so far (τ²-bench messages)
-        self.flags: dict[str, Any] = {"context_overflow": False, "tool_results_trimmed": 0,
-                                      "peak_prompt_tokens": 0}
+        self.flags: dict[str, Any] = {
+            "context_overflow": False,
+            "tool_results_trimmed": 0,
+            "peak_prompt_tokens": 0,
+        }
         self.done = False
         self._overflowed = False
         self.started: float | None = None
@@ -188,8 +201,12 @@ class Tau2Episode:
     def reset(self) -> list[dict]:
         """Start the conversation. Returns the new messages (normally the customer's opener)."""
         env = _NoScoreAgentGymEnv(
-            domain=self.domain, task_id=self.task_id, max_steps=self.max_steps,
-            user_llm=self.user_llm, user_llm_args=self.user_llm_args, language=self.language,
+            domain=self.domain,
+            task_id=self.task_id,
+            max_steps=self.max_steps,
+            user_llm=self.user_llm,
+            user_llm_args=self.user_llm_args,
+            language=self.language,
         )
         self._env = env
         self.started = time.time()
@@ -231,7 +248,7 @@ class Tau2Episode:
             # τ²-bench clears the agent's observation when the run ends. Keep what the agent saw,
             # or `messages()` (the agent's view) would be only the system prompt afterwards.
             return []
-        new = obs[len(self._view):]
+        new = obs[len(self._view) :]
         self._view = list(obs)
         return [self._for_model(m) for m in to_openai(new)]
 
@@ -262,8 +279,9 @@ class Tau2Episode:
         instruction = f"{AGENT_INSTRUCTION}\n\n{extra}" if extra else AGENT_INSTRUCTION
         steps = self.resolution_steps()
         if steps:
-            return SYSTEM_PROMPT_GT.format(agent_instruction=instruction,
-                                           domain_policy=self.policy, resolution_steps=steps)
+            return SYSTEM_PROMPT_GT.format(
+                agent_instruction=instruction, domain_policy=self.policy, resolution_steps=steps
+            )
         return SYSTEM_PROMPT.format(agent_instruction=instruction, domain_policy=self.policy)
 
     def resolution_steps(self) -> str:
@@ -279,7 +297,8 @@ class Tau2Episode:
         return "\n".join(
             f"[Step {i + 1}] "
             f"{LLMGTAgent.make_agent_instructions_from_action(a, include_function_args=with_args)}"
-            for i, a in enumerate(task.evaluation_criteria.actions))
+            for i, a in enumerate(task.evaluation_criteria.actions)
+        )
 
     @property
     def tool_schemas(self) -> list[dict]:
@@ -308,7 +327,8 @@ class Tau2Episode:
         msgs, trimmed, fits = fit_context(full, budget, self.count_tokens)
         self.flags["tool_results_trimmed"] = max(self.flags["tool_results_trimmed"], trimmed)
         self.flags["peak_prompt_tokens"] = max(  # untrimmed size: evidence for the telecom decision
-            self.flags["peak_prompt_tokens"], self.count_tokens(full) + self.tool_tokens())
+            self.flags["peak_prompt_tokens"], self.count_tokens(full) + self.tool_tokens()
+        )
         if not fits:
             self._end_for_context()
         return msgs
@@ -330,8 +350,9 @@ class Tau2Episode:
     def _send_done(self) -> None:
         from tau2.data_model.message import AssistantMessage, ToolCall
 
-        stop = AssistantMessage(role="assistant", content=None, tool_calls=[
-            ToolCall(id="end", name="done", arguments={})])
+        stop = AssistantMessage(
+            role="assistant", content=None, tool_calls=[ToolCall(id="end", name="done", arguments={})]
+        )
         self.env._agent.set_action(stop)
         self._wait_for_turn()
         self._sync()
@@ -351,8 +372,11 @@ class Tau2Episode:
         episode = self
 
         def call(**kwargs: Any) -> str:
-            reply = {"role": "assistant", "content": None, "tool_calls": [
-                {"id": f"call_{len(episode._view)}", "name": tool.name, "arguments": kwargs}]}
+            reply = {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [{"id": f"call_{len(episode._view)}", "name": tool.name, "arguments": kwargs}],
+            }
             new = episode.step(reply)
             results = [m["content"] for m in new if m["role"] == "tool"]
             return results[0] if results else ""
@@ -361,8 +385,11 @@ class Tau2Episode:
         call.__qualname__ = tool.name
         call.__doc__ = tool._get_description()
         sig = tool.__signature__
-        call.__signature__ = sig.replace(parameters=[  # ty: ignore[unresolved-attribute]  # inspect reads it
-            p for p in sig.parameters.values() if p.kind != inspect.Parameter.VAR_KEYWORD])
+        call.__signature__ = sig.replace(
+            parameters=[  # ty: ignore[unresolved-attribute]  # inspect reads it
+                p for p in sig.parameters.values() if p.kind != inspect.Parameter.VAR_KEYWORD
+            ]
+        )
         return call
 
     # --- Result --------------------------------------------------------------------------
@@ -398,21 +425,32 @@ class Tau2Episode:
             raise RuntimeError("The conversation hasn't ended yet")
         traj = self.trajectory()
         outcome = scorer(self.domain, self.language).score(
-            self.task_id, traj, self.termination, judges=judges)
+            self.task_id, traj, self.termination, judges=judges
+        )
         run = self.env._simulation_run
         return {
             "format": "reagent.tau2.episode/v0",
-            "domain": self.domain, "task_id": self.task_id, "language": self.language,
-            "hints": self.hints, "hinted": bool(self.resolution_steps()),
+            "domain": self.domain,
+            "task_id": self.task_id,
+            "language": self.language,
+            "hints": self.hints,
+            "hinted": bool(self.resolution_steps()),
             "prompt_variant": self.prompt_variant,
             "prompt_version": PROMPT_VERSIONS[self.prompt_variant],
             "termination": self.termination,
-            "outcome": {"passed": outcome.passed, "reward": outcome.reward,
-                        "checks": outcome.checks, "judged": outcome.judged,
-                        "skipped": outcome.skipped, "note": outcome.note},
+            "outcome": {
+                "passed": outcome.passed,
+                "reward": outcome.reward,
+                "checks": outcome.checks,
+                "judged": outcome.judged,
+                "skipped": outcome.skipped,
+                "note": outcome.note,
+            },
             "flags": dict(self.flags),
-            "user_llm": self.user_llm, "seed": self.seed,
-            "max_context": self.max_context, "reserve": self.reserve,
+            "user_llm": self.user_llm,
+            "seed": self.seed,
+            "max_context": self.max_context,
+            "reserve": self.reserve,
             "user_cost": getattr(run, "user_cost", None) if run else None,
             "duration_s": round((self.ended or time.time()) - (self.started or time.time()), 2),
             "messages": traj,

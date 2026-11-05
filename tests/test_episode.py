@@ -24,8 +24,10 @@ from reflexive.episode import TRUNCATED, Tau2Episode, compact_json, fit_context,
 from reflexive.outcome import scorer  # noqa: E402
 
 logger.disable("tau2")
-CUSTOMER: dict[str, Any] = {"user_llm": "gpt-4.1",
-                            "user_llm_args": {"mock_response": "Yes, please go ahead."}}
+CUSTOMER: dict[str, Any] = {
+    "user_llm": "gpt-4.1",
+    "user_llm_args": {"mock_response": "Yes, please go ahead."},
+}
 
 
 def play_correct_actions(domain, task_id, **kw):
@@ -37,8 +39,7 @@ def play_correct_actions(domain, task_id, **kw):
             ep.prompt()
             if ep.done:
                 break
-            seen.append(ep.step({"role": "assistant", "content": None,
-                                 "tool_calls": m["tool_calls"]}))
+            seen.append(ep.step({"role": "assistant", "content": None, "tool_calls": m["tool_calls"]}))
     if not ep.done:
         ep.step({"role": "assistant", "content": "That's all done for you."})
         ep.finish()
@@ -92,7 +93,8 @@ def test_tool_results_are_compact_json():
 
 def test_context_guard_trims_oldest_tool_results_first():
     msgs = [{"role": "system", "content": "s"}] + [
-        {"role": "tool", "tool_call_id": str(i), "content": "x" * 400} for i in range(4)]
+        {"role": "tool", "tool_call_id": str(i), "content": "x" * 400} for i in range(4)
+    ]
     out, trimmed, fits = fit_context(msgs, budget=250)
     assert fits and trimmed >= 1
     assert out[1]["content"] == TRUNCATED and out[-1]["content"] == "x" * 400  # latest kept

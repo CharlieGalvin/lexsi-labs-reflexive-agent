@@ -36,8 +36,19 @@ from reflexive.teacher import (
 )
 
 CONFIG_PATH = Path(__file__).resolve().parents[2] / "configs" / "arms.yaml"
-STUDENT_KEYS = {"name", "model", "api_base", "api_key_env", "mode", "style", "temperature",
-                "max_tokens", "max_context", "reserve", "rpm"}
+STUDENT_KEYS = {
+    "name",
+    "model",
+    "api_base",
+    "api_key_env",
+    "mode",
+    "style",
+    "temperature",
+    "max_tokens",
+    "max_context",
+    "reserve",
+    "rpm",
+}
 
 
 @dataclass(frozen=True)
@@ -66,9 +77,14 @@ def get_arm(key: str, path: str | Path | None = None) -> Arm:
     if unknown:
         raise ValueError(f"Unknown student settings: {', '.join(sorted(unknown))}")
     a = arms[key]
-    return Arm(key=key, name=a["name"], prompt_variant=a.get("prompt_variant", "default"),
-               student=dict(cfg["student"]), customer=cfg.get("customer"),
-               description=a.get("description", ""))
+    return Arm(
+        key=key,
+        name=a["name"],
+        prompt_variant=a.get("prompt_variant", "default"),
+        student=dict(cfg["student"]),
+        customer=cfg.get("customer"),
+        description=a.get("description", ""),
+    )
 
 
 def make_student(student: dict, *, limiter: RateLimiter | None = None, **kwargs: Any) -> TeacherClient:
@@ -82,11 +98,17 @@ def make_student(student: dict, *, limiter: RateLimiter | None = None, **kwargs:
     if key_env and not api_key and "completion" not in kwargs:
         raise RuntimeError(f"Set {key_env} in .env for the student ({student['model']})")
     client = TeacherClient(
-        student.get("mode", "prompted"), style=student.get("style", "cohere"),
-        model=student["model"], api_base=student["api_base"], api_key=api_key or "none",
-        temperature=student.get("temperature", 0.0), max_tokens=student.get("max_tokens", 1024),
+        student.get("mode", "prompted"),
+        style=student.get("style", "cohere"),
+        model=student["model"],
+        api_base=student["api_base"],
+        api_key=api_key or "none",
+        temperature=student.get("temperature", 0.0),
+        max_tokens=student.get("max_tokens", 1024),
         rpm=student.get("rpm") or 0,  # not TEACHER_RPM: the teacher's cap isn't the student's
-        prices=(0.0, 0.0) if not key_env else None, **kwargs)
+        prices=(0.0, 0.0) if not key_env else None,
+        **kwargs,
+    )
     if limiter is not None:
         client.limiter = limiter
     return client
@@ -95,13 +117,28 @@ def make_student(student: dict, *, limiter: RateLimiter | None = None, **kwargs:
 def make_episode(arm: Arm, domain: str, task_id: str, **kwargs: Any) -> Tau2Episode:
     """The arm's `Tau2Episode`: its prompt variant, the student's window, never hints."""
     s = arm.student
-    return Tau2Episode(domain, task_id, user_llm=kwargs.pop("user_llm", arm.customer),
-                       max_context=s.get("max_context", 128_000), reserve=s.get("reserve", 4_096),
-                       prompt_variant=arm.prompt_variant, hints="none", **kwargs)
+    return Tau2Episode(
+        domain,
+        task_id,
+        user_llm=kwargs.pop("user_llm", arm.customer),
+        max_context=s.get("max_context", 128_000),
+        reserve=s.get("reserve", 4_096),
+        prompt_variant=arm.prompt_variant,
+        hints="none",
+        **kwargs,
+    )
 
 
-def run_episode(arm: Arm, agent: Any, domain: str, task_id: str, *, judges: bool = True,
-                sample: int = 0, **episode_kwargs: Any) -> dict:
+def run_episode(
+    arm: Arm,
+    agent: Any,
+    domain: str,
+    task_id: str,
+    *,
+    judges: bool = True,
+    sample: int = 0,
+    **episode_kwargs: Any,
+) -> dict:
     """One conversation of ``arm`` on one task. Never raises for a failed conversation.
 
     A crash mid-conversation is recorded (``error``) and scored on what happened so far; a crash
@@ -125,17 +162,36 @@ def run_episode(arm: Arm, agent: Any, domain: str, task_id: str, *, judges: bool
         if ep._env is not None and not ep.done:
             ep.finish()
     usage = agent.usage.as_dict() if hasattr(agent, "usage") else None
-    extra = {"arm": arm.key, "arm_name": arm.name, "student": arm.student.get("name"),
-             "agent_llm": arm.student.get("model"), "agent_usage": usage, "sample": sample,
-             "error": error}
+    extra = {
+        "arm": arm.key,
+        "arm_name": arm.name,
+        "student": arm.student.get("name"),
+        "agent_llm": arm.student.get("model"),
+        "agent_usage": usage,
+        "sample": sample,
+        "error": error,
+    }
     if ep.done:
         rec = ep.record(judges=judges, **extra)
     else:
-        rec = {"format": "reagent.tau2.episode/v0", "domain": domain, "task_id": task_id,
-               "prompt_variant": arm.prompt_variant, "termination": "unexpected_error",
-               "outcome": {"passed": False, "reward": 0.0, "checks": {}, "judged": False,
-                           "skipped": [], "note": error},
-               "flags": dict(ep.flags), "messages": [], **extra}
+        rec = {
+            "format": "reagent.tau2.episode/v0",
+            "domain": domain,
+            "task_id": task_id,
+            "prompt_variant": arm.prompt_variant,
+            "termination": "unexpected_error",
+            "outcome": {
+                "passed": False,
+                "reward": 0.0,
+                "checks": {},
+                "judged": False,
+                "skipped": [],
+                "note": error,
+            },
+            "flags": dict(ep.flags),
+            "messages": [],
+            **extra,
+        }
     msgs = rec["messages"]
     rec["diagnostics"] = {
         "tools_ran": sum(len(m.get("tool_calls") or []) for m in msgs if m["role"] == "assistant"),

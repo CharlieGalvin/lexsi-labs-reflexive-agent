@@ -31,7 +31,9 @@ def test_no_saved_view_at_all_stops_the_build() -> None:
 
 
 def test_the_totals_are_counted_not_typed(capsys: pytest.CaptureFixture[str]) -> None:
-    doms = {d: {"train": {"trajectories": 1, "tasks": 2}, "dev": {"trajectories": 0, "tasks": 1}}
-            for d in ("retail", "airline", "telecom")}
+    doms = {
+        d: {"train": {"trajectories": 1, "tasks": 2}, "dev": {"trajectories": 0, "tasks": 1}}
+        for d in ("retail", "airline", "telecom")
+    }
     bg.print_table({"domains": doms})
     assert "total       3 of   6        0 of  3" in capsys.readouterr().out

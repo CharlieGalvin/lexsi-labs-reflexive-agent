@@ -41,8 +41,9 @@ def prompts_and_tools(domain: str, task_id: str) -> tuple[str, list[dict[str, An
 
     from reflexive.episode import _NoScoreAgentGymEnv
 
-    env = _NoScoreAgentGymEnv(domain=domain, task_id=task_id, max_steps=200, user_llm="gpt-4.1",
-                              user_llm_args={}, language="en")
+    env = _NoScoreAgentGymEnv(
+        domain=domain, task_id=task_id, max_steps=200, user_llm="gpt-4.1", user_llm_args={}, language="en"
+    )
     agent = env._get_orchestrator().agent
     prompt = SYSTEM_PROMPT.format(agent_instruction=AGENT_INSTRUCTION, domain_policy=agent.domain_policy)
     return prompt, [t.openai_schema for t in agent.tools if t.name != "done"]
@@ -101,8 +102,9 @@ def _train_order(key: tuple[str, str]) -> tuple[str, int]:
     return d, train.index(t) if t in train else -1
 
 
-def convert(picked: dict[tuple[str, str], Record], system: System,
-            source: dict[str, str]) -> dict[str, list[Record]]:
+def convert(
+    picked: dict[tuple[str, str], Record], system: System, source: dict[str, str]
+) -> dict[str, list[Record]]:
     """Each picked conversation as a Cohere-format record, checked to read back exactly."""
     rows: dict[str, list[Record]] = {"train": [], "dev": []}
     bad = []
@@ -115,8 +117,10 @@ def convert(picked: dict[tuple[str, str], Record], system: System,
             bad.append((rec["id"], problems))
         rows[split].append(rec)
     if bad:
-        raise BuildError(*(f"{i}: {'; '.join(ps)}" for i, ps in bad[:10]),
-                         f"{len(bad)} records failed their checks; nothing written")
+        raise BuildError(
+            *(f"{i}: {'; '.join(ps)}" for i, ps in bad[:10]),
+            f"{len(bad)} records failed their checks; nothing written",
+        )
     return rows
 
 
@@ -132,43 +136,62 @@ def write_files(rows: dict[str, list[Record]], out: Path) -> None:
     shutil.copy(splits.SPLITS_PATH, out / "splits.json")
 
 
-def make_report(rows: dict[str, list[Record]], out: Path, source: dict[str, str], checked: int,
-                reasons: collections.Counter[str]) -> dict[str, Any]:
+def make_report(
+    rows: dict[str, list[Record]],
+    out: Path,
+    source: dict[str, str],
+    checked: int,
+    reasons: collections.Counter[str],
+) -> dict[str, Any]:
     """What was built, per domain and split, with checksums of the files just written.
 
     publish_golden.py refuses to upload files whose checksums differ from these.
     """
     files = {n: sha256(out / n) for n in (*FILES.values(), "splits.json")}
-    report: dict[str, Any] = {"input": source, "view_check": checked, "conversations": dict(reasons),
-                              "files": files, "domains": {}}
+    report: dict[str, Any] = {
+        "input": source,
+        "view_check": checked,
+        "conversations": dict(reasons),
+        "files": files,
+        "domains": {},
+    }
     for d in splits.DOMAINS:
         for split in FILES:
             ids = splits.task_ids(d, split)
             have = {x["task_id"] for x in rows[split] if x["domain"] == d}
             report["domains"].setdefault(d, {})[split] = {
-                "tasks": len(ids), "trajectories": len(have),
-                "unsolved": [t for t in ids if t not in have]}
+                "tasks": len(ids),
+                "trajectories": len(have),
+                "unsolved": [t for t in ids if t not in have],
+            }
     sizes = collections.defaultdict(list)
     for rec in rows["train"]:
         sizes["turns"].append(len(rec["messages"]))
         sizes["targets"].append(len(rec["train_on"]))
         sizes["chars"].append(sum(len(m["content"]) for m in rec["messages"]))
-    report["train_sizes"] = {k: {"min": min(v), "median": sorted(v)[len(v) // 2], "max": max(v)}
-                             for k, v in sizes.items()}
+    report["train_sizes"] = {
+        k: {"min": min(v), "median": sorted(v)[len(v) // 2], "max": max(v)} for k, v in sizes.items()
+    }
     return report
 
 
 def print_table(report: dict[str, Any]) -> None:
     """Trajectories per domain and split, out of the frozen split's task count."""
     doms = report["domains"]
-    total = {s: (sum(v[s]["trajectories"] for v in doms.values()), sum(v[s]["tasks"] for v in doms.values()))
-             for s in FILES}
+    total = {
+        s: (sum(v[s]["trajectories"] for v in doms.values()), sum(v[s]["tasks"] for v in doms.values()))
+        for s in FILES
+    }
     print("\n          train            dev")
     for d, v in doms.items():
-        print(f"{d:8s}  {v['train']['trajectories']:3d} of {v['train']['tasks']:3d}       "
-              f"{v['dev']['trajectories']:2d} of {v['dev']['tasks']:2d}")
-    print(f"{'total':8s}  {total['train'][0]:3d} of {total['train'][1]:3d}       "
-          f"{total['dev'][0]:2d} of {total['dev'][1]:2d}")
+        print(
+            f"{d:8s}  {v['train']['trajectories']:3d} of {v['train']['tasks']:3d}       "
+            f"{v['dev']['trajectories']:2d} of {v['dev']['tasks']:2d}"
+        )
+    print(
+        f"{'total':8s}  {total['train'][0]:3d} of {total['train'][1]:3d}       "
+        f"{total['dev'][0]:2d} of {total['dev'][1]:2d}"
+    )
 
 
 def main() -> int:
@@ -185,8 +208,9 @@ def main() -> int:
         print(f"{len(recs)} conversations from {shown(a.input)}")
         system = system_prompts(recs)
         checked = check_views(read_jsonl(VIEW_CHECK) if VIEW_CHECK.exists() else [], system)
-        print("1-2. system prompts rebuilt; agent's view matches the saved one exactly in "
-              f"{checked}/{checked}")
+        print(
+            f"1-2. system prompts rebuilt; agent's view matches the saved one exactly in {checked}/{checked}"
+        )
 
         for r in recs:
             splits.assert_not_test(r["domain"], r["task_id"])
@@ -209,8 +233,10 @@ def main() -> int:
     report = make_report(rows, a.out, source, checked, reasons)
     (a.out / "build_report.json").write_text(json.dumps(report, indent=1) + "\n")
     print_table(report)
-    print(f"\nwrote {shown(a.out)}/: golden_train.jsonl, golden_dev_reference.jsonl, "
-          "splits.json, build_report.json")
+    print(
+        f"\nwrote {shown(a.out)}/: golden_train.jsonl, golden_dev_reference.jsonl, "
+        "splits.json, build_report.json"
+    )
 
     if a.sample:
         pick_ = random.Random("reagent-read-v1").sample(rows["train"], a.sample)
@@ -221,13 +247,17 @@ def main() -> int:
 
 def render(records: list[Record]) -> str:
     """Records as markdown for a person to read: each turn labelled, targets marked."""
-    out = ["# Golden trajectories v1: records to read\n",
-           "Every turn as the student will see it. **▶ TARGET** marks the turns it learns to write "
-           "(`train_on`). The system prompt is cut to its first and last lines.\n"]
+    out = [
+        "# Golden trajectories v1: records to read\n",
+        "Every turn as the student will see it. **▶ TARGET** marks the turns it learns to write "
+        "(`train_on`). The system prompt is cut to its first and last lines.\n",
+    ]
     for rec in records:
-        out.append(f"\n---\n\n## {rec['id']}\n\nOutcome: `{json.dumps(rec['outcome']['checks'])}` · "
-                   f"teacher {rec['teacher']['model']} via {rec['teacher']['provider']} · "
-                   f"{len(rec['messages'])} turns, {len(rec['train_on'])} targets\n")
+        out.append(
+            f"\n---\n\n## {rec['id']}\n\nOutcome: `{json.dumps(rec['outcome']['checks'])}` · "
+            f"teacher {rec['teacher']['model']} via {rec['teacher']['provider']} · "
+            f"{len(rec['messages'])} turns, {len(rec['train_on'])} targets\n"
+        )
         for i, m in enumerate(rec["messages"]):
             text = m["content"]
             if m["role"] == "system":

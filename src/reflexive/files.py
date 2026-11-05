@@ -26,8 +26,10 @@ def read_jsonl(path: Path) -> list[dict[str, Any]]:
         try:
             out.append(json.loads(line))
         except json.JSONDecodeError as e:
-            raise BadJsonLine(f"{shown(path)}, line {n}: not valid JSON ({e.msg}); "
-                              "a half-written last line? Remove it and re-run.") from None
+            raise BadJsonLine(
+                f"{shown(path)}, line {n}: not valid JSON ({e.msg}); "
+                "a half-written last line? Remove it and re-run."
+            ) from None
     return out
 
 

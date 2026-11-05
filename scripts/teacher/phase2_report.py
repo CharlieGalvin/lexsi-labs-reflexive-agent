@@ -33,22 +33,27 @@ def load(path: pathlib.Path) -> dict[tuple[str, str], dict]:
 
 def transferred(r: dict) -> bool:
     """The agent handed the customer to a human instead of solving the problem."""
-    return any(t["function"]["name"] == "transfer_to_human_agents"
-               for m in r["messages"] for t in (m.get("tool_calls") or []))
+    return any(
+        t["function"]["name"] == "transfer_to_human_agents"
+        for m in r["messages"]
+        for t in (m.get("tool_calls") or [])
+    )
 
 
 def summary(recs: dict) -> dict:
     fails = [r for r in recs.values() if not r["outcome"]["passed"]]
     calls = sum(r["agent_usage"].get("calls", 0) for r in recs.values()) or 1
     return {
-        "n": len(recs), "passed": sum(r["outcome"]["passed"] for r in recs.values()),
+        "n": len(recs),
+        "passed": sum(r["outcome"]["passed"] for r in recs.values()),
         "fail_max_steps": sum(r["termination"] == "max_steps" for r in fails),
         "fail_transferred": sum(transferred(r) for r in fails),
-        "out_tokens_per_turn": sum(r["agent_usage"].get("completion_tokens", 0)
-                                   for r in recs.values()) / calls,
+        "out_tokens_per_turn": sum(r["agent_usage"].get("completion_tokens", 0) for r in recs.values())
+        / calls,
         "agent_cost": sum(r["agent_usage"].get("est_cost") or 0 for r in recs.values()),
-        "total_cost": sum((r["agent_usage"].get("est_cost") or 0) + (r.get("user_cost") or 0)
-                          for r in recs.values()),
+        "total_cost": sum(
+            (r["agent_usage"].get("est_cost") or 0) + (r.get("user_cost") or 0) for r in recs.values()
+        ),
         "median_wall_s": st.median(r["wall_s"] for r in recs.values()) if recs else 0,
     }
 
@@ -60,11 +65,17 @@ def compare(a: dict, b: dict) -> dict:
         pa = {k: a[k]["outcome"]["passed"] for k in keys}
         pb = {k: b[k]["outcome"]["passed"] for k in keys}
         only_a, only_b, p = mcnemar(pa, pb)
-        rows[d] = {"shared": len(keys), "a": sum(pa.values()), "b": sum(pb.values()),
-                   "only_a": only_a, "only_b": only_b, "p": p,
-                   "diff_ci": paired_bootstrap(pa, pb) if keys else (0, 0),
-                   "a_ci": wilson(sum(pa.values()), len(keys)),
-                   "b_ci": wilson(sum(pb.values()), len(keys))}
+        rows[d] = {
+            "shared": len(keys),
+            "a": sum(pa.values()),
+            "b": sum(pb.values()),
+            "only_a": only_a,
+            "only_b": only_b,
+            "p": p,
+            "diff_ci": paired_bootstrap(pa, pb) if keys else (0, 0),
+            "a_ci": wilson(sum(pa.values()), len(keys)),
+            "b_ci": wilson(sum(pb.values()), len(keys)),
+        }
     return rows
 
 
@@ -110,20 +121,26 @@ def main() -> int:
     a = ap.parse_args()
     g, q = load(a.folder / "glm53f.jsonl"), load(a.folder / "qwen38nt.jsonl")
     rows = compare(g, q)
-    print(f"{'domain':<8} {'tasks':>5} {'GLM':>13} {'Qwen-nt':>13} {'only GLM':>9} {'only Qwen':>10} "
-          f"{'p':>9} {'GLM - Qwen (95%)':>18}")
+    print(
+        f"{'domain':<8} {'tasks':>5} {'GLM':>13} {'Qwen-nt':>13} {'only GLM':>9} {'only Qwen':>10} "
+        f"{'p':>9} {'GLM - Qwen (95%)':>18}"
+    )
     for d, r in rows.items():
         lo, hi = r["diff_ci"]
-        print(f"{d:<8} {r['shared']:>5} {r['a']:>4} ({r['a'] / r['shared']:>4.0%})  {r['b']:>4} "
-              f"({r['b'] / r['shared']:>4.0%}) {r['only_a']:>9} {r['only_b']:>10} {r['p']:>9.2g} "
-              f"{lo:>+7.0%} to {hi:+.0%}")
+        print(
+            f"{d:<8} {r['shared']:>5} {r['a']:>4} ({r['a'] / r['shared']:>4.0%})  {r['b']:>4} "
+            f"({r['b'] / r['shared']:>4.0%}) {r['only_a']:>9} {r['only_b']:>10} {r['p']:>9.2g} "
+            f"{lo:>+7.0%} to {hi:+.0%}"
+        )
     for name, recs in (("glm53f", g), ("qwen38nt", q)):
         for d in DOMAINS:
             s = summary({k: v for k, v in recs.items() if k[0] == d})
-            print(f"{name:<9} {d:<8} {s['passed']:>3}/{s['n']:<3} fails: {s['fail_max_steps']} hit max "
-                  f"steps, {s['fail_transferred']} handed to a human; {s['out_tokens_per_turn']:.0f} output "
-                  f"tokens/turn; teacher ${s['agent_cost']:.2f}, total ${s['total_cost']:.2f}; "
-                  f"median {s['median_wall_s']:.0f}s")
+            print(
+                f"{name:<9} {d:<8} {s['passed']:>3}/{s['n']:<3} fails: {s['fail_max_steps']} hit max "
+                f"steps, {s['fail_transferred']} handed to a human; {s['out_tokens_per_turn']:.0f} output "
+                f"tokens/turn; teacher ${s['agent_cost']:.2f}, total ${s['total_cost']:.2f}; "
+                f"median {s['median_wall_s']:.0f}s"
+            )
     if a.plot:
         plot(rows, a.plot)
     return 0

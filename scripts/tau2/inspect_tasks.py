@@ -33,8 +33,10 @@ def main() -> None:
 
     from tau2.registry import registry
 
-    print(f"{'domain':8s} {'train':>5s} {'test':>4s} {'policy':>7s} {'tools':>6s} {'fixed':>6s} "
-          f"{'gold I/O med':>12s} {'p90':>5s} {'over ctx':>8s}")
+    print(
+        f"{'domain':8s} {'train':>5s} {'test':>4s} {'policy':>7s} {'tools':>6s} {'fixed':>6s} "
+        f"{'gold I/O med':>12s} {'p90':>5s} {'over ctx':>8s}"
+    )
     for d in DOMAINS:
         env = registry.get_env_constructor(d)()
         splits = {s: official_split(d, s) for s in ("train", "test")}
@@ -58,8 +60,10 @@ def main() -> None:
         p90 = sorted(io)[int(0.9 * len(io))]
         tr = len(splits.get("train", [])) if splits else "?"
         te = len(splits.get("test", [])) if splits else "?"
-        print(f"{d:8s} {tr!s:>5s} {te!s:>4s} {policy_tok:7d} {tools_tok:6d} {fixed:6d} "
-              f"{int(st.median(io)):12d} {p90:5d} {over:4d}/{len(io)}")
+        print(
+            f"{d:8s} {tr!s:>5s} {te!s:>4s} {policy_tok:7d} {tools_tok:6d} {fixed:6d} "
+            f"{int(st.median(io)):12d} {p90:5d} {over:4d}/{len(io)}"
+        )
 
 
 if __name__ == "__main__":

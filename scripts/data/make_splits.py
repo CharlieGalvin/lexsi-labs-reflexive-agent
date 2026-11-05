@@ -47,18 +47,27 @@ def build(tau2_dir: Path = TAU2) -> dict:
         domains[d] = {"train": [t for t in train if t not in set(dev)], "dev": dev, "test": test}
         source[d] = {"official_train": len(train), "official_test": len(test)}
     try:
-        commit = subprocess.run(["git", "-C", str(tau2_dir), "rev-parse", "HEAD"],
-                                capture_output=True, text=True, check=True).stdout.strip()
+        commit = subprocess.run(
+            ["git", "-C", str(tau2_dir), "rev-parse", "HEAD"], capture_output=True, text=True, check=True
+        ).stdout.strip()
     except (OSError, subprocess.CalledProcessError):
         commit = None
     return {
         "version": 1,
         "frozen": "2026-11-04",
-        "source": {"benchmark": "tau2-bench v2.0.0", "commit": commit,
-                   "file": "data/tau2/domains/<domain>/split_tasks.json", "counts": source},
-        "dev_method": {"seed": SEED, "per_domain_seed": f"{SEED}:<domain>",
-                       "sizes": DEV_SIZE, "by": "task",
-                       "how": "random.Random(seed).sample(sorted official train IDs, size)"},
+        "source": {
+            "benchmark": "tau2-bench v2.0.0",
+            "commit": commit,
+            "file": "data/tau2/domains/<domain>/split_tasks.json",
+            "counts": source,
+        },
+        "dev_method": {
+            "seed": SEED,
+            "per_domain_seed": f"{SEED}:<domain>",
+            "sizes": DEV_SIZE,
+            "by": "task",
+            "how": "random.Random(seed).sample(sorted official train IDs, size)",
+        },
         "rules": [
             "test: final evaluation only. Never used for healing, teacher fixes, DSPy or any choice.",
             "dev: never trained on. For DSPy, gate checks and heal-cycle checks.",

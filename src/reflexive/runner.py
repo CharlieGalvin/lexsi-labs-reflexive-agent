@@ -48,20 +48,20 @@ PRICES = {"qwen": (0.08e-6, 0.28e-6), "glm": (0.07e-6, 0.40e-6)}
 # (3 Nov 2026) to span open vs closed weights and cheap vs strong; scores are that board's.
 SLATE = {
     # open weights (expected; the run checks OpenRouter's Hugging Face link)
-    "glm": "z-ai/glm-4.7-flash",              # 66.7%, our first pick
-    "glm53f": "z-ai/glm-5.3-flash",           # 75.6%, the chosen teacher
-    "dsv4f": "deepseek/deepseek-v4-flash",    # 73.9%
-    "mimo": "xiaomi/mimo-v2.6-flash",         # 77.9%
-    "qwen38": "qwen/qwen3.8-27b",             # 77.5%, dense 27B
-    "gemma4": "google/gemma-4-31b-it",        # 75.3%, dense 31B
-    "gptoss": "openai/gpt-oss-120b",          # 65.2%
+    "glm": "z-ai/glm-4.7-flash",  # 66.7%, our first pick
+    "glm53f": "z-ai/glm-5.3-flash",  # 75.6%, the chosen teacher
+    "dsv4f": "deepseek/deepseek-v4-flash",  # 73.9%
+    "mimo": "xiaomi/mimo-v2.6-flash",  # 77.9%
+    "qwen38": "qwen/qwen3.8-27b",  # 77.5%, dense 27B
+    "gemma4": "google/gemma-4-31b-it",  # 75.3%, dense 31B
+    "gptoss": "openai/gpt-oss-120b",  # 65.2%
     # closed weights
-    "haiku": "anthropic/claude-haiku-5.5",    # 72.8%
+    "haiku": "anthropic/claude-haiku-5.5",  # 72.8%
     # gflite (google/gemini-3.5-flash-lite) dropped 3 Nov at Charlie's request; or:<slug> still runs it
     "sonnet": "anthropic/claude-sonnet-5.5",  # 78.8%
-    "gpt51": "openai/gpt-5.1",                # 80.0%, the ceiling
-    "gem38f": "google/gemini-3.8-flash",      # 71.3%, added 3 Nov at Charlie's request
-    "opus": "anthropic/claude-opus-5.5",      # 75.3%, added 3 Nov; the priciest (~$0.34/task)
+    "gpt51": "openai/gpt-5.1",  # 80.0%, the ceiling
+    "gem38f": "google/gemini-3.8-flash",  # 71.3%, added 3 Nov at Charlie's request
+    "opus": "anthropic/claude-opus-5.5",  # 75.3%, added 3 Nov; the priciest (~$0.34/task)
 }
 
 # Request-setting variants of slate models (not part of --models bakeoff)
@@ -103,31 +103,38 @@ def _strip_think(text: str | None) -> str:
 class NativeAgent:
     """An API model with native tool calling, as the agent (one call per turn), via LiteLLM."""
 
-    def __init__(self, model: str, prices: tuple[float, float], no_think: bool = False,
-                 supported: set[str] | None = None) -> None:
+    def __init__(
+        self,
+        model: str,
+        prices: tuple[float, float],
+        no_think: bool = False,
+        supported: set[str] | None = None,
+    ) -> None:
         self.model, self.prices, self.no_think = model, prices, no_think
         # OpenRouter's list of parameters the model accepts. Some newer models (reasoning ones)
         # refuse `temperature`; with require_parameters on, sending it finds no endpoint at all.
         self.supported = supported
         self.temperature = 0.0  # fix runs raise it for retries (scripts/teacher/fixes.py)
-        self.usage: dict[str, Any] = {"calls": 0, "prompt_tokens": 0, "completion_tokens": 0,
-                                      "seconds": 0.0}
+        self.usage: dict[str, Any] = {"calls": 0, "prompt_tokens": 0, "completion_tokens": 0, "seconds": 0.0}
 
     def turn(self, messages: list[Message], tools: list[dict[str, Any]]) -> Message:
         import litellm
 
         litellm.suppress_debug_info = True  # ty: ignore[invalid-assignment]  # litellm types it Literal[False]
         if self.no_think and messages and messages[0]["role"] == "system":
-            messages = [{**messages[0], "content": messages[0]["content"] + "\n\n/no_think"},
-                        *messages[1:]]
+            messages = [{**messages[0], "content": messages[0]["content"] + "\n\n/no_think"}, *messages[1:]]
         for _attempt in range(2):  # Qwen3 sometimes returns an empty reply: ask once more
             start = time.monotonic()
-            extra: dict[str, Any] = ({"extra_body": {"provider": {"require_parameters": True}}}
-                                     if self.model.startswith("openrouter/") else {})  # tools must work
+            extra: dict[str, Any] = (
+                {"extra_body": {"provider": {"require_parameters": True}}}
+                if self.model.startswith("openrouter/")
+                else {}
+            )  # tools must work
             if not self.supported or "temperature" in self.supported:
                 extra["temperature"] = self.temperature
-            resp = litellm.completion(model=self.model, messages=messages, tools=tools,
-                                      num_retries=3, **extra)
+            resp = litellm.completion(
+                model=self.model, messages=messages, tools=tools, num_retries=3, **extra
+            )
             self.usage["seconds"] += time.monotonic() - start
             self.usage["calls"] += 1
             u = getattr(resp, "usage", None)
@@ -138,9 +145,14 @@ class NativeAgent:
                 break
             self.usage["empty"] = self.usage.get("empty", 0) + 1
             messages = [*messages, {"role": "user", "content": EMPTY_NUDGE}]
-        calls = [{"id": tc.id, "type": "function",
-                  "function": {"name": tc.function.name, "arguments": tc.function.arguments or "{}"}}
-                 for tc in (msg.tool_calls or [])]
+        calls = [
+            {
+                "id": tc.id,
+                "type": "function",
+                "function": {"name": tc.function.name, "arguments": tc.function.arguments or "{}"},
+            }
+            for tc in (msg.tool_calls or [])
+        ]
         if calls:  # τ²-bench's rule: a tool call or a message, not both
             return {"role": "assistant", "content": None, "tool_calls": calls}
         text = _strip_think(msg.content)
@@ -150,9 +162,11 @@ class NativeAgent:
 
     def usage_dict(self) -> dict[str, Any]:
         pin, pout = self.prices
-        return {**self.usage, "seconds": round(self.usage["seconds"], 2),
-                "est_cost": round(self.usage["prompt_tokens"] * pin
-                                  + self.usage["completion_tokens"] * pout, 4)}
+        return {
+            **self.usage,
+            "seconds": round(self.usage["seconds"], 2),
+            "est_cost": round(self.usage["prompt_tokens"] * pin + self.usage["completion_tokens"] * pout, 4),
+        }
 
 
 class OpenRouterAgent(NativeAgent):
@@ -223,17 +237,23 @@ class OpenRouterAgent(NativeAgent):
         raise ModelError(f"{self.slug}: {last}")
 
     def turn(self, messages: list[Message], tools: list[dict[str, Any]]) -> Message:
-        body: dict[str, Any] = {"model": self.slug, "tools": tools,
-                                "provider": {"require_parameters": True},
-                                "usage": {"include": True},
-                                # a cap keeps OpenRouter's per-request reservation small (it holds
-                                # max_tokens × price while a request runs); turns are far shorter
-                                "max_tokens": 8192}
+        body: dict[str, Any] = {
+            "model": self.slug,
+            "tools": tools,
+            "provider": {"require_parameters": True},
+            "usage": {"include": True},
+            # a cap keeps OpenRouter's per-request reservation small (it holds
+            # max_tokens × price while a request runs); turns are far shorter
+            "max_tokens": 8192,
+        }
         if not self.supported or "temperature" in self.supported:
             body["temperature"] = self.temperature
         if self.provider:  # pin one provider (and its quantisation) so the run is reproducible
-            body["provider"] = {"require_parameters": True, "order": [self.provider],
-                                "allow_fallbacks": False}
+            body["provider"] = {
+                "require_parameters": True,
+                "order": [self.provider],
+                "allow_fallbacks": False,
+            }
         body.update(self.extra_body)
         msgs = self._with_reasoning(messages)
         for _attempt in range(2):  # an empty reply: ask once more
@@ -254,10 +274,16 @@ class OpenRouterAgent(NativeAgent):
             self.usage["empty"] = self.usage.get("empty", 0) + 1
             msgs = [*msgs, {"role": "user", "content": EMPTY_NUDGE}]
         calls: list[dict[str, Any]] = [
-            {"id": tc["id"], "type": "function",
-             "function": {"name": tc["function"]["name"],
-                          "arguments": tc["function"].get("arguments") or "{}"}}
-            for tc in (msg.get("tool_calls") or [])]
+            {
+                "id": tc["id"],
+                "type": "function",
+                "function": {
+                    "name": tc["function"]["name"],
+                    "arguments": tc["function"].get("arguments") or "{}",
+                },
+            }
+            for tc in (msg.get("tool_calls") or [])
+        ]
         if msg.get("reasoning_details"):
             self.reasoning[calls[0]["id"] if calls else text] = msg["reasoning_details"]
         if calls:  # τ²-bench's rule: a tool call or a message, not both
@@ -276,8 +302,9 @@ class OpenRouterAgent(NativeAgent):
 class AyaAgent:
     """A Cohere Aya model with prompted tool calls in Aya's own format (default: Aya Expanse 32B)."""
 
-    def __init__(self, model: str = "c4ai-aya-expanse-32b",
-                 prices: tuple[float, float] | None = None) -> None:
+    def __init__(
+        self, model: str = "c4ai-aya-expanse-32b", prices: tuple[float, float] | None = None
+    ) -> None:
         self.client = CohereClient("prompted", style="cohere", model=model, prices=prices)
         self.model = f"cohere/{self.client.model}"
 
@@ -358,9 +385,14 @@ def openrouter_info(slug: str) -> dict[str, Any]:
     p = m.get("pricing") or {}
     fixed = next((PRICES[k] for k, v in SLATE.items() if v == slug and k in PRICES), (0.0, 0.0))
     prices = (float(p["prompt"]), float(p["completion"])) if "prompt" in p else fixed
-    return {"prices": prices, "open_weights": bool(m.get("hugging_face_id")) if m else None,
-            "hf": m.get("hugging_face_id"), "context": m.get("context_length"), "listed": bool(m),
-            "supported": set(m.get("supported_parameters") or []) or None}
+    return {
+        "prices": prices,
+        "open_weights": bool(m.get("hugging_face_id")) if m else None,
+        "hf": m.get("hugging_face_id"),
+        "context": m.get("context_length"),
+        "listed": bool(m),
+        "supported": set(m.get("supported_parameters") or []) or None,
+    }
 
 
 def open_weights(model: str) -> bool | None:
@@ -377,8 +409,11 @@ def openrouter_credits() -> float | None:
     import httpx
 
     try:
-        r = httpx.get("https://openrouter.ai/api/v1/credits", timeout=20,
-                      headers={"Authorization": f"Bearer {os.environ['OPENROUTER_API_KEY']}"})
+        r = httpx.get(
+            "https://openrouter.ai/api/v1/credits",
+            timeout=20,
+            headers={"Authorization": f"Bearer {os.environ['OPENROUTER_API_KEY']}"},
+        )
         d = r.json()["data"]
         return float(d["total_credits"]) - float(d["total_usage"])
     except Exception:  # noqa: BLE001 - no key, offline, or the endpoint changed: don't block the run
@@ -447,16 +482,46 @@ def _converse(agent: Agent, ep: Tau2Episode) -> str | None:
     return None
 
 
-def _record(model: str, agent: Agent, ep: Tau2Episode, domain: str, task_id: str, error: str | None, *,
-            judges: bool, temperature: float, provider: str | None) -> Record:
+def _record(
+    model: str,
+    agent: Agent,
+    ep: Tau2Episode,
+    domain: str,
+    task_id: str,
+    error: str | None,
+    *,
+    judges: bool,
+    temperature: float,
+    provider: str | None,
+) -> Record:
     if not ep.done:  # failed before the conversation started: record it as a failed attempt
-        return {"domain": domain, "task_id": task_id, "termination": "unexpected_error",
-                "outcome": {"passed": False, "reward": 0.0, "checks": {}, "judged": False,
-                            "skipped": [], "note": error}, "messages": [], "user_cost": None,
-                "sample_model": model, "agent_llm": agent.model,
-                "agent_usage": agent.usage_dict(), "error": error}
-    meta = {"sample_model": model, "agent_llm": agent.model, "agent_usage": agent.usage_dict(),
-            "error": error, "temperature": temperature, "pinned_provider": provider}
+        return {
+            "domain": domain,
+            "task_id": task_id,
+            "termination": "unexpected_error",
+            "outcome": {
+                "passed": False,
+                "reward": 0.0,
+                "checks": {},
+                "judged": False,
+                "skipped": [],
+                "note": error,
+            },
+            "messages": [],
+            "user_cost": None,
+            "sample_model": model,
+            "agent_llm": agent.model,
+            "agent_usage": agent.usage_dict(),
+            "error": error,
+        }
+    meta = {
+        "sample_model": model,
+        "agent_llm": agent.model,
+        "agent_usage": agent.usage_dict(),
+        "error": error,
+        "temperature": temperature,
+        "pinned_provider": provider,
+    }
     try:
         return ep.record(judges=judges, **meta)
     except Exception as e:  # noqa: BLE001 - a judge call failed: keep the run, re-judge later
@@ -465,9 +530,17 @@ def _record(model: str, agent: Agent, ep: Tau2Episode, domain: str, task_id: str
         return ep.record(judges=False, **meta, judge_error=f"{type(e).__name__}: {str(e)[:300]}")
 
 
-def run_one(model: str, domain: str, task_id: str, *, temperature: float = 0.0,
-            judges: bool = False, provider: str | None = None, user_llm: str | None = None,
-            user_llm_args: dict[str, Any] | None = None) -> Record:
+def run_one(
+    model: str,
+    domain: str,
+    task_id: str,
+    *,
+    temperature: float = 0.0,
+    judges: bool = False,
+    provider: str | None = None,
+    user_llm: str | None = None,
+    user_llm_args: dict[str, Any] | None = None,
+) -> Record:
     """One conversation of ``model`` as the agent on a τ²-bench task, scored and recorded.
 
     Never raises for a model or API failure: the record says what went wrong (``error``,
@@ -479,13 +552,20 @@ def run_one(model: str, domain: str, task_id: str, *, temperature: float = 0.0,
     if provider and isinstance(agent, OpenRouterAgent):
         agent.provider = provider
     max_context, reserve = CONTEXT.get(model, (128_000, 4_096))
-    ep = Tau2Episode(domain, task_id, user_llm=user_llm, user_llm_args=user_llm_args,
-                     max_context=max_context, reserve=reserve,
-                     count_tokens=COUNT.get(model, estimate_tokens))
+    ep = Tau2Episode(
+        domain,
+        task_id,
+        user_llm=user_llm,
+        user_llm_args=user_llm_args,
+        max_context=max_context,
+        reserve=reserve,
+        count_tokens=COUNT.get(model, estimate_tokens),
+    )
     start = time.monotonic()
     error = _converse(agent, ep)
-    rec = _record(model, agent, ep, domain, task_id, error, judges=judges, temperature=temperature,
-                  provider=provider)
+    rec = _record(
+        model, agent, ep, domain, task_id, error, judges=judges, temperature=temperature, provider=provider
+    )
     msgs = rec["messages"]
     rec["diagnostics"] = {
         "tools_ran": sum(len(m.get("tool_calls") or []) for m in msgs if m["role"] == "assistant"),

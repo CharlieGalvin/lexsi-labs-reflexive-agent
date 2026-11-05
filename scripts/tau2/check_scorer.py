@@ -46,8 +46,11 @@ def deterministic(info: Any) -> dict[str, Any]:  # info: a τ²-bench RewardInfo
         "db_match": db,
         "env_assertions": [c.met for c in info.env_assertions or []],
         "action_checks": [c.action_match for c in info.action_checks or []],
-        "breakdown": {getattr(k, "value", k): v for k, v in (info.reward_breakdown or {}).items()
-                      if getattr(k, "value", k) not in JUDGED},
+        "breakdown": {
+            getattr(k, "value", k): v
+            for k, v in (info.reward_breakdown or {}).items()
+            if getattr(k, "value", k) not in JUDGED
+        },
     }
 
 
@@ -64,8 +67,7 @@ def check_run(name: str, judges: bool) -> int:
         basis = {b.value for b in task.evaluation_criteria.reward_basis}
         judged = bool(basis & JUDGED) and not judges
         ours = sc.score(sim.task_id, sim.messages, sim.termination_reason.value, judges=judges)
-        oai = sc.score(sim.task_id, to_openai(sim.messages), sim.termination_reason.value,
-                       judges=judges)
+        oai = sc.score(sim.task_id, to_openai(sim.messages), sim.termination_reason.value, judges=judges)
         same = all(deterministic(o.reward_info) == deterministic(official) for o in (ours, oai))
         if not judged:
             same = same and ours.reward == oai.reward == official.reward
@@ -73,8 +75,7 @@ def check_run(name: str, judges: bool) -> int:
         tag = "✓" if same else "✗ MISMATCH"
         if judged:
             tag += f"  (deterministic checks only; skipped {', '.join(ours.skipped)})"
-        print(f"{sim.task_id[:70]:<70} {official.reward:>8.1f} {ours.reward:>6.1f} "
-              f"{oai.reward:>6.1f}  {tag}")
+        print(f"{sim.task_id[:70]:<70} {official.reward:>8.1f} {ours.reward:>6.1f} {oai.reward:>6.1f}  {tag}")
         if not same:
             print(f"   official: {deterministic(official)}\n   ours:     {deterministic(ours.reward_info)}")
     print(f"\n{len(results.simulations) - bad}/{len(results.simulations)} match the official score")
@@ -95,15 +96,16 @@ def check_gold(domains: list[str]) -> int:
             writes = sc.write_action_indices(tid)
             if writes:
                 drop_total += 1
-                o2 = sc.score(tid, sc.gold_trajectory(tid, drop=writes[-1]), "user_stop",
-                              judges=False)
+                o2 = sc.score(tid, sc.gold_trajectory(tid, drop=writes[-1]), "user_stop", judges=False)
                 drop_fail += not o2.passed
                 if o2.passed:
                     notes.append(f"still passes without its last change: task {tid}")
         n = len(sc.tasks)
         failures += n - gold_pass
-        print(f"{d:<8} correct actions pass: {gold_pass}/{n}   "
-              f"last change removed → fail: {drop_fail}/{drop_total}")
+        print(
+            f"{d:<8} correct actions pass: {gold_pass}/{n}   "
+            f"last change removed → fail: {drop_fail}/{drop_total}"
+        )
         for line in notes:
             print(f"         {line}")
     return 1 if failures else 0

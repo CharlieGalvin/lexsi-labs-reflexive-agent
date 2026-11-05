@@ -11,11 +11,17 @@ def load():
 
 
 def rec(domain, task, attempt, passed, checks=None, broken=False, judged=True):
-    return {"domain": domain, "task_id": task, "attempt": attempt, "termination": "user_stop",
-            "outcome": {"passed": passed, "judged": judged, "checks": checks or {"DB": 1.0}},
-            "diagnostics": {"repeated_failures": 0, "unknown_tools": 0, "unseen_arguments": []},
-            "agent_usage": {"est_cost": 0.01}, "user_cost": 0.02,
-            "error": "boom" if broken else None}
+    return {
+        "domain": domain,
+        "task_id": task,
+        "attempt": attempt,
+        "termination": "user_stop",
+        "outcome": {"passed": passed, "judged": judged, "checks": checks or {"DB": 1.0}},
+        "diagnostics": {"repeated_failures": 0, "unknown_tools": 0, "unseen_arguments": []},
+        "agent_usage": {"est_cost": 0.01},
+        "user_cost": 0.02,
+        "error": "boom" if broken else None,
+    }
 
 
 def test_retries_are_warmer_than_the_first_attempt():
@@ -31,10 +37,17 @@ def test_db_only_ignores_judged_checks():
 
 def test_report_counts_pass_at_3_and_pass_all_3():
     fx = load()
-    recs = [rec("retail", "1", 1, True), rec("retail", "1", 2, True), rec("retail", "1", 3, True),
-            rec("retail", "2", 1, False), rec("retail", "2", 2, True), rec("retail", "2", 3, False),
-            rec("telecom", "t", 1, False), rec("telecom", "t", 2, False),
-            rec("telecom", "t", 3, False, broken=True)]
+    recs = [
+        rec("retail", "1", 1, True),
+        rec("retail", "1", 2, True),
+        rec("retail", "1", 3, True),
+        rec("retail", "2", 1, False),
+        rec("retail", "2", 2, True),
+        rec("retail", "2", 3, False),
+        rec("telecom", "t", 1, False),
+        rec("telecom", "t", 2, False),
+        rec("telecom", "t", 3, False, broken=True),
+    ]
     r = fx.report(recs)
     assert r["retail"]["pass1"] == (1, 2)
     assert r["retail"]["pass_at_3"] == (2, 2) and r["retail"]["pass_all_3"] == (1, 2)
@@ -52,8 +65,11 @@ def test_remaining_train_tasks_are_the_148_not_used_in_phase_1():
     tasks = fx.remaining_train_tasks()
     assert len(tasks) == 148 and len(set(tasks)) == 148
     assert not set(tasks) & set(fx.runner.sample_tasks())
-    assert {d: sum(x == d for x, _ in tasks) for d in fx.DOMAINS} == {"retail": 54, "airline": 20,
-                                                                       "telecom": 74}
+    assert {d: sum(x == d for x, _ in tasks) for d in fx.DOMAINS} == {
+        "retail": 54,
+        "airline": 20,
+        "telecom": 74,
+    }
 
 
 def test_preflight_reports_every_failing_model(monkeypatch):
@@ -64,8 +80,9 @@ def test_preflight_reports_every_failing_model(monkeypatch):
         if model == "bad":
             raise RuntimeError("You have no credits remaining.")
 
-    monkeypatch.setitem(sys.modules, "litellm", types.SimpleNamespace(completion=completion,
-                                                                       suppress_debug_info=False))
+    monkeypatch.setitem(
+        sys.modules, "litellm", types.SimpleNamespace(completion=completion, suppress_debug_info=False)
+    )
     fx = load()
     problems = fx.preflight(["good", "bad", "bad"])
     assert len(problems) == 1 and "add OpenAI credits" in problems[0]
@@ -84,9 +101,11 @@ def test_needs_judging_picks_failed_or_skipped_judges():
 
 def test_pass_at_3_counts_tasks_that_stopped_at_their_first_pass():
     fx = load()
-    recs = [{**rec("retail", "1", 1, True), "attempt_mode": "until_pass"},
-            *({**rec("retail", "2", i, i == 2), "attempt_mode": "until_pass"} for i in (1, 2)),
-            *({**rec("retail", "3", i, False), "attempt_mode": "until_pass"} for i in (1, 2, 3))]
+    recs = [
+        {**rec("retail", "1", 1, True), "attempt_mode": "until_pass"},
+        *({**rec("retail", "2", i, i == 2), "attempt_mode": "until_pass"} for i in (1, 2)),
+        *({**rec("retail", "3", i, False), "attempt_mode": "until_pass"} for i in (1, 2, 3)),
+    ]
     r = fx.report(recs)["retail"]
     assert r["pass1"] == (1, 3) and r["pass_at_3"] == (2, 3)
     assert r["pass_all_3"] == (0, 0)  # not measured when retries stop at a pass
@@ -95,9 +114,11 @@ def test_pass_at_3_counts_tasks_that_stopped_at_their_first_pass():
 def test_view_check_spots_customer_actions_shown_to_the_agent():
     sr = load_script("student/review")
     call = {"id": "u1", "function": {"name": "check_status_bar"}}
-    full = [{"role": "user", "content": None, "tool_calls": [call]},
-            {"role": "tool", "tool_call_id": "u1", "content": "No signal"},
-            {"role": "user", "content": "It says no signal."}]
+    full = [
+        {"role": "user", "content": None, "tool_calls": [call]},
+        {"role": "tool", "tool_call_id": "u1", "content": "No signal"},
+        {"role": "user", "content": "It says no signal."},
+    ]
     hidden = {"domain": "telecom", "messages": full, "agent_view": [full[2]]}
     shown = {"domain": "telecom", "messages": full, "agent_view": full}
     assert sr.view_check([hidden]) == (1, 1, 0) and sr.view_check([shown]) == (1, 1, 1)
