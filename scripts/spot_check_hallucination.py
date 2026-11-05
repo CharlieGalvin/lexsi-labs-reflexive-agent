@@ -90,6 +90,10 @@ def main() -> int:
     p.add_argument("--per-type", type=int, default=10)
     p.add_argument("--labels", type=Path, help="JSON {sample id: correct?}; report precision")
     a = p.parse_args()
+    if missing_files := [str(f) for f in a.files if not f.exists()]:
+        print(f"⛔ not found: {', '.join(missing_files)}. Rollouts are local (results/ is gitignored):")
+        print("   pass your own, e.g. `python scripts/spot_check_hallucination.py results/fixes/aya.jsonl`")
+        return 1
     items = sample(a.files, a.per_type)
     if not a.labels:
         print("\n\n".join(show(x) for x in items))

@@ -194,3 +194,36 @@ def test_a_year_first_date_of_birth_is_grounded() -> None:
         call("a", "get_customer_by_name", {"full_name": "John Smith", "dob": "1990-03-14"}),
     ]
     assert kinds(msgs) == []
+
+
+# --- The saved tool schemas still match τ²-bench (only where τ²-bench is installed) --------------
+
+
+def test_saved_tool_schemas_match_tau2_bench() -> None:
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    import pytest
+
+    pytest.importorskip("tau2")
+    root = Path(__file__).resolve().parents[1]
+    run = subprocess.run(
+        [sys.executable, "scripts/dump_tool_schemas.py", "--check"], cwd=root, capture_output=True, text=True
+    )
+    assert run.returncode == 0, run.stdout + run.stderr
+
+
+def test_spot_check_reports_a_missing_file_instead_of_crashing(tmp_path: Any) -> None:
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    run = subprocess.run(
+        [sys.executable, "scripts/spot_check_hallucination.py", str(tmp_path / "nope.jsonl")],
+        cwd=root,
+        capture_output=True,
+        text=True,
+    )
+    assert run.returncode == 1 and "not found" in run.stdout and "Traceback" not in run.stderr

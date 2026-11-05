@@ -34,6 +34,12 @@ turn is one batch: look up `"customer's phone number"` (a placeholder, so ARG co
 call `can_send_mms`, `check_apn_settings` and others that only the customer can run. Then it
 retries the same batch (LOOP). Arm C's prompt changes none of this.
 
+**Why it calls them:** these names aren't invented. Telecom's agent policy includes τ²-bench's
+`tech_support_manual.md`, which names the customer's tools in call syntax
+(`check_network_status()` 4 times, `check_apn_settings` 3, …) so the agent can *ask the customer*
+to run them. Aya reads a tool name in its own instructions and calls it. That's a confusion about
+whose tools they are, which is why Arm C's "never invent a tool" has no effect.
+
 Placeholders are much more common than invented values: 59 conversations against 3 in Arm A.
 The invented values seen are made-up IDs (`C00123456789`, `L0012345`) and a year added to a
 birthday the customer gave without one.
