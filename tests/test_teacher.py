@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from types import SimpleNamespace as NS
+from typing import Any
 
 import pytest
 
@@ -610,3 +611,21 @@ def test_tool_errors_counts_unknown_tools_and_retried_failures() -> None:
         {"role": "tool", "tool_call_id": "d", "content": '{"status": "exchange requested"}'},
     ]
     assert tool_errors(msgs) == {"unknown_tools": 1, "repeated_failures": 1}
+
+
+def test_a_reply_cut_off_at_max_tokens_is_counted() -> None:
+    """finish_reason "length" means the API stopped at max_tokens (1024 for Aya), mid-reply."""
+    reasons = iter(["length", "stop"])
+
+    def completion(**kwargs: Any) -> NS:
+        msg = NS(content="Let me check that order for you", tool_calls=None)
+        return NS(
+            choices=[NS(message=msg, finish_reason=next(reasons))],
+            usage=NS(prompt_tokens=1, completion_tokens=1),
+        )
+
+    t = CohereClient("prompted", completion=completion, rpm=0)
+    for _ in range(2):
+        t.turn([{"role": "user", "content": "hi"}], [])
+    assert t.usage.cut_off == 1 and t.usage.as_dict()["cut_off"] == 1
+    assert [c["finish_reason"] for c in t.usage.per_call] == ["length", "stop"]

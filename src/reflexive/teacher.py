@@ -361,6 +361,7 @@ class Usage:
     embedded: int = 0  # prompted tool calls written inside prose (the prose was dropped)
     directly_answer: int = 0  # "directly-answer" pseudo-calls turned into a message
     empty: int = 0  # empty replies (re-asked once without stop sequences)
+    cut_off: int = 0  # replies the API stopped at max_tokens (finish_reason "length")
     per_call: list[dict] = field(default_factory=list)
     prices: tuple[float, float] = (PRICE_IN, PRICE_OUT)  # USD per input / output token
 
@@ -380,6 +381,7 @@ class Usage:
             "embedded": self.embedded,
             "directly_answer": self.directly_answer,
             "empty": self.empty,
+            "cut_off": self.cut_off,
             "est_cost": round(self.cost, 4),
         }
 
@@ -496,7 +498,10 @@ class CohereClient:
         ct = getattr(u, "completion_tokens", 0) or 0
         self.usage.prompt_tokens += pt
         self.usage.completion_tokens += ct
-        self.usage.per_call.append({"prompt_tokens": pt, "completion_tokens": ct})
+        finish = getattr(resp.choices[0], "finish_reason", None)
+        if finish == "length":  # stopped at max_tokens: the reply may be missing its end
+            self.usage.cut_off += 1
+        self.usage.per_call.append({"prompt_tokens": pt, "completion_tokens": ct, "finish_reason": finish})
         return resp
 
     def turn(self, messages: list[dict], tool_schemas: list[dict]) -> dict:
