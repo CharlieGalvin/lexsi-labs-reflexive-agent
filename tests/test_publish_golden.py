@@ -207,6 +207,19 @@ def test_dry_run_still_checks_the_files_when_the_hub_cant_be_reached(tmp_path, m
     assert "no problems" in out and "couldn't check the Hub" in out
 
 
+def test_without_huggingface_hub_the_dry_run_still_works_and_the_real_run_says_why(
+    tmp_path, monkeypatch, capsys
+):
+    _setup(tmp_path, monkeypatch, existing={}, args=["--dry-run"])
+    monkeypatch.setitem(sys.modules, "huggingface_hub", None)  # makes the import fail
+    assert pg.main() == 0
+    out = capsys.readouterr().out
+    assert "no problems" in out and "couldn't check the Hub: ModuleNotFoundError" in out
+    monkeypatch.setattr(sys, "argv", ["publish_golden.py", "--dir", str(tmp_path), "--repo", "org/ds"])
+    assert pg.main() == 1
+    assert "huggingface_hub isn't installed" in capsys.readouterr().out
+
+
 def test_refuses_files_changed_since_build(tmp_path, monkeypatch):
     _setup(tmp_path, monkeypatch, existing={})
     with (tmp_path / pg.FILES["train"]).open("a") as f:

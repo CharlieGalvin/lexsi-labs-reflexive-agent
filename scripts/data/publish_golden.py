@@ -75,10 +75,11 @@ def check_files(folder: Path, report: dict) -> list[str]:
     built = report.get("files")
     if not built:
         return ["the build report has no file checksums: rebuild with `just golden`"]
-    for name in [*FILES.values(), "splits.json"]:
-        if built.get(name) != sha256(folder / name):
+    shas = {name: sha256(folder / name) for name in [*FILES.values(), "splits.json"]}
+    for name, sha in shas.items():
+        if built.get(name) != sha:
             problems.append(f"{name} changed since `just golden` checked it: rebuild")
-    if sha256(folder / "splits.json") != sha256(splits.SPLITS_PATH):
+    if shas["splits.json"] != sha256(splits.SPLITS_PATH):
         problems.append(f"splits.json differs from {shown(splits.SPLITS_PATH)}: rebuild with `just golden`")
     return problems
 
@@ -317,8 +318,8 @@ def refusal(state: HubState, repo: str, *, retag: bool) -> str | None:
     return None
 
 
-def load_checked(folder: Path) -> dict[str, list[dict[str, Any]]] | None:
-    """The records, if every check passes; otherwise print the problems and return None."""
+def load_checked(folder: Path) -> tuple[dict[str, list[dict[str, Any]]], dict] | None:
+    """The records and the build report, if every check passes; else print the problems, return None."""
     if not (folder / FILES["train"]).exists():
         print(f"⛔ {folder} has no {FILES['train']}: run `just golden` first")
         return None
@@ -335,7 +336,7 @@ def load_checked(folder: Path) -> dict[str, list[dict[str, Any]]] | None:
         print(f"⛔ {len(problems)} problems; nothing uploaded")
         return None
     print(f"checked: {len(rows['train'])} train + {len(rows['dev'])} dev records, no problems")
-    return rows
+    return rows, report
 
 
 def main() -> int:
@@ -353,21 +354,21 @@ def main() -> int:
     )
     a = p.parse_args()
 
-    rows = load_checked(a.dir)
-    if rows is None:
+    checked = load_checked(a.dir)
+    if checked is None:
         return 1
-    report = json.loads((a.dir / "build_report.json").read_text())
+    rows, report = checked
     names = [*FILES.values(), "splits.json"]
-    shas = {n: sha256(a.dir / n) for n in names}
+    shas = {n: report["files"][n] for n in names}  # check_files just confirmed they match the files
     (a.dir / "README.md").write_text(card(rows, report, a.repo, shas))
     print(f"wrote {shown(a.dir)}/README.md (the data card)")
 
-    from huggingface_hub import HfApi
-
-    api = HfApi()
     if a.dry_run:
         print(f"dry run: would upload {', '.join(names)} and README.md to {a.repo} (private), tag {TAG}")
         try:
+            from huggingface_hub import HfApi
+
+            api = HfApi()
             state = hub_state(api, a.repo)
         except Exception as e:  # noqa: BLE001 - no token or offline: the dry run still checked the files
             print(f"   (couldn't check the Hub: {type(e).__name__})")
@@ -380,6 +381,12 @@ def main() -> int:
         )
         return 0
 
+    try:
+        from huggingface_hub import HfApi
+    except ImportError:
+        print("⛔ huggingface_hub isn't installed: it comes with the dev tools (`uv sync --extra dev`)")
+        return 1
+    api = HfApi()
     state = hub_state(api, a.repo)
     why = refusal(state, a.repo, retag=a.retag)
     if why:
