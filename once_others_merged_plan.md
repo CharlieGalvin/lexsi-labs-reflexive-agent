@@ -18,12 +18,10 @@
 
 1. ~~**#38**~~ merged 5 Nov.
 2. ~~**#37**~~ merged 5 Nov.
-3. **#39** (docs), then **#40** (Chiara's classifier). **Before merging it**, Claude updates #39 for #37:
-   - add `arms.py` and `scripts/rollout.py` to the new README repo-layout block;
-   - put Chiara's Arm A row in the "Training and evaluation runs" table of `docs/EXPERIMENTS.md`.
+3. **#39** (docs): updated for #37 and current as of 5 Nov; needs Chiara's approval.
+4. **#40** (Chiara's classifier, SEL-12).
 
-Then run the SEL-48 upload (`just golden-publish`) and hand over to Katie. That's separate from
-this PR and shouldn't wait for it.
+The SEL-48 upload and hand-over are done (5 Nov).
 
 ## 1. Bring the branch up to date
 
