@@ -76,7 +76,9 @@ PROMPT_VERSIONS: dict[str, str] = {k: v["version"] for k, v in _PROMPTS.items()}
 CAREFUL_INSTRUCTION = PROMPT_VARIANTS["careful"]  # Arm C's instruction
 CAREFUL_VERSION = PROMPT_VERSIONS["careful"]
 DEFAULT_MAX_STEPS = 200  # same as `tau2 run`
-DEFAULT_MAX_ERRORS = 10
+# τ²-bench also ends a conversation after 10 tool errors in a row (termination
+# "too_many_errors"). That's its own DEFAULT_MAX_ERRORS: the Gym environment we drive doesn't
+# take an error limit as a setting, so there's nothing for us to pass.
 
 
 def estimate_tokens(messages: list[dict]) -> int:
