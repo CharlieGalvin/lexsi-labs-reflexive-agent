@@ -218,24 +218,24 @@ class _Context:
         self.text += " " + text.lower()
         joined = re.sub(r"(?<=\d)[ ().+-]{1,3}(?=\d)", "", text)  # (555) 123-4567 -> 5551234567
         self.numbers.update(re.findall(r"\d{7,}", joined))
+        self.numbers.update(re.findall(r"\d{7,}", text))  # as written, too: joining can merge neighbours
         self.dates.update(_iso_dates(text))
+
+    def _seen(self, v: str) -> bool:
+        """``v`` appears as a whole value, not as part of a longer one: C100 isn't seen in C1001."""
+        return bool(re.search(rf"(?<![a-z0-9_]){re.escape(v)}(?![a-z0-9_])", self.text))
 
     def has(self, key: str, value: str) -> bool:
         v = value.strip().lower()
-        if not v or v in self.text or v.lstrip("#") in self.text:
+        if not v or self._seen(v) or self._seen(v.lstrip("#")):
             return True
         if key == "dob" and v in self.dates:
             return True
         digits = re.sub(r"\D", "", v)
-        if (
-            key != "dob"
-            and len(digits) >= 7
-            and len(digits) >= len(v) - 4
-            and any(digits in n for n in self.numbers)
-        ):
+        if key != "dob" and len(digits) >= 7 and len(digits) >= len(v) - 4 and digits in self.numbers:
             return True  # a phone number written differently: (555) 123-4567 vs 5551234567
         if key.endswith("name"):
-            return all(w in self.text for w in v.split())  # "Smith John" or extra spaces
+            return all(self._seen(w) for w in v.split())  # "Smith John" or extra spaces, whole words
         return False
 
 

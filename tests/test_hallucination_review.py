@@ -75,3 +75,39 @@ def test_record_without_agent_view_drops_the_customers_phone_actions() -> None:
 def test_record_without_agent_view_still_catches_an_invented_line_id() -> None:
     found = [(str(f.type), f.kind, f.detail) for f in classify_record(_record_without_agent_view()).findings]
     assert any(k == "ungrounded" and "L1009" in d for _, k, d in found), found
+
+
+# --- "Seen before" means the whole value, not a fragment of something else -----------------------
+
+
+def test_a_truncated_id_is_not_grounded_by_a_longer_one() -> None:
+    msgs = [
+        SYSTEM,
+        user("my number is 5551234567"),
+        call("a", "get_customer_by_phone", {"phone_number": "5551234567"}),
+        result("a", '{"customer_id":"C1001","line_ids":["L1001"]}'),
+        call("b", "get_data_usage", {"customer_id": "C100", "line_id": "L10"}),
+    ]
+    assert kinds(msgs).count(("ARG", "ungrounded")) == 2
+
+
+def test_an_invented_name_is_not_grounded_by_parts_of_other_words() -> None:
+    msgs = [
+        SYSTEM,
+        user("Every customer on this channel plan. DOB 1990-01-01"),
+        call("a", "get_customer_by_name", {"full_name": "Tom Ann", "dob": "1990-01-01"}),
+    ]  # "cus-tom-er", "ch-ann-el"
+    assert ("ARG", "ungrounded") in kinds(msgs)
+
+
+def test_whole_values_still_ground() -> None:
+    msgs = [
+        SYSTEM,
+        user("I'm John Smith, dob 1990-01-01, my email is john.smith@example.com."),
+        call("a", "get_customer_by_name", {"full_name": "Smith John", "dob": "1990-01-01"}),
+        result("a", '[{"customer_id":"C1001","line_ids":["L1001"]}]'),
+        call("b", "get_data_usage", {"customer_id": "C1001", "line_id": "L1001"}),
+        user("order #W123 please"),
+        call("c", "get_details_by_id", {"id": "W123"}),
+    ]
+    assert ("ARG", "ungrounded") not in kinds(msgs)
