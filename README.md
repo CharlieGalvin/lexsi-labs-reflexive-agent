@@ -177,13 +177,17 @@ Run `just` on its own to list every command. Python must be **3.12 or 3.13** (τ
 ```
 configs/                 one YAML per experiment / arm (copy, don't edit in place)
   splits.json            frozen τ²-bench train / dev / test task IDs (SEL-36; never regenerate)
+  arms.yaml              the experiment arms: shared student and customer, one prompt per arm (SEL-41)
+  prompts.yaml           the arms' versioned prompt texts (e.g. careful/v1); never edit a version in place
 src/reflexive/           Python package: each role adds its modules here
   outcome.py             pass/fail for any τ²-bench trajectory via τ²-bench's own scoring (Curator)
   episode.py             one τ²-bench conversation our code drives: tools, customer, context guard (Curator)
+  arms.py                the experiment arms (configs/arms.yaml) and one rollout of an arm (Architect)
   llm.py                 API model names and OpenRouter prices
   splits.py              load the frozen splits; split_of(), assert_not_test()
   teacher.py             Cohere `Action:` prompt format (to_prompted) and tool-call parsing; Cohere client
   golden.py              golden trajectories v1: agent's view, clean-pass pick, Cohere conversion, checks
+scripts/rollout.py       run an arm on a domain's tasks: `just rollout A retail` (Arm A), `just rollout C ...`
 scripts/tau2_*           τ²-bench: first run, cost report, context-fit check, OpenRouter pricing
 scripts/teacher_*        teacher bake-off (teacher_sample) and the fix run (teacher_fixes)
 scripts/*_report.py      bake-off and phase 2 statistics; student_review.py: Aya's failure types

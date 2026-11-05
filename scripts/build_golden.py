@@ -55,8 +55,12 @@ def load(path: Path) -> list[dict]:
     return [json.loads(x) for x in path.read_text().splitlines() if x.strip()]
 
 
+def sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
 def sha(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()[:16]
+    return sha256(path)[:16]
 
 
 def main() -> int:
@@ -127,7 +131,11 @@ def main() -> int:
                 f.write(json.dumps(rec, ensure_ascii=False) + "\n")
     shutil.copy(splits.SPLITS_PATH, a.out / "splits.json")
 
-    report = {"input": src, "view_check": checked, "conversations": dict(reasons), "domains": {}}
+    # Checksums of what was just checked: publish_golden.py refuses files that changed since
+    files = {n: sha256(a.out / n)
+             for n in ("golden_train.jsonl", "golden_dev_reference.jsonl", "splits.json")}
+    report = {"input": src, "view_check": checked, "conversations": dict(reasons), "files": files,
+              "domains": {}}
     for d in splits.DOMAINS:
         for split in ("train", "dev"):
             ids = splits.task_ids(d, split)
