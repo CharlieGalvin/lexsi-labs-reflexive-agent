@@ -12,7 +12,9 @@ summary counts them apart, and a re-run retries them (their records are replaced
 **Rate limits**: ``--rpm`` (or ``rpm`` in the config) caps the student's calls per minute across
 all workers. A Cohere Trial key allows 20/min and 1,000 calls a month.
 
-**Splits** are τ²-bench's own train / test lists until the frozen dev split (SEL-36) is merged.
+**Splits** are the frozen train / dev / test task IDs in ``configs/splits.json`` (SEL-36,
+`reflexive.splits`). Dev is held out from τ²-bench's train split, so ``train`` here is smaller
+than τ²-bench's own. Test is for the final evaluation only.
 **Judges**: retail and airline need ``OPENAI_API_KEY`` for τ²-bench's LLM judges. Without it
 (``--judges auto``) only the deterministic checks are scored, and the record lists what was
 skipped.
@@ -28,16 +30,23 @@ import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+from reflexive import splits
 from reflexive.arms import get_arm, make_student, run_episode
-from reflexive.episode import _split
 from reflexive.teacher import RateLimiter
+
+
+def _split_of(domain: str, task_id: str) -> str:
+    try:
+        return splits.split_of(domain, task_id)
+    except KeyError:
+        return "other"
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("arm", help="arm key from configs/arms.yaml, e.g. A or C")
     ap.add_argument("domain", choices=["retail", "airline", "telecom"])
-    ap.add_argument("--split", default="train", choices=["train", "test"])
+    ap.add_argument("--split", default="train", choices=list(splits.SPLITS))
     ap.add_argument("--task-ids", nargs="+", help="these tasks instead of the whole split")
     ap.add_argument("--limit", type=int, help="only the first N tasks of the split (sorted)")
     ap.add_argument("--samples", type=int, default=1, help="conversations per task")
@@ -51,10 +60,9 @@ def main() -> int:
 
     arm = get_arm(a.arm, a.config)
     judges = {"on": True, "off": False}.get(a.judges, bool(os.environ.get("OPENAI_API_KEY")))
-    tasks = a.task_ids or sorted(_split(a.domain, a.split))
+    tasks = a.task_ids or sorted(splits.task_ids(a.domain, a.split))
     if a.task_ids:
-        split_of = {t: s for s in ("train", "test") for t in _split(a.domain, s)}
-        a.split = "-".join(sorted({split_of.get(t, "other") for t in tasks}))
+        a.split = "-".join(sorted({_split_of(a.domain, t) for t in tasks}))
     if a.limit:
         tasks = tasks[: a.limit]
     out = a.out or pathlib.Path(f"results/episodes/arms/{arm.key}-{a.domain}-{a.split}.jsonl")

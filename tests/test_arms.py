@@ -44,6 +44,36 @@ def test_unknown_arm_and_unknown_student_setting_are_refused(tmp_path):
         get_arm("A", path)
 
 
+# Each prompt version's text, pinned: editing a variant in configs/prompts.yaml in place would
+# make earlier runs incomparable. Add a new variant with a new version (and a line here) instead.
+PINNED_PROMPTS = {
+    "careful/v1": "10be39575fcd3760225f5cc64043b1049f300a1573be709d8fb54829ff631c86",
+}
+
+
+def test_prompt_versions_are_never_edited_in_place():
+    import hashlib
+
+    from reflexive.episode import PROMPT_VARIANTS, PROMPT_VERSIONS
+
+    for variant, text in PROMPT_VARIANTS.items():
+        version = PROMPT_VERSIONS[variant]
+        if text is None:  # τ²-bench's own prompt, nothing added
+            assert version == "tau2/default"
+            continue
+        assert version in PINNED_PROMPTS, f"{version} is new: pin its hash in PINNED_PROMPTS"
+        assert hashlib.sha256(text.encode()).hexdigest() == PINNED_PROMPTS[version], (
+            f"{variant} ({version}) was edited in place: add a new variant and version instead")
+    assert len(set(PROMPT_VERSIONS.values())) == len(PROMPT_VERSIONS)  # versions are unique
+
+
+def test_every_arm_uses_a_known_prompt_variant():
+    from reflexive.episode import PROMPT_VARIANTS
+
+    for key in load_config()["arms"]:
+        assert get_arm(key).prompt_variant in PROMPT_VARIANTS
+
+
 def test_student_needs_its_api_key(monkeypatch):
     student = get_arm("A").student
     monkeypatch.delenv(student["api_key_env"], raising=False)
@@ -200,7 +230,7 @@ def test_rollout_reruns_crashed_conversations_and_counts_them_apart(tmp_path, mo
         calls.append(task_id)
         return rec(task_id, error="RateLimitError: again" if task_id == "t3" else None)
 
-    monkeypatch.setattr(mod, "_split", lambda domain, split: {"t1", "t2", "t3"})
+    monkeypatch.setattr(mod.splits, "task_ids", lambda domain, split: ["t1", "t2", "t3"])
     monkeypatch.setattr(mod, "make_student", lambda student, **kw: object())
     monkeypatch.setattr(mod, "run_episode", fake_run)
     monkeypatch.setattr("sys.argv", ["rollout.py", "A", "telecom", "--out", str(out), "--workers", "1"])
@@ -210,3 +240,24 @@ def test_rollout_reruns_crashed_conversations_and_counts_them_apart(tmp_path, mo
     assert sorted(r["task_id"] for r in saved) == ["t1", "t2", "t3"]  # the old crash was replaced
     printed = capsys.readouterr().out
     assert "0/1 passed" in printed and "1 crashed" in printed
+
+
+def test_rollout_runs_the_frozen_dev_split(tmp_path, monkeypatch, capsys):
+    from reflexive import splits
+
+    mod = _load_rollout_script()
+    out = tmp_path / "A.jsonl"
+    calls = []
+
+    def fake_run(arm, agent, domain, task_id, **kw):
+        calls.append(task_id)
+        return {"task_id": task_id, "sample": 0, "termination": "agent_stop", "error": None,
+                "outcome": {"passed": False}, "flags": {"context_overflow": False}, "wall_s": 1.0}
+
+    monkeypatch.setattr(mod, "make_student", lambda student, **kw: object())
+    monkeypatch.setattr(mod, "run_episode", fake_run)
+    monkeypatch.setattr("sys.argv", ["rollout.py", "A", "telecom", "--split", "dev", "--out",
+                                     str(out), "--workers", "1"])
+    assert mod.main() == 0
+    dev = splits.task_ids("telecom", "dev")
+    assert sorted(calls) == sorted(dev) and not set(dev) & set(splits.task_ids("telecom", "train"))

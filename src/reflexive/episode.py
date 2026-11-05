@@ -38,7 +38,8 @@ The student is trained on the conversation, not on this prompt.
 **Prompt variants (the arms).** ``prompt_variant`` picks what goes in the agent's instructions:
 ``"default"`` is τ²-bench's prompt unchanged (Arm A); ``"careful"`` adds the fixed
 anti-hallucination instruction `CAREFUL_INSTRUCTION` (Arm C, the prompt-only control). The
-variant and its version are recorded in `record()`. See `reflexive.arms`.
+variants' texts and versions are in ``configs/prompts.yaml``; the variant and its version are
+recorded in `record()`. See `reflexive.arms`.
 
 **Context guard.** `prompt()` keeps the prompt (conversation plus tool definitions) within
 ``max_context - reserve`` tokens, where ``reserve`` is room left for the model's reply, by
@@ -56,26 +57,24 @@ import inspect
 import json
 import time
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
+
+import yaml
 
 from reflexive.outcome import from_openai, scorer, to_openai
 
 TRUNCATED = "[older tool result removed to fit the context window]"
 HINTS = ("none", "steps", "steps_with_args")
 
-# Arm C's fixed instruction (SEL-41). It names the three failure types we heal (Tool / Arg / Loop)
-# plus ungrounded claims, so Arm C is a fair test of "just tell the model". Never edit it in place:
-# a change makes earlier Arm C runs incomparable. Write a new version and bump CAREFUL_VERSION.
-CAREFUL_VERSION = "careful/v1"
-CAREFUL_INSTRUCTION = """Be careful not to hallucinate:
-- Only call tools you have been given. Never invent a tool or a tool name.
-- Only use argument values (IDs, names, dates, amounts) that the user gave you or that a tool \
-returned earlier in this conversation. If you don't have a value, ask the user or look it up \
-first. Never guess or make one up.
-- If a tool call returns an error, read it and change something before trying again. Never \
-repeat the same call with the same arguments.
-- Only tell the user things that the policy or a tool result supports. If you don't know, say so."""
-PROMPT_VARIANTS = {"default": None, "careful": CAREFUL_INSTRUCTION}
+# The prompt variants (SEL-41) live in configs/prompts.yaml, each with its text and version.
+# Never edit a variant's text in place: add a new variant with a new version (see that file).
+PROMPTS_PATH = Path(__file__).resolve().parents[2] / "configs" / "prompts.yaml"
+_PROMPTS = yaml.safe_load(PROMPTS_PATH.read_text())["variants"]
+PROMPT_VARIANTS: dict[str, str | None] = {k: v["text"] for k, v in _PROMPTS.items()}
+PROMPT_VERSIONS: dict[str, str] = {k: v["version"] for k, v in _PROMPTS.items()}
+CAREFUL_INSTRUCTION = PROMPT_VARIANTS["careful"]  # Arm C's instruction
+CAREFUL_VERSION = PROMPT_VERSIONS["careful"]
 DEFAULT_MAX_STEPS = 200  # same as `tau2 run`
 DEFAULT_MAX_ERRORS = 10
 
@@ -385,7 +384,7 @@ class Tau2Episode:
             "domain": self.domain, "task_id": self.task_id, "language": self.language,
             "hints": self.hints, "hinted": bool(self.resolution_steps()),
             "prompt_variant": self.prompt_variant,
-            "prompt_version": CAREFUL_VERSION if self.prompt_variant == "careful" else "tau2/default",
+            "prompt_version": PROMPT_VERSIONS[self.prompt_variant],
             "termination": self.termination,
             "outcome": {"passed": outcome.passed, "reward": outcome.reward,
                         "checks": outcome.checks, "judged": outcome.judged,
