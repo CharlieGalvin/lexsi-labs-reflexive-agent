@@ -11,15 +11,11 @@ conversations ended) and cost. Standard library only, except for --plot.
 from __future__ import annotations
 
 import argparse
-import importlib.util
 import json
 import pathlib
 import statistics as st
 
-_spec = importlib.util.spec_from_file_location(
-    "bakeoff_report", pathlib.Path(__file__).parent / "bakeoff_report.py")
-br = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(br)
+from reflexive.stats import mcnemar, paired_bootstrap, wilson
 
 DOMAINS = ("retail", "airline", "telecom")
 MODELS = {"glm53f": "GLM-5.3-Flash", "qwen38nt": "Qwen3.8 27B (thinking off)"}
@@ -63,12 +59,12 @@ def compare(a: dict, b: dict) -> dict:
         keys = sorted(k for k in a.keys() & b.keys() if d in ("all", k[0]))
         pa = {k: a[k]["outcome"]["passed"] for k in keys}
         pb = {k: b[k]["outcome"]["passed"] for k in keys}
-        only_a, only_b, p = br.mcnemar(pa, pb)
+        only_a, only_b, p = mcnemar(pa, pb)
         rows[d] = {"shared": len(keys), "a": sum(pa.values()), "b": sum(pb.values()),
                    "only_a": only_a, "only_b": only_b, "p": p,
-                   "diff_ci": br.paired_bootstrap(pa, pb) if keys else (0, 0),
-                   "a_ci": br.wilson(sum(pa.values()), len(keys)),
-                   "b_ci": br.wilson(sum(pb.values()), len(keys))}
+                   "diff_ci": paired_bootstrap(pa, pb) if keys else (0, 0),
+                   "a_ci": wilson(sum(pa.values()), len(keys)),
+                   "b_ci": wilson(sum(pb.values()), len(keys))}
     return rows
 
 
