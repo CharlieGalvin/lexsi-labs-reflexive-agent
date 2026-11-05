@@ -173,3 +173,24 @@ def test_a_described_phone_number_is_still_a_placeholder() -> None:
         call("a", "get_customer_by_phone", {"phone_number": "customer's phone number"}),
     ]
     assert ("ARG", "placeholder") in kinds(msgs)
+
+
+# --- Names without accents and year-first dates ground -------------------------------------------
+
+
+def test_a_name_written_without_its_accents_is_grounded() -> None:
+    msgs = [
+        SYSTEM,
+        user("I'm José García, born 1990-03-14"),
+        call("a", "get_customer_by_name", {"full_name": "Jose Garcia", "dob": "1990-03-14"}),
+    ]
+    assert kinds(msgs) == []
+
+
+def test_a_year_first_date_of_birth_is_grounded() -> None:
+    msgs = [
+        SYSTEM,
+        user("I'm John Smith, dob 1990/03/14"),
+        call("a", "get_customer_by_name", {"full_name": "John Smith", "dob": "1990-03-14"}),
+    ]
+    assert kinds(msgs) == []

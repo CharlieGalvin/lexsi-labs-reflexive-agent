@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import json
 import re
+import unicodedata
 from collections import Counter
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
@@ -204,7 +205,14 @@ def _iso_dates(text: str) -> list[str]:
     ]
     for a, b, y in re.findall(r"\b(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})\b", text):
         out += [f"{y}-{int(a):02d}-{int(b):02d}", f"{y}-{int(b):02d}-{int(a):02d}"]
+    for y, m, d in re.findall(r"\b(\d{4})[/.](\d{1,2})[/.](\d{1,2})\b", text):  # 1990/03/14
+        out.append(f"{y}-{int(m):02d}-{int(d):02d}")
     return out
+
+
+def _fold(text: str) -> str:
+    """Lower case without accents, as τ²-bench matches names: José García -> jose garcia."""
+    return "".join(c for c in unicodedata.normalize("NFKD", text.lower()) if not unicodedata.combining(c))
 
 
 class _Context:
@@ -216,7 +224,7 @@ class _Context:
         self.dates: set[str] = set()
 
     def add(self, text: str) -> None:
-        self.text += " " + text.lower()
+        self.text += " " + _fold(text)
         joined = re.sub(r"(?<=\d)[ ().+-]{1,3}(?=\d)", "", text)  # (555) 123-4567 -> 5551234567
         self.numbers.update(re.findall(r"\d{7,}", joined))
         self.numbers.update(re.findall(r"\d{7,}", text))  # as written, too: joining can merge neighbours
@@ -227,7 +235,7 @@ class _Context:
         return bool(re.search(rf"(?<![a-z0-9_]){re.escape(v)}(?![a-z0-9_])", self.text))
 
     def has(self, key: str, value: str) -> bool:
-        v = value.strip().lower()
+        v = _fold(value.strip())
         if not v or self._seen(v) or self._seen(v.lstrip("#")):
             return True
         if key == "dob" and v in self.dates:
