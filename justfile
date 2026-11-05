@@ -151,6 +151,10 @@ bakeoff-report:
 
 # --- Experiment arms (configs/arms.yaml) ----------------------------------------
 
+# Re-score saved rollouts with the AuditKIT oracle: verified success rate (judges on; `--only dev`, `--judges off`)
+oracle-score *files:
+    python scripts/arms/oracle_score.py {{files}}
+
 # Run an arm on a domain's split, e.g. `just rollout A retail --limit 5` or `just rollout C telecom`
 rollout arm domain *args:
     python scripts/arms/rollout.py {{arm}} {{domain}} {{args}}
