@@ -59,6 +59,10 @@ check: lint test
 golden *args:
     python scripts/build_golden.py {{args}}
 
+# Check data/golden/v1/, write the data card and upload it PRIVATE to the team HF org, tag v1 (SEL-48; --dry-run first)
+golden-publish *args:
+    python scripts/publish_golden.py {{args}}
+
 # Confirm configs/splits.json matches a rebuild from its seed (SEL-36)
 splits-check:
     python scripts/make_splits.py --check
@@ -126,4 +130,10 @@ student-review path="results/fixes/aya.jsonl":
 bakeoff-report:
     python scripts/bakeoff_report.py
 
-# Experiment commands (train, baseline, evaluate…) are added by the Architect and Trainer.
+# --- Experiment arms (configs/arms.yaml) ----------------------------------------
+
+# Run an arm on a domain's split, e.g. `just rollout A retail --limit 5` or `just rollout C telecom`
+rollout arm domain *args:
+    python scripts/rollout.py {{arm}} {{domain}} {{args}}
+
+# Experiment commands (train, evaluate…) are added by the Architect and Trainer.

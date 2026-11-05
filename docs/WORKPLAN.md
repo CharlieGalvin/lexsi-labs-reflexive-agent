@@ -7,6 +7,14 @@ hallucination, loops, steps and redundant calls versus a naive agent (A), a "be 
 **Live tracking is in Linear** ([Reflexive Agents project](https://linear.app/self-healing-hallucination/project/reflexive-agents-e8769e1623aa));
 this file is the original plan the Linear issues (`SEL-5`…`SEL-30`) were created from.
 
+> **Kept as the original 2 Nov plan; not updated.** What changed since:
+> - Public benchmarks instead of a synthetic task suite: **τ²-bench** (train 142 / dev 36 /
+>   test 100) and **BFCL v3 multi-turn**, not 200 SQL + API tasks.
+> - **Teacher: GLM-5.3-Flash** (bake-off, 3 Nov), not Aya Expanse 32B.
+>   **Student: Aya Expanse 32B**, not Tiny Aya.
+> - Golden trajectories are verified by τ²-bench's own evaluator, not a sandbox replay.
+> - Milestone wording below (v0 suite of 50, 200-task test split) refers to the old plan.
+
 ## Key dates
 
 | Date | Event | Our milestone |
