@@ -1,11 +1,14 @@
-"""The teacher model, Aya Expanse 32B via Cohere's API, as an agent for `Tau2Episode` (SEL-37).
+"""Aya Expanse 32B via Cohere's API as an agent for `Tau2Episode`: our student (SEL-37).
 
-    teacher = TeacherClient(mode="prompted")        # or "native"; reads COHERE_API_KEY
+    aya = CohereClient(mode="prompted")             # or "native"; reads COHERE_API_KEY
     ep = Tau2Episode("retail", task_id, max_context=128_000)
     ep.reset()
     while not ep.done:
-        ep.step(teacher.turn(ep.prompt(), ep.tool_schemas))
-    teacher.usage                                   # calls, tokens, seconds, est. cost
+        ep.step(aya.turn(ep.prompt(), ep.tool_schemas))
+    aya.usage                                       # calls, tokens, seconds, est. cost
+
+(The module is called ``teacher`` because Aya was first tried as the teacher; GLM-5.3-Flash
+won the bake-off, and Aya is now the student. ``TeacherClient`` is kept as an alias.)
 
 Calls go through Cohere's OpenAI-compatible endpoint (https://api.cohere.ai/compatibility/v1)
 with LiteLLM. See docs/TEACHER_SETUP.md for limits and prices.
@@ -381,7 +384,7 @@ class ContextTooLong(RuntimeError):
     """The model's API refused the prompt as longer than its context window."""
 
 
-class TeacherClient:
+class CohereClient:
     """Aya Expanse 32B (by default) as the agent: one call per agent turn."""
 
     def __init__(self, mode: str = "prompted", *, style: str = "cohere", model: str = TEACHER_MODEL,
@@ -514,6 +517,8 @@ class TeacherClient:
         reply = self._call(follow, None, stop=STOP_SEQUENCES).choices[0].message.content or ""
         return {"role": "assistant", "content": _strip_actions(reply) or reply}
 
+
+TeacherClient = CohereClient  # the old name, still used by reflexive.arms
 
 _ID_LIKE = re.compile(r"^(?=.*\d)[\w#@.\-]{4,}$")
 # Dates and times are worked out from the conversation ("next Friday"), not looked up, so they

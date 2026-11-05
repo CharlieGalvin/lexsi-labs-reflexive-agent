@@ -81,7 +81,7 @@ These are Cohere's documented facts as of 3 Nov 2026, plus what they mean for ou
 **Tested 3 Nov (`just teacher-probe`).** A request with `tools=` is rejected by Cohere:
 `invalid request: tool use is not supported by the provided model: c4ai-aya-expanse-32b`.
 The prompted format worked first time: the teacher replied with a valid JSON tool call that
-parsed. So the teacher runs in **prompted mode** (`TeacherClient("prompted")`, the default):
+parsed. So the teacher runs in **prompted mode** (`CohereClient("prompted")`, the default):
 
 - **Use Aya's own tool format (`style="cohere"`, the default).** Aya Expanse comes from
   Cohere's Command R family and was trained on its tool-use prompt. Its model template, which
@@ -152,7 +152,7 @@ measures it properly. ~600 attempts at ~70 s is ~11 h one after another, so run 
 
 **Backup teacher:** Cohere's Command models support native tool calling, including parallel
 calls, multi-step calls and `tool_choice` ([tool-use usage patterns](https://docs.cohere.com/v2/docs/tool-use-usage-patterns),
-examples with `command-a-plus-05-2026`). `TeacherClient("native", model=...)` already
+examples with `command-a-plus-05-2026`). `CohereClient("native", model=...)` already
 supports this. Switching would depart from the proposal's teacher (Aya Expanse 32B), so it's a
 team decision if Aya's pass rate turns out too low.
 
@@ -277,4 +277,4 @@ Same 30 train tasks, database checks only (a best case):
 | `just teacher-check [cohere\|agenttune] [none\|steps\|steps_with_args]` | Teacher on one train task per domain, in that prompt style (default `cohere`) and with those hints (default `none`). Reports cost, latency, score, the tool calls that actually ran and any invented IDs, then the budget. Saves to `results/episodes/teacher-check-<style>[-<hints>].jsonl`. | ~30–60 |
 
 - **Rate:** we use a **production key** (decided 3 Nov), so the driver doesn't throttle by default. If calls start failing with rate-limit errors (HTTP 429), they're retried; to space them out, set `TEACHER_RPM` in `.env` (e.g. `20` for a trial key).
-- **Code:** `reflexive.teacher.TeacherClient`, used as the agent in `reflexive.episode.Tau2Episode`.
+- **Code:** `reflexive.teacher.CohereClient`, used as the agent in `reflexive.episode.Tau2Episode`.

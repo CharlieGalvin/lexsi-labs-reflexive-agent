@@ -1,12 +1,13 @@
-"""Teacher fix run: the chosen teacher on every train task not used in phase 1 (SEL-58 phase 2, SEL-45).
+"""Teacher fix run: the chosen teacher on the train tasks, up to 3 attempts each (SEL-58 phase 2, SEL-45).
 
     python scripts/teacher/fixes.py --list                       # the 148 tasks, no API calls
     python scripts/teacher/fixes.py --limit 3                    # smoke test: 3 tasks x 3 attempts
-    python scripts/teacher/fixes.py                              # the full run (GLM-5.3-Flash)
+    python scripts/teacher/fixes.py --tasks all                  # all 178 (the SEL-45 run, GLM-5.3-Flash)
     python scripts/teacher/fixes.py --report                     # summary of what's saved
 
-**Tasks.** Every τ²-bench *train* task in retail, airline and telecom that phase 1 didn't use:
-54 retail + 20 airline + 74 telecom = 148. Train tasks only, so every verified pass is a real fix.
+**Tasks.** τ²-bench *train* tasks in retail, airline and telecom: by default the 148 that phase 1
+didn't use (54 retail + 20 airline + 74 telecom); ``--tasks all`` adds phase 1's 30, for all 178.
+Train tasks only, so every verified pass is a real fix.
 
 **Attempts.** Up to 3 per task, stopping at the first pass: attempt 1 at temperature 0, retries
 at 0.7 so they actually differ. pass@3 = a fix exists. ``--all-attempts`` runs all 3 even after
@@ -29,16 +30,17 @@ resumes where it stopped; ``--retry-broken`` redoes broken conversations.
 from __future__ import annotations
 
 import argparse
-import importlib.util
 import json
+import os
 import pathlib
+import random
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Any
 
-HERE = pathlib.Path(__file__).parent
-_spec = importlib.util.spec_from_file_location("teacher_sample", HERE / "bakeoff.py")
-ts = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(ts)
+from reflexive import runner
+from reflexive.runner import Record, Task, is_broken
+from reflexive.stats import wilson
 
 TEMPERATURES = [0.0, 0.7, 0.7]  # attempt 1, 2, 3
 # The customer's replies are a few sentences. Without a cap, OpenRouter reserves GPT-4.1's full
@@ -80,11 +82,11 @@ JUDGED = {"NL_ASSERTION", "COMMUNICATE"}
 DOMAINS = ("retail", "airline", "telecom")
 
 
-def remaining_train_tasks() -> list[tuple[str, str]]:
+def remaining_train_tasks() -> list[Task]:
     """Every train task in the three domains, minus phase 1's fixed 30, in a stable order."""
     from tau2.registry import registry
 
-    used = set(ts.sample_tasks())
+    used = set(runner.sample_tasks())
     out = []
     for d in DOMAINS:
         out += [(d, t) for t in sorted(registry.get_task_splits_loader(d)()["train"],
@@ -92,7 +94,7 @@ def remaining_train_tasks() -> list[tuple[str, str]]:
     return out
 
 
-def db_only_pass(rec: dict) -> bool:
+def db_only_pass(rec: Record) -> bool:
     """Would it pass on the deterministic checks alone? (The phase 1 measure.)"""
     if rec.get("termination") not in ("agent_stop", "user_stop"):
         return False
@@ -103,8 +105,9 @@ def db_only_pass(rec: dict) -> bool:
 # --- Report -------------------------------------------------------------------------------------
 
 
-def report(recs: list[dict], attempts: int = 3) -> dict:
-    by_task: dict[tuple[str, str], list[dict]] = {}
+def report(recs: list[Record], attempts: int = 3) -> dict[str, dict[str, Any]]:
+    """Pass rates, fixes, broken runs and cost per domain, plus \"all\"."""
+    by_task: dict[Task, list[Record]] = {}
     for r in recs:
         by_task.setdefault((r["domain"], r["task_id"]), []).append(r)
     rows = {}
@@ -125,9 +128,9 @@ def report(recs: list[dict], attempts: int = 3) -> dict:
             "pass_all_3": _rate([all(r["outcome"]["passed"] for r in v) for v in complete.values()]),
             "db_only_pass1": _rate([db_only_pass(r) for v in tasks.values() for r in v
                                     if r.get("attempt") == 1]),
-            "fixes": sum(r["outcome"]["passed"] and not ts._broken(r) for r in convs),
+            "fixes": sum(r["outcome"]["passed"] and not is_broken(r) for r in convs),
             "clean_fixes": sum(_clean(r) for r in convs),
-            "broken": sum(ts._broken(r) for r in convs),
+            "broken": sum(is_broken(r) for r in convs),
             "judge_errors": sum(bool(r.get("judge_error")) for r in convs),
             "cost": sum((r["agent_usage"].get("est_cost") or 0) + (r.get("user_cost") or 0) for r in convs),
         }
@@ -138,20 +141,20 @@ def _rate(xs: list[bool]) -> tuple[int, int]:
     return sum(xs), len(xs)
 
 
-def _clean(rec: dict) -> bool:
+def _clean(rec: Record) -> bool:
     """A passing conversation with no retried failed calls and no unknown tools.
 
     Invented-ID flags aren't used yet: in phase 1 every flag for the top teachers was a date
     worked out from the conversation (SEL-9 will make the check ignore dates).
     """
     x = rec["diagnostics"]
-    return (rec["outcome"]["passed"] and not ts._broken(rec) and not rec.get("judge_error")
+    return (rec["outcome"]["passed"] and not is_broken(rec) and not rec.get("judge_error")
             and not x["repeated_failures"] and not x["unknown_tools"])
 
 
-def needs_judging(rec: dict) -> bool:
+def needs_judging(rec: Record) -> bool:
     """Scored without its judged checks (a judge call failed, or the run used --no-judges)."""
-    if ts._broken(rec) and not rec.get("judge_error"):
+    if is_broken(rec) and not rec.get("judge_error"):
         return False
     return bool(rec.get("judge_error")) or bool(rec["outcome"].get("skipped"))
 
@@ -169,7 +172,7 @@ def rejudge(path: pathlib.Path, workers: int = 2, tries: int = 6) -> tuple[int, 
     recs = [json.loads(x) for x in path.read_text().splitlines()]
     todo = [r for r in recs if needs_judging(r)]
 
-    def one(r: dict) -> bool:
+    def one(r: Record) -> bool:
         for k in range(tries):
             try:
                 o = score(r["domain"], r["task_id"], r["messages"], r["termination"], judges=True)
@@ -193,13 +196,13 @@ def rejudge(path: pathlib.Path, workers: int = 2, tries: int = 6) -> tuple[int, 
     return ok, len(todo)
 
 
-def print_report(model: str, rows: dict) -> None:
-    def pct(kn):
+def print_report(model: str, rows: dict[str, dict[str, Any]]) -> None:
+    def pct(kn: tuple[int, int]) -> str:
         k, n = kn
-        lo, hi = ts.wilson(k, n)
+        lo, hi = wilson(k, n)
         return f"{k:>3}/{n:<3} ({k / n:>4.0%}, {lo:.0%}–{hi:.0%})" if n else "      -       "
 
-    print(f"\n=== {model}: train tasks not used in phase 1 (judges on) ===")
+    print(f"\n=== {model}: train tasks (judges on) ===")
     print(f"{'domain':<8} {'pass@1 (judged)':>24} {'pass@1 (DB only)':>24} {'pass@3: a fix exists':>24} "
           f"{'pass^3: all 3 pass':>24} {'clean fixes':>11} {'broken':>6} {'cost':>7}")
     for d, s in rows.items():
@@ -214,12 +217,111 @@ def print_report(model: str, rows: dict) -> None:
           "Cost = teacher + simulated customer (judges not included).")
 
 
+# --- Running ------------------------------------------------------------------------------------
+
+Attempt = tuple[str, str, int]  # (domain, task_id, attempt number)
+
+
+def pick_tasks(which: str, domains: list[str], *, sample: int | None = None,
+               limit: int | None = None) -> list[Task]:
+    """The tasks to run: phase 1's rest, its 30, or all; then a sample per domain, then a limit."""
+    pool = {"rest": remaining_train_tasks, "phase1": runner.sample_tasks,
+            "all": lambda: runner.sample_tasks() + remaining_train_tasks()}[which]()
+    tasks = [t for t in pool if t[0] in domains]
+    if sample:
+        tasks = [t for d in DOMAINS for t in random.Random(0).sample(
+            [x for x in tasks if x[0] == d], min(sample, sum(x[0] == d for x in tasks)))]
+    return tasks[:limit] if limit else tasks
+
+
+def load_done(out: pathlib.Path, *, retry_broken: bool) -> dict[Attempt, Record]:
+    """The attempts already saved (all of them, or only unbroken ones with --retry-broken)."""
+    done: dict[Attempt, Record] = {}
+    if not out.exists():
+        return done
+    for line in out.read_text().splitlines():
+        r = json.loads(line)
+        if not (retry_broken and is_broken(r)):
+            done[(r["domain"], r["task_id"], r["attempt"])] = r
+    if retry_broken:  # rewrite the file without the broken attempts about to be redone
+        out.write_text("".join(json.dumps(r) + "\n" for r in done.values()))
+    return done
+
+
+def _passed(done: dict[Attempt, Record], d: str, t: str) -> bool:
+    return any(r["outcome"]["passed"] for (dd, tt, _), r in done.items() if (dd, tt) == (d, t))
+
+
+def ready_to_run(model: str, customer: str, *, judges: bool, todo: bool) -> bool:
+    """Credits, the model, the customer and the judges all work: checked before any spend."""
+    left = runner.openrouter_credits()
+    if left is not None:
+        print(f"   OpenRouter credits left: ${left:.2f}")
+        if left < runner.MIN_CREDITS:
+            print("   ⛔ add credits at https://openrouter.ai/settings/credits first")
+            return False
+    print(f"   simulated customer: {customer}; judges: {', '.join(judge_models()) if judges else 'off'}")
+    if not todo:
+        return True
+    runner.make_agent(model)()  # fail now if the model can't be set up
+    problems = preflight([customer, *(judge_models() if judges else [])])
+    if problems:
+        print("   ⛔ not started; a test call failed:")
+        for p in problems:
+            print(f"      {p}")
+        return False
+    return True
+
+
+def _note(rec: Record) -> str:
+    o = rec["outcome"]
+    return "; ".join(s for s, on in (
+        ("judge error", rec.get("judge_error")),
+        (f"BROKEN ({rec.get('error') or rec['termination']})"[:120], is_broken(rec)),
+        ("DB ok, judge failed", o.get("judged") and not o["passed"] and db_only_pass(rec))) if on)
+
+
+def run_attempts(a: argparse.Namespace, tasks: list[Task], done: dict[Attempt, Record],
+                 out: pathlib.Path, customer: str) -> None:
+    """One round per attempt number; a task's retries run only if it hasn't passed yet."""
+    mode = "all" if a.all_attempts else "until_pass"
+    n = 0
+    with out.open("a") as f, ThreadPoolExecutor(a.workers) as pool:
+        for i in range(1, a.attempts + 1):
+            round_todo = [(d, t) for d, t in tasks if (d, t, i) not in done
+                          and (a.all_attempts or not _passed(done, d, t))]
+            if not round_todo:
+                continue
+            temperature = TEMPERATURES[min(i, 3) - 1]
+            print(f"-- attempt {i} (temperature {temperature}): {len(round_todo)} tasks")
+            futures = {pool.submit(runner.run_one, a.model, d, t, temperature=temperature,
+                                   judges=not a.no_judges, provider=a.provider,
+                                   user_llm=customer, user_llm_args=CUSTOMER_ARGS):
+                       (d, t) for d, t in round_todo}
+            for fut in as_completed(futures):
+                d, t = futures[fut]
+                rec = fut.result()
+                if runner.out_of_credits(rec) or runner.model_gone(rec):
+                    for other in futures:
+                        other.cancel()
+                    print(f"   ⛔ stopping: {rec['error'][:200]}. Fix it, then run the same command again.")
+                    return
+                n += 1
+                rec["attempt"], rec["attempt_mode"] = i, mode
+                f.write(json.dumps(rec) + "\n")
+                f.flush()
+                done[(d, t, i)] = rec
+                short = t if len(t) <= 40 else t[:37] + "..."  # telecom IDs are long
+                print(f"   [{n:>3}] {'✅' if rec['outcome']['passed'] else '❌'} {d}:{short:<5} #{i}  "
+                      f"{rec['diagnostics']['tools_ran']:>2} tools {rec['wall_s']:>5.0f}s  {_note(rec)}")
+
+
 # --- Main ---------------------------------------------------------------------------------------
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--model", default="glm53f", help="a teacher_sample model name (default glm53f)")
+    ap.add_argument("--model", default="glm53f", help="a model name from reflexive.runner (default glm53f)")
     ap.add_argument("--attempts", type=int, default=3, help="most attempts per task (default 3)")
     ap.add_argument("--all-attempts", action="store_true",
                     help="run every attempt even after a pass (gives pass^3; ~2.5x the cost)")
@@ -242,7 +344,7 @@ def main() -> int:
                     help="score saved conversations that are missing their judged checks, then exit")
     a = ap.parse_args()
 
-    out = pathlib.Path(f"results/fixes/{ts._file_name(a.model)}.jsonl")
+    out = pathlib.Path(f"results/fixes/{runner.file_name(a.model)}.jsonl")
     if a.rejudge:
         if not out.exists():
             ap.error(f"nothing saved yet at {out}")
@@ -254,22 +356,14 @@ def main() -> int:
         print_report(a.model, report(recs, a.attempts))
         return 0
 
-    pool_ = {"rest": remaining_train_tasks, "phase1": ts.sample_tasks,
-             "all": lambda: ts.sample_tasks() + remaining_train_tasks()}[a.tasks]()
-    tasks = [t for t in pool_ if t[0] in a.domains]
-    if a.sample:
-        import random
-
-        tasks = [t for d in DOMAINS for t in random.Random(0).sample(
-            [x for x in tasks if x[0] == d], min(a.sample, sum(x[0] == d for x in tasks)))]
-    tasks = tasks[:a.limit] if a.limit else tasks
+    tasks = pick_tasks(a.tasks, a.domains, sample=a.sample, limit=a.limit)
     if a.list:
         for d in DOMAINS:
             ids = [t for dd, t in tasks if dd == d]
             print(f"{d} ({len(ids)}): {' '.join(ids)}")
         print(f"total: {len(tasks)}")
         return 0
-    if not a.no_judges and not __import__("os").environ.get("OPENAI_API_KEY"):
+    if not a.no_judges and not os.environ.get("OPENAI_API_KEY"):
         ap.error("judges need OPENAI_API_KEY in .env (or pass --no-judges)")
 
     from tau2.gym import register_gym_agent
@@ -280,82 +374,18 @@ def main() -> int:
     episode._REGISTERED = True
 
     out.parent.mkdir(parents=True, exist_ok=True)
-    done: dict[tuple[str, str, int], dict] = {}
-    if out.exists():
-        for line in out.read_text().splitlines():
-            r = json.loads(line)
-            if a.retry_broken and ts._broken(r):
-                continue
-            done[(r["domain"], r["task_id"], r["attempt"])] = r
-        if a.retry_broken:
-            out.write_text("".join(json.dumps(r) + "\n" for r in done.values()))
+    done = load_done(out, retry_broken=a.retry_broken)
     todo = [(d, t, i) for d, t in tasks for i in range(1, a.attempts + 1) if (d, t, i) not in done]
     if not a.all_attempts:  # the most it could be; retries only run for tasks without a pass
-        todo = [(d, t, i) for d, t, i in todo if i == 1 or not any(
-            r["outcome"]["passed"] for (dd, tt, _), r in done.items() if (dd, tt) == (d, t))]
+        todo = [(d, t, i) for d, t, i in todo if i == 1 or not _passed(done, d, t)]
     print(f"== {a.model}: {len(tasks)} tasks × {a.attempts} attempts; {len(done)} done, {len(todo)} to run "
           f"→ {out}")
-    left = ts.openrouter_credits()
-    if left is not None:
-        print(f"   OpenRouter credits left: ${left:.2f}")
-        if left < ts.MIN_CREDITS:
-            print("   ⛔ add credits at https://openrouter.ai/settings/credits first")
-            return 1
-
     customer = CUSTOMER[a.customer or "openrouter"]  # OpenAI's low new-account rate limits stall runs
-    print(f"   simulated customer: {customer}; judges: {'off' if a.no_judges else ', '.join(judge_models())}")
-    if todo:
-        ts.make_agent(a.model)()  # fail now if the model can't be set up
-        problems = preflight([customer, *([] if a.no_judges else judge_models())])
-        if problems:
-            print("   ⛔ not started; a test call failed:")
-            for p in problems:
-                print(f"      {p}")
-            return 1
-
-    def passed(d: str, t: str) -> bool:
-        return any(r["outcome"]["passed"] for (dd, tt, _), r in done.items() if (dd, tt) == (d, t))
-
-    mode = "all" if a.all_attempts else "until_pass"
-    n, stop = 0, False
-    with out.open("a") as f, ThreadPoolExecutor(a.workers) as pool:
-        for i in range(1, a.attempts + 1):  # one round per attempt number
-            if stop:
-                break
-            round_todo = [(d, t) for d, t in tasks if (d, t, i) not in done
-                          and (a.all_attempts or not passed(d, t))]
-            if not round_todo:
-                continue
-            print(f"-- attempt {i} (temperature {TEMPERATURES[min(i, 3) - 1]}): {len(round_todo)} tasks")
-            futures = {pool.submit(ts.run_one, a.model, d, t, temperature=TEMPERATURES[min(i, 3) - 1],
-                                   judges=not a.no_judges, provider=a.provider,
-                                   user_llm=customer, user_llm_args=CUSTOMER_ARGS):
-                           (d, t) for d, t in round_todo}
-            for fut in as_completed(futures):
-                d, t = futures[fut]
-                rec = fut.result()
-                if ts._no_credits(rec) or ts._gone(rec):
-                    for other in futures:
-                        other.cancel()
-                    print(f"   ⛔ stopping: {rec['error'][:200]}. Fix it, then run the same command again.")
-                    stop = True
-                    break
-                n += 1
-                rec["attempt"], rec["attempt_mode"] = i, mode
-                f.write(json.dumps(rec) + "\n")
-                f.flush()
-                done[(d, t, i)] = rec
-                o, judged = rec["outcome"], rec["outcome"].get("judged")
-                note = "; ".join(s for s, on in (
-                    ("judge error", rec.get("judge_error")),
-                    (f"BROKEN ({rec.get('error') or rec['termination']})"[:120], ts._broken(rec)),
-                    ("DB ok, judge failed", judged and not o["passed"] and db_only_pass(rec))) if on)
-                short = t if len(t) <= 40 else t[:37] + "..."  # telecom IDs are long
-                print(f"   [{n:>3}] {'✅' if o['passed'] else '❌'} {d}:{short:<5} #{i}  "
-                      f"{rec['diagnostics']['tools_ran']:>2} tools {rec['wall_s']:>5.0f}s  {note}")
+    if not ready_to_run(a.model, customer, judges=not a.no_judges, todo=bool(todo)):
+        return 1
+    run_attempts(a, tasks, done, out, customer)
     print_report(a.model, report(list(done.values()), a.attempts))
     return 0
-
 
 if __name__ == "__main__":
     sys.exit(main())

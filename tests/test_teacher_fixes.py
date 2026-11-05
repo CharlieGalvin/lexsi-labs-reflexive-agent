@@ -51,7 +51,7 @@ def test_remaining_train_tasks_are_the_148_not_used_in_phase_1():
     fx = load()
     tasks = fx.remaining_train_tasks()
     assert len(tasks) == 148 and len(set(tasks)) == 148
-    assert not set(tasks) & set(fx.ts.sample_tasks())
+    assert not set(tasks) & set(fx.runner.sample_tasks())
     assert {d: sum(x == d for x, _ in tasks) for d in fx.DOMAINS} == {"retail": 54, "airline": 20,
                                                                        "telecom": 74}
 

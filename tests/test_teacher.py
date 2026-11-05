@@ -9,13 +9,14 @@ import pytest
 
 from reflexive.teacher import (
     TOOL_RESULT,
+    CohereClient,
     ContextTooLong,
     EmptyTeacherReply,
     RateLimiter,
-    TeacherClient,
     find_prompted_calls,
     parse_prompted,
     to_prompted,
+    tool_errors,
     tool_stub,
     unseen_arguments,
 )
@@ -156,7 +157,7 @@ def test_tool_calls_embedded_in_prose_are_found(text, name):
 
 
 def test_embedded_call_drops_the_prose_and_any_made_up_result():
-    t = TeacherClient("prompted", completion=fake_completion([AIRLINE_REPLY]), rpm=0)
+    t = CohereClient("prompted", completion=fake_completion([AIRLINE_REPLY]), rpm=0)
     turn = t.turn([{"role": "user", "content": "go ahead"}], TOOLS)
     assert turn["content"] is None  # not "...successfully sent..." to the customer
     assert json.loads(turn["tool_calls"][0]["function"]["arguments"]) == {
@@ -215,7 +216,7 @@ def test_action_prefixed_reply_is_a_call_not_embedded():
 
 def test_cohere_turn_sends_stop_sequences():
     fc = fake_completion(['Action: ```json\n[{"tool_name": "get_order_details", "parameters": {}}]\n```'])
-    t = TeacherClient("prompted", completion=fc, rpm=0)
+    t = CohereClient("prompted", completion=fc, rpm=0)
     assert t.style == "cohere"  # Aya's own format is the teacher's default
     turn = t.turn([{"role": "system", "content": "P"}, {"role": "user", "content": "hi"}], [ORDER_TOOL])
     assert turn["tool_calls"][0]["function"]["name"] == "get_order_details"
@@ -225,7 +226,7 @@ def test_cohere_turn_sends_stop_sequences():
 def test_directly_answer_with_prose_becomes_a_message():
     reply = ('Your order is on its way!\n\nAction: ```json\n'
              '[{"tool_name": "directly-answer", "parameters": {}}]\n```')
-    t = TeacherClient("prompted", completion=fake_completion([reply]), rpm=0)
+    t = CohereClient("prompted", completion=fake_completion([reply]), rpm=0)
     turn = t.turn([{"role": "user", "content": "thanks"}], [ORDER_TOOL])
     assert turn == {"role": "assistant", "content": "Your order is on its way!"}
     assert t.usage.directly_answer == 1 and t.usage.calls == 1
@@ -234,7 +235,7 @@ def test_directly_answer_with_prose_becomes_a_message():
 def test_directly_answer_alone_asks_once_for_the_reply():
     fc = fake_completion(['Action: ```json\n[{"tool_name": "directly-answer", "parameters": {}}]\n```',
                           "You're welcome, have a nice day!"])
-    t = TeacherClient("prompted", completion=fc, rpm=0)
+    t = CohereClient("prompted", completion=fc, rpm=0)
     turn = t.turn([{"role": "user", "content": "thanks"}], [ORDER_TOOL])
     assert turn == {"role": "assistant", "content": "You're welcome, have a nice day!"}
     assert t.usage.calls == 2 and "plain text" in fc.calls[1]["messages"][-1]["content"]
@@ -242,21 +243,21 @@ def test_directly_answer_alone_asks_once_for_the_reply():
 
 def test_empty_reply_is_re_asked_once_without_stop_sequences():
     fc = fake_completion(["", "Could you share your order number?"])
-    t = TeacherClient("prompted", completion=fc, rpm=0)
+    t = CohereClient("prompted", completion=fc, rpm=0)
     turn = t.turn([{"role": "user", "content": "hi"}], [ORDER_TOOL])
     assert turn == {"role": "assistant", "content": "Could you share your order number?"}
     assert t.usage.empty == 1 and "stop" in fc.calls[0] and "stop" not in fc.calls[1]
 
 
 def test_twice_empty_reply_raises_instead_of_sending_an_empty_turn():
-    t = TeacherClient("prompted", completion=fake_completion(["", "   "]), rpm=0)
+    t = CohereClient("prompted", completion=fake_completion(["", "   "]), rpm=0)
     with pytest.raises(EmptyTeacherReply):
         t.turn([{"role": "user", "content": "hi"}], [ORDER_TOOL])
 
 
 def test_message_is_cut_before_invented_results():
     reply = "Let me check that for you.\n<results>\nDocument: 0\nresult: shipped\n</results>"
-    t = TeacherClient("prompted", completion=fake_completion(["", reply]), rpm=0)
+    t = CohereClient("prompted", completion=fake_completion(["", reply]), rpm=0)
     turn = t.turn([{"role": "user", "content": "hi"}], [ORDER_TOOL])
     assert turn["content"] == "Let me check that for you."
 
@@ -283,7 +284,7 @@ def test_unseen_arguments_flags_invented_ids_from_a_real_transcript():
 def test_pseudo_tool_call_text_is_counted_as_unparsed():
     # Seen 3 Nov: "[(tool_name: get_reservation_details, parameters: {...})]" is not JSON
     text = 'Let me check.\n\n[(tool_name: get_reservation_details, parameters: {"reservation_id": "X"})]'
-    t = TeacherClient("prompted", style="agenttune", completion=fake_completion([text]), rpm=0)
+    t = CohereClient("prompted", style="agenttune", completion=fake_completion([text]), rpm=0)
     turn = t.turn([{"role": "user", "content": "hi"}], TOOLS)
     assert "tool_calls" not in turn and t.usage.unparsed == 1
 
@@ -318,7 +319,7 @@ def test_no_response_from_the_api_is_retried(monkeypatch):
         calls.append(1)
         return None if len(calls) == 1 else ok(**kw)
 
-    t = TeacherClient("prompted", completion=flaky, rpm=0)
+    t = CohereClient("prompted", completion=flaky, rpm=0)
     assert t.turn([{"role": "user", "content": "hi"}], TOOLS)["content"] == "fine" and len(calls) == 2
 
 
@@ -329,7 +330,7 @@ def test_too_many_tokens_becomes_context_too_long():
     def refuse(**kw):
         raise BadRequestError("too many tokens: size limit exceeded by 35 tokens. The limit is 8192")
 
-    t = TeacherClient("prompted", completion=refuse, rpm=0)
+    t = CohereClient("prompted", completion=refuse, rpm=0)
     with pytest.raises(ContextTooLong):
         t.turn([{"role": "user", "content": "hi"}], TOOLS)
 
@@ -340,7 +341,7 @@ def test_too_many_tokens_becomes_context_too_long():
 def test_prompted_turn_returns_tool_calls_and_counts_usage():
     fc = fake_completion(['[{"tool_name": "get_order_details", "parameters": {"order_id": "#W1"}}]',
                           "Your order is pending."])
-    t = TeacherClient("prompted", completion=fc, rpm=0)
+    t = CohereClient("prompted", completion=fc, rpm=0)
     turn = t.turn([{"role": "system", "content": "P"}, {"role": "user", "content": "hi"}], TOOLS)
     assert turn["content"] is None and turn["tool_calls"][0]["function"]["name"] == "get_order_details"
     assert "tools" not in fc.calls[0]  # prompted: no native tools parameter
@@ -354,14 +355,14 @@ def test_prompted_turn_returns_tool_calls_and_counts_usage():
 
 def test_native_turn_passes_tools_and_reads_structured_calls():
     fc = fake_completion([[{"id": "x1", "name": "get_order_details", "args": {"order_id": "#W1"}}]])
-    t = TeacherClient("native", completion=fc, rpm=0)
+    t = CohereClient("native", completion=fc, rpm=0)
     turn = t.turn([{"role": "user", "content": "hi"}], TOOLS)
     assert fc.calls[0]["tools"] == TOOLS
     assert turn["tool_calls"][0]["id"] == "x1"
 
 
 def test_unparsable_json_reply_is_sent_as_a_message_and_counted():
-    t = TeacherClient("prompted", completion=fake_completion(['[{"tool_name": "x", "parameters": ']),
+    t = CohereClient("prompted", completion=fake_completion(['[{"tool_name": "x", "parameters": ']),
                       rpm=0)
     turn = t.turn([{"role": "user", "content": "hi"}], TOOLS)
     assert "tool_calls" not in turn and t.usage.unparsed == 1
@@ -399,7 +400,7 @@ def test_retries_transient_errors_but_not_rejected_requests(monkeypatch):
             raise RateLimitError("429")
         return ok(**kw)
 
-    t = TeacherClient("prompted", completion=flaky, rpm=0)
+    t = CohereClient("prompted", completion=flaky, rpm=0)
     assert t.turn([{"role": "user", "content": "hi"}], TOOLS)["content"] == "fine"
     assert len(attempts) == 3 and t.usage.calls == 1 and t.usage.errors == 0
 
@@ -409,7 +410,7 @@ def test_retries_transient_errors_but_not_rejected_requests(monkeypatch):
         rejected.append(1)
         raise BadRequestError("tool use is not supported by the provided model")
 
-    t = TeacherClient("native", completion=bad, rpm=0)
+    t = CohereClient("native", completion=bad, rpm=0)
     with pytest.raises(BadRequestError):
         t.turn([{"role": "user", "content": "hi"}], TOOLS)
     assert len(rejected) == 1 and t.usage.errors == 1
@@ -417,16 +418,16 @@ def test_retries_transient_errors_but_not_rejected_requests(monkeypatch):
 
 def test_no_rate_limit_by_default(monkeypatch):
     monkeypatch.delenv("TEACHER_RPM", raising=False)
-    t = TeacherClient(completion=fake_completion([]))
+    t = CohereClient(completion=fake_completion([]))
     assert t.limiter.interval == 0.0
     monkeypatch.setenv("TEACHER_RPM", "20")
-    assert TeacherClient(completion=fake_completion([])).limiter.interval == pytest.approx(3.0)
+    assert CohereClient(completion=fake_completion([])).limiter.interval == pytest.approx(3.0)
 
 
 def test_missing_key_is_explained(monkeypatch):
     monkeypatch.delenv("COHERE_API_KEY", raising=False)
     with pytest.raises(RuntimeError, match="COHERE_API_KEY"):
-        TeacherClient()
+        CohereClient()
 
 
 # --- End to end through Tau2Episode (needs τ²-bench) -------------------------------------------
@@ -444,7 +445,7 @@ def test_prompted_teacher_solves_a_task_through_the_episode():
     replies = [json.dumps([{"tool_name": tc["name"], "parameters": tc["arguments"]}
                            for tc in m["tool_calls"]]) for m in gold]
     replies.append("Your exchange is confirmed. ###STOP###")  # τ²-bench's agent stop
-    teacher = TeacherClient("prompted", completion=fake_completion(replies), rpm=0)
+    teacher = CohereClient("prompted", completion=fake_completion(replies), rpm=0)
     ep = Tau2Episode("retail", "0", user_llm="gpt-4.1",
                      user_llm_args={"mock_response": "Yes, please go ahead."},
                      max_context=128_000, reserve=4_096)
@@ -466,3 +467,28 @@ def test_dates_are_not_invented_ids():
              "function": {"name": "search_direct_flight",
                           "arguments": '{"date": "2024-05-24", "user_id": "mia_li_3668"}'}}]}]
     assert unseen_arguments(msgs) == ["mia_li_3668"]
+
+
+def test_the_old_name_still_works() -> None:
+    """reflexive.arms imports the client under its first name."""
+    from reflexive.teacher import TeacherClient
+
+    assert TeacherClient is CohereClient
+
+
+def test_tool_errors_counts_unknown_tools_and_retried_failures() -> None:
+    def call(i, name, args):
+        return {"role": "assistant", "content": None,
+                "tool_calls": [{"id": i, "function": {"name": name, "arguments": json.dumps(args)}}]}
+
+    msgs = [
+        call("a", "check_apn_settings", {}),
+        {"role": "tool", "tool_call_id": "a", "content": "Error: Tool 'check_apn_settings' not found."},
+        call("b", "exchange", {"item_ids": ["1012345678"]}),
+        {"role": "tool", "tool_call_id": "b", "content": "Error: Number of 1012345678 not found."},
+        call("c", "exchange", {"item_ids": ["1012345678"]}),  # identical retry of a failure
+        {"role": "tool", "tool_call_id": "c", "content": "Error: Number of 1012345678 not found."},
+        call("d", "exchange", {"item_ids": ["1151293680"]}),  # different args: not a retry
+        {"role": "tool", "tool_call_id": "d", "content": '{"status": "exchange requested"}'},
+    ]
+    assert tool_errors(msgs) == {"unknown_tools": 1, "repeated_failures": 1}

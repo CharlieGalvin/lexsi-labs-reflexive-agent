@@ -37,3 +37,10 @@ def test_paired_bootstrap_is_reproducible_and_brackets_the_difference() -> None:
     b = {t: t % 3 == 0 for t in range(30)}  # 10/30
     lo, hi = paired_bootstrap(a, b, reps=2000)
     assert lo < 5 / 30 < hi and (lo, hi) == paired_bootstrap(a, b, reps=2000)
+
+
+def test_wilson_matches_the_table_we_planned_the_bakeoff_with() -> None:
+    lo, hi = wilson(0, 30)
+    assert lo == 0 and round(hi, 3) == 0.114
+    lo, hi = wilson(3, 30)
+    assert (round(lo, 3), round(hi, 3)) == (0.035, 0.256)
