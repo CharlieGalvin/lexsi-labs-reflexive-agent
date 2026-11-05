@@ -133,12 +133,11 @@ teacher-probe model="c4ai-aya-expanse-32b":
 teacher-check style="cohere" hints="none":
     python scripts/archive/teacher_check.py --style {{style}} --hints {{hints}}
 
-# Is Aya a usable teacher? Same 30 train tasks for Aya and a reference (default: Qwen3 32B). ~$5
+# Teacher bake-off, phase 1: models on 30 fixed train tasks (`--models bakeoff`: the slate, ~$26; `--list`: free)
 teacher-sample *models="aya qwen":
     python scripts/teacher/bakeoff.py --models {{models}}
 
-# Fix run: the teacher (default GLM-5.3-Flash) on the 148 train tasks phase 1 didn't use, 3 attempts,
-# judges on. ~$13. Try `just teacher-fixes --limit 2` first; `--report` summarises what's saved.
+# Fix run: GLM-5.3-Flash, up to 3 attempts per train task, judges on (`--tasks all`: 178, $11.20; `--report`: free)
 teacher-fixes *args:
     python scripts/teacher/fixes.py {{args}}
 
