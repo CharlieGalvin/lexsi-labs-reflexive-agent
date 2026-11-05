@@ -385,11 +385,9 @@ class Tau2Episode:
         call.__qualname__ = tool.name
         call.__doc__ = tool._get_description()
         sig = tool.__signature__
-        call.__signature__ = sig.replace(
-            parameters=[  # ty: ignore[unresolved-attribute]  # inspect reads it
-                p for p in sig.parameters.values() if p.kind != inspect.Parameter.VAR_KEYWORD
-            ]
-        )
+        params = [p for p in sig.parameters.values() if p.kind != inspect.Parameter.VAR_KEYWORD]
+        # Python lets a function carry a __signature__ (inspect reads it); ty doesn't know that
+        call.__signature__ = sig.replace(parameters=params)  # ty: ignore[unresolved-attribute]
         return call
 
     # --- Result --------------------------------------------------------------------------
