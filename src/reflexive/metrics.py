@@ -11,6 +11,9 @@ Definitions:
   (``reflexive.teacher``: unknown tools, ID-like arguments never seen before, a failed call
   repeated unchanged), not the Tool / Arg / Loop classifier (``reflexive.hallucination``).
 - **transferred_to_human**: conversations where the agent called ``transfer_to_human_agents``.
+- **What counts crashed records:** only the money and the calls (``student_calls``,
+  ``student_replies_cut_off``, ``cost_usd``), which were spent either way. Every rate,
+  count and per-conversation figure uses the scored conversations only.
 """
 
 from __future__ import annotations
@@ -108,8 +111,14 @@ def arm_metrics(records: list[Record]) -> dict[str, Any]:
             else None
         ),
         "student_tokens_per_conversation_median": (
-            int(statistics.median(u.get("prompt_tokens", 0) + u.get("completion_tokens", 0) for u in usage))
-            if usage
+            int(
+                statistics.median(
+                    (r.get("agent_usage") or {}).get("prompt_tokens", 0)
+                    + (r.get("agent_usage") or {}).get("completion_tokens", 0)
+                    for r in scored
+                )
+            )
+            if n
             else None
         ),
         "cost_usd": {

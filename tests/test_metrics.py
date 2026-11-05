@@ -102,8 +102,14 @@ def test_cost_tokens_and_calls_per_success() -> None:
 am = load_script("arms/metrics")
 
 
-def _run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, recs: list[Record], *args: str) -> tuple[int, Path]:
-    src = tmp_path / "A-retail-train.jsonl"
+def _run(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    recs: list[Record],
+    *args: str,
+    name: str = "A-retail-train",
+) -> tuple[int, Path]:
+    src = tmp_path / f"{name}.jsonl"
     src.write_text("".join(json.dumps(r) + "\n" for r in recs))
     out = tmp_path / "out.metrics.json"
     monkeypatch.setattr(sys, "argv", ["metrics.py", str(src), "--out", str(out), "--owner", "Test", *args])
@@ -127,3 +133,67 @@ def test_a_test_split_task_is_refused(tmp_path: Path, monkeypatch, capsys) -> No
     ]
     code, out = _run(tmp_path, monkeypatch, recs)
     assert code == 1 and not out.exists() and "test-split" in capsys.readouterr().out
+
+
+# --- What the script refuses (review of #42) ----------------------------------------------------
+
+TRAIN, DEV = splits.task_ids("retail", "train"), splits.task_ids("retail", "dev")
+
+
+def test_a_file_with_train_and_dev_tasks_needs_only(tmp_path: Path, monkeypatch, capsys) -> None:
+    """Chiara's telecom file is like this: without --only it was summarised as 'train'."""
+    code, out = _run(tmp_path, monkeypatch, [rec(TRAIN[0], False), rec(DEV[0], True)])
+    assert code == 1 and not out.exists() and "--only" in capsys.readouterr().out
+
+
+def test_the_split_comes_from_the_records_not_the_file_name(tmp_path: Path, monkeypatch, capsys) -> None:
+    code, _ = _run(tmp_path, monkeypatch, [rec(TRAIN[0], False)], name="A-retail-dev")
+    assert code == 1 and "named dev, but its tasks are train" in capsys.readouterr().out
+    code, out = _run(tmp_path, monkeypatch, [rec(TRAIN[0], False)], name="A-retail-train.retry")
+    assert code == 0 and json.loads(out.read_text())["run"] == "arm-A-retail-train"
+
+
+def test_a_file_mixing_domains_or_arms_is_refused(tmp_path: Path, monkeypatch, capsys) -> None:
+    mixed = [rec(TRAIN[0], False), rec(splits.task_ids("airline", "train")[0], False, domain="airline")]
+    assert _run(tmp_path, monkeypatch, mixed)[0] == 1 and "several domains" in capsys.readouterr().out
+    arms = [rec(TRAIN[0], False), rec(TRAIN[1], False, arm="C")]
+    assert _run(tmp_path, monkeypatch, arms)[0] == 1 and "several arms" in capsys.readouterr().out
+
+
+def test_a_test_task_is_refused_even_with_only(tmp_path: Path, monkeypatch, capsys) -> None:
+    """The filter mustn't hide it: test tasks are never mixed in with train or dev."""
+    recs = [rec(DEV[0], True), rec(splits.task_ids("retail", "test")[0], True)]
+    code, out = _run(tmp_path, monkeypatch, recs, "--only", "dev")
+    assert code == 1 and not out.exists() and "test-split" in capsys.readouterr().out
+
+
+def test_a_task_in_no_split_is_a_message_not_a_traceback(tmp_path: Path, monkeypatch, capsys) -> None:
+    code, _ = _run(tmp_path, monkeypatch, [rec("9999", False)])
+    assert code == 1 and "'9999' is in no frozen split" in capsys.readouterr().out
+
+
+def test_an_existing_summary_is_kept_unless_forced(tmp_path: Path, monkeypatch, capsys) -> None:
+    code, out = _run(tmp_path, monkeypatch, [rec(TRAIN[0], True)])
+    out.write_text('{"history": "Chiara\'s notes"}')
+    code, _ = _run(tmp_path, monkeypatch, [rec(TRAIN[0], True)])
+    assert code == 1 and "Chiara" in out.read_text() and "--force" in capsys.readouterr().out
+    code, _ = _run(tmp_path, monkeypatch, [rec(TRAIN[0], True)], "--force")
+    assert code == 0 and json.loads(out.read_text())["passed"] == 1
+
+
+def test_a_file_where_everything_crashed_is_refused(tmp_path: Path, monkeypatch, capsys) -> None:
+    code, out = _run(tmp_path, monkeypatch, [rec(TRAIN[0], False, error="RateLimitError")])
+    assert code == 1 and not out.exists() and "every conversation" in capsys.readouterr().out
+
+
+def test_the_token_median_ignores_crashed_conversations() -> None:
+    crashed = rec("x", False, error="boom", agent_usage={"prompt_tokens": 0, "completion_tokens": 0})
+    m = arm_metrics([rec("1", True), rec("2", False), crashed, crashed, crashed])
+    assert m["student_tokens_per_conversation_median"] == 1000 and m["conversations"] == 2
+
+
+def test_several_samples_per_task_get_a_note_on_the_range(tmp_path: Path, monkeypatch) -> None:
+    recs = [rec(TRAIN[0], True, sample=0), rec(TRAIN[0], False, sample=1)]
+    _, out = _run(tmp_path, monkeypatch, recs)
+    m = json.loads(out.read_text())
+    assert m["samples_per_task"] == 2 and "too narrow" in m["note_samples"]
