@@ -16,9 +16,9 @@
 
 ## 0. Merge order (Charlie)
 
-1. **#38** (publish script), after Chiara approves.
-2. **#37** (Chiara's Arm A/C harness).
-3. **#39** (docs). **Before merging it**, Claude updates #39 for #37:
+1. ~~**#38**~~ merged 5 Nov.
+2. ~~**#37**~~ merged 5 Nov.
+3. **#39** (docs), then **#40** (Chiara's classifier). **Before merging it**, Claude updates #39 for #37:
    - add `arms.py` and `scripts/rollout.py` to the new README repo-layout block;
    - put Chiara's Arm A row in the "Training and evaluation runs" table of `docs/EXPERIMENTS.md`.
 
@@ -135,6 +135,11 @@ scripts/
 - [ ] Move `load`/`sha256` from `build_golden.py` into the package (the publish script imports a script)
 - [ ] `Tau2Episode`'s default `max_context=8192` (the Tiny Aya leftover) → 128K, or make it required
   (a GRPO loop building episodes directly would cut telecom short)
+- [ ] Data card (`publish_golden.card`, for v1.1): add the size facts now in `docs/DATA_CONTRACT.md`
+  (file sizes, target tokens per record and in total, ~13% of each record is a target)
+- [ ] Wait for #40 (Chiara's classifier): it adds `scripts/dump_tool_schemas.py`,
+  `scripts/spot_check_hallucination.py` and `docs/experiments/HALLUCINATION_CLASSIFIER.md`.
+  Move, type and format them with the rest, and add the page to `docs/experiments/README.md`
 - [ ] `TeacherClient` records the API's `finish_reason`, so a reply cut by `max_tokens` is visible
 
 ## 9. Verify, then raise the PR
