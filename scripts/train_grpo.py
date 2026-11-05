@@ -66,7 +66,7 @@ def build_task(cfg: dict, out: pathlib.Path):
         rows = toy_lookup.questions("train", l2_share=opts.get("l2_share", 0.5))
         ds = Dataset.from_list([
             {"prompt": toy_lookup.prompt(r), "answer": r["answer"], "field": r["field"],
-             "qid": r["qid"], "level": r["level"]}
+             "customer_id": r["customer_id"], "qid": r["qid"], "level": r["level"]}
             for r in rows
         ])
         reward = toy_lookup.make_reward_fn(cfg.get("reward_weights"), log_path=out / "rewards.jsonl")

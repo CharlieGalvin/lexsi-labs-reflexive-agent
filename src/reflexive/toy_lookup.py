@@ -94,11 +94,14 @@ def _by_id() -> dict[str, dict]:
     return {c["customer_id"]: c for c in customers()}
 
 
+# The docstrings below are what the model sees. Keep real-looking example IDs and names out of
+# them: Tiny Aya copied the example ID "C1023" (a real customer) into every name question and
+# answered from the wrong customer's record (baseline, 5 Nov).
 def find_customer(name: str) -> dict:
-    """Find a customer's ID from their full name.
+    """Find a customer's ID from their full name. Use this first when you only know the name.
 
     Args:
-        name: The customer's full name, e.g. "Priya Shah".
+        name: The customer's full name, exactly as written in the question.
 
     Returns:
         A dict with the customer_id, or an error if no customer has that name.
@@ -114,7 +117,8 @@ def get_customer(customer_id: str) -> dict:
     """Get a customer's record: name, plan, balance and mobile data left.
 
     Args:
-        customer_id: The customer's ID, e.g. "C1023".
+        customer_id: The customer's ID, as written in the question or as returned by
+            find_customer. Never make one up.
 
     Returns:
         The customer record, or an error if the ID doesn't exist.
@@ -194,10 +198,14 @@ def tool_calls(conversation: list[dict]) -> list[tuple[str, dict]]:
     return calls
 
 
+# One *answer* (not **bold**). Whitespace inside is allowed: Tiny Aya writes "*45.1\n*".
+_STARRED = re.compile(r"(?<!\*)\*([^*]{1,80})\*(?!\*)")
+
+
 def starred(text: str) -> str | None:
     """The last ``*...*`` answer in ``text`` (ignoring ``**bold**``), or None."""
-    found = re.findall(r"(?<!\*)\*([^*\n]{1,80})\*(?!\*)", text or "")
-    return found[-1].strip() if found else None
+    found = [f.strip() for f in _STARRED.findall(text or "") if f.strip()]
+    return found[-1] if found else None
 
 
 def _matches(predicted: str | None, expected: str, field: str) -> bool:
@@ -210,22 +218,25 @@ def _matches(predicted: str | None, expected: str, field: str) -> bool:
     return num is not None and abs(float(num.group()) - float(expected)) <= tol
 
 
-def score(conversation: list[dict], final_text: str, answer: str, field: str) -> dict:
+def score(conversation: list[dict], final_text: str, answer: str, field: str,
+          customer_id: str | None = None) -> dict:
     """Score one rollout. The components (each 0 or 1, plus counts):
 
     - ``correct``: the starred answer matches the true value
-    - ``tool_ok``: at least one tool call, and every call named a real tool, used a real
-      customer ID and got a result (no errors)
+    - ``tool_ok``: the rollout fetched the asked-about customer's record (``customer_id``) with
+      ``get_customer``, and every call named a real tool, used a real ID of the right customer
+      and got a result (no errors)
     - ``format``: exactly one starred answer in the final reply
-    - ``n_tool_calls``, ``hallucinated_ids`` (``get_customer`` calls with an ID that doesn't exist)
+    - counts: ``n_tool_calls``; ``hallucinated_ids``: ``get_customer`` calls with an ID that
+      doesn't exist; ``wrong_customer``: calls with a real ID of a different customer
     """
     calls = tool_calls(conversation)
     names = {f.__name__ for f in TOOLS}
     ids = _by_id()
-    hallucinated = sum(
-        1 for name, args in calls
-        if name == "get_customer" and str(args.get("customer_id", "")).strip().upper() not in ids
-    )
+    fetched = [str(args.get("customer_id", "")).strip().upper()
+               for name, args in calls if name == "get_customer"]
+    hallucinated = sum(1 for i in fetched if i not in ids)
+    wrong = sum(1 for i in fetched if i in ids and customer_id and i != customer_id)
     # Tool results are "tool" turns, or "user" turns starting "Tool result" when AgentTune folds
     # them for a model without tool support (Tiny Aya).
     errors = sum(
@@ -234,15 +245,18 @@ def score(conversation: list[dict], final_text: str, answer: str, field: str) ->
         and (m.get("role") == "tool"
              or (m.get("role") == "user" and str(m.get("content", "")).startswith("Tool result")))
     )
-    tool_ok = bool(calls) and hallucinated == 0 and errors == 0 and all(n in names for n, _ in calls)
+    right_record = bool(fetched) and (customer_id is None or customer_id in fetched)
+    tool_ok = (right_record and hallucinated == 0 and wrong == 0 and errors == 0
+               and all(n in names for n, _ in calls))
+    n_starred = sum(1 for f in _STARRED.findall(final_text or "") if f.strip())
     predicted = starred(final_text)
-    n_starred = len(re.findall(r"(?<!\*)\*([^*\n]{1,80})\*(?!\*)", final_text or ""))
     return {
         "correct": float(_matches(predicted, answer, field)),
         "tool_ok": float(tool_ok),
         "format": float(n_starred == 1),
         "n_tool_calls": len(calls),
         "hallucinated_ids": hallucinated,
+        "wrong_customer": wrong,
         "predicted": predicted,
     }
 
@@ -262,7 +276,8 @@ def _final_text(conversation: list[dict] | None, completion: Any) -> str:
 def make_reward_fn(weights: dict | None = None, log_path: str | Path | None = None):
     """A GRPO reward function: the weighted sum of :func:`score`'s components.
 
-    TRL passes the dataset columns (``answer``, ``field``, ``qid``, ``level``) and AgentTune's
+    TRL passes the dataset columns (``answer``, ``field``, ``customer_id``, ``qid``, ``level``)
+    and AgentTune's
     rollout fields (``conversations``, ``responses``) as keyword arguments. Every scored
     rollout is appended to ``log_path`` as one JSON line (open it with
     ``pd.read_json(path, lines=True)``): AgentTune's own trajectories.jsonl leaves the reward
@@ -274,7 +289,7 @@ def make_reward_fn(weights: dict | None = None, log_path: str | Path | None = No
     lock = threading.Lock()
     state = {"calls": 0}
 
-    def lookup_reward(completions, answer=None, field=None, qid=None, level=None,
+    def lookup_reward(completions, answer=None, field=None, qid=None, level=None, customer_id=None,
                       conversations=None, responses=None, **kwargs) -> list[float]:
         n = len(completions)
         convs = conversations if conversations is not None else [None] * n
@@ -287,7 +302,8 @@ def make_reward_fn(weights: dict | None = None, log_path: str | Path | None = No
         for i in range(n):
             text = (responses[i] if responses is not None and responses[i] else
                     _final_text(convs[i], completions[i]))
-            s = score(convs[i] or [], text, answer[i], field[i])
+            s = score(convs[i] or [], text, answer[i], field[i],
+                      customer_id[i] if customer_id else None)
             r = sum(w[k] * s[k] for k in w)
             rewards.append(r)
             rows.append({"step": step, "call": state["calls"], "qid": qid[i] if qid else None,

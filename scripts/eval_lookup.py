@@ -55,7 +55,7 @@ def main() -> int:
     for i, row in enumerate(rows, 1):
         out = rollout([toy_lookup.prompt(row)], do_sample=False, max_new_tokens=a.max_new_tokens)
         conv, text = out["conversations"][0], out["responses"][0] or ""
-        s = toy_lookup.score(conv, text, row["answer"], row["field"])
+        s = toy_lookup.score(conv, text, row["answer"], row["field"], row["customer_id"])
         records.append({**row, **s, "final_text": text[:300],
                         "conversation": json.dumps(conv, default=str)})
         if i % 10 == 0 or i == len(rows):
@@ -67,7 +67,7 @@ def main() -> int:
     dest.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(dest, index=False)
 
-    cols = ["correct", "tool_ok", "format", "n_tool_calls", "hallucinated_ids"]
+    cols = ["correct", "tool_ok", "format", "n_tool_calls", "hallucinated_ids", "wrong_customer"]
     print("\nBy level (means):")
     print(df.groupby("level")[cols].mean().round(2).to_string())
     print("\nOverall:")

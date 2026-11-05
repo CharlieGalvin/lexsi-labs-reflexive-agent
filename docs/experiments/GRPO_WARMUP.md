@@ -19,8 +19,15 @@ to iterate on in minutes.
   (40 customers who never appear in training).
 
 **Reward** (weights in the config): `correct` 1.0 (the starred answer matches) +
-`tool_ok` 0.5 (it called tools, and none errored or used a made-up ID) + `format` 0.2
-(exactly one `*answer*`). Maximum 1.7.
+`tool_ok` 0.5 (it fetched the asked-about customer's record, and no call errored, used a
+made-up ID or a real ID of the wrong customer) + `format` 0.2 (exactly one `*answer*`).
+Maximum 1.7.
+
+**Baseline lessons (5 Nov).** AgentTune's default tool-result wording ("use this result to
+answer") stopped every rollout after one call, so `toy_lookup.HARNESS` replaces it in both
+training and eval. And Tiny Aya copied the example ID from the tool description (a real
+customer) into every name question, answering from the wrong customer's record. So the tool
+descriptions carry no example IDs or names, and `wrong_customer` counts this failure.
 
 ## How GRPO learns, in pandas terms
 

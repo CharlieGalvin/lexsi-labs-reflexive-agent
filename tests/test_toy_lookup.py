@@ -49,8 +49,24 @@ def test_score_correct_rollout_both_call_shapes():
     assert s["tool_ok"] == 1.0 and s["hallucinated_ids"] == 0
     # the final text is passed separately; score it on the real reply
     final = f"The balance is *{c['balance']}*."
-    s = tl.score(_conv(calls, results, final), final, c["balance"], "balance")
-    assert (s["correct"], s["format"]) == (1.0, 1.0)
+    s = tl.score(_conv(calls, results, final), final, c["balance"], "balance", c["customer_id"])
+    assert (s["correct"], s["format"], s["tool_ok"]) == (1.0, 1.0, 1.0)
+
+
+def test_real_record_of_the_wrong_customer_is_not_tool_ok():
+    # baseline 5 Nov: Tiny Aya copied an example ID and answered from someone else's record
+    asked, other = tl.customers()[0], tl.customers()[23]
+    calls = [{"name": "get_customer", "arguments": {"customer_id": other["customer_id"]}}]
+    final = f"*{other['balance']}*"
+    s = tl.score(_conv(calls, [tl.get_customer(other["customer_id"])], final), final,
+                 asked["balance"], "balance", asked["customer_id"])
+    assert s["tool_ok"] == 0.0 and s["wrong_customer"] == 1 and s["hallucinated_ids"] == 0
+
+
+def test_tool_docstrings_have_no_real_ids_or_names():
+    import inspect
+    docs = " ".join(inspect.getdoc(f) for f in tl.TOOLS)
+    assert not any(c["customer_id"] in docs or c["name"] in docs for c in tl.customers())
 
 
 def test_score_hallucinated_id_and_guess():
@@ -89,6 +105,8 @@ def test_numeric_tolerance_and_text_match():
     assert not tl._matches("42.2", "42.10", "balance")
     assert tl._matches("12.3 GB", "12.3", "data_left_gb")
     assert tl._matches("premium.", "Premium", "plan")
+    assert tl.starred("*45.1\n*") == "45.1"
+    assert tl.score([], "*45.1\n*", "45.1", "data_left_gb")["format"] == 1.0
 
 
 def test_reward_fn_logs_rows_and_debug(tmp_path):
@@ -98,7 +116,7 @@ def test_reward_fn_logs_rows_and_debug(tmp_path):
                  [tl.get_customer(c["customer_id"])], final)
     fn = tl.make_reward_fn(log_path=tmp_path / "rewards.jsonl")
     r = fn(["x", "y"], answer=[c["plan"]] * 2, field=["plan"] * 2, qid=["q1", "q2"], level=[1, 1],
-           conversations=[conv, []], responses=[final, "no idea"])
+           customer_id=[c["customer_id"]] * 2, conversations=[conv, []], responses=[final, "no idea"])
     assert r == pytest.approx([1.7, 0.0])
     assert len((tmp_path / "rewards.jsonl").read_text().splitlines()) == 2
     assert (tmp_path / "reward_inputs_debug.json").exists()
