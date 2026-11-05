@@ -137,5 +137,58 @@ def test_the_summary_rates_only_scored_conversations_and_reports_disagreements()
     ]
     s = os_.summary(scored)
     assert s["verdicts"] == {"success": 1, "failure": 1, "unknown": 1, "error": 1}
-    assert (s["scored"], s["success_rate"]) == (2, 0.5)
+    assert s["success_rate"] is None  # an unknown could go either way: no single rate
+    assert s["success_rate_bounds"] == [round(1 / 3, 4), round(2 / 3, 4)]
+    assert "between 33.3% and 66.7%" in os_.rate_text(s)
     assert [d["oracle"] for d in s["disagreements_with_saved"]] == [FAILURE]
+    assert os_.summary(scored[:2])["success_rate"] == 0.5  # no unknowns: a plain rate
+
+
+# --- From the review of #43 ------------------------------------------------------------------
+
+
+def test_with_judges_off_an_early_ending_is_a_failure_not_unknown(retail: Any) -> None:
+    """τ²-bench scores an early ending 0 with no checks run: nothing passed (retail dev 35 and 73)."""
+    out = verdict(replay(retail, _task(retail, judged=True), termination="too_many_errors"), judges=False)
+    assert out.verdict == FAILURE and out.evidence["checks"] == {}
+
+
+def test_a_record_with_no_ending_is_an_error_not_scored_as_finished() -> None:
+    rec = record()
+    rec.pop("termination")
+    out = verdict(rec)
+    assert out.verdict == ERROR and "no ending" in out.reason
+
+
+def test_a_broken_run_is_the_runs_fault_in_auditkit() -> None:
+    """AuditKIT books a run as the target's error, not a scoring error, when stop_reason is 'error'."""
+    assert episode_from_record(record(error="RateLimitError")).stop_reason == "error"
+    assert episode_from_record(record()).stop_reason == record()["termination"]
+
+
+def test_a_verdict_saved_with_judges_off_is_not_compared() -> None:
+    saved = {"passed": True, "reward": 1.0, "checks": {"DB": 1.0}, "skipped": ["NL_ASSERTION"]}
+    assert episode_from_record(record(outcome=saved)).source_verdict is None
+
+
+def test_the_overall_line_survives_nothing_left_to_score(tmp_path: Any, monkeypatch, capsys) -> None:
+    """--only dev on two train files used to crash formatting a missing rate."""
+    import json
+    import sys
+
+    from _scripts import load_script
+
+    from reflexive import splits
+
+    os_ = load_script("arms/oracle_score")
+    files = []
+    for name in ("a", "b"):
+        f = tmp_path / f"A-retail-{name}.jsonl"
+        r = record(domain="retail", task_id=splits.task_ids("retail", "train")[0], error="boom")
+        f.write_text(json.dumps(r) + "\n")
+        files.append(str(f))
+    pytest.importorskip("loguru")
+    monkeypatch.setattr(sys, "argv", ["oracle_score.py", *files, "--only", "dev", "--judges", "off"])
+    assert os_.main() == 0
+    out = capsys.readouterr().out
+    assert "overall: success rate n/a (nothing scored)" in out and "no records in the dev split" in out

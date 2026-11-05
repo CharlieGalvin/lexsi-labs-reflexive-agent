@@ -17,9 +17,11 @@ deployment gate, come from verified state.
 - ``success`` / ``failure``: τ²-bench passed or failed it.
 - ``error``: the run broke (a crash, a rate limit: ``reflexive.runner.is_broken``) or the
   scorer raised. The model wasn't tested, so it's never a ``failure``.
-- ``unknown``: with ``judges=False``, the deterministic checks passed but LLM-judged checks
-  were skipped. That's a best case, not a verified pass (AuditKIT's AG-07: missing evidence
-  is never turned into a pass). A failed deterministic check is a definite ``failure``.
+- ``unknown``: with ``judges=False``, a conversation that ended normally and passed every
+  deterministic check, while LLM-judged checks were skipped. That's a best case, not a
+  verified pass (AuditKIT's AG-07: missing evidence is never turned into a pass). A failed
+  deterministic check, or a conversation that ended early (τ²-bench scores it 0 without
+  running any check), is a definite ``failure``. A record with no ending is an ``error``.
 
 **Re-scored, not read.** The record's own saved ``outcome`` is passed on only as
 ``episode.source_verdict``: AuditKIT never uses it as the result (its AG-05) but reports any
@@ -40,7 +42,7 @@ from reflexive.runner import is_broken
 Record = dict[str, Any]
 
 TAU2_VERSION = "2.0.0"  # third_party/tau2-bench, pinned by `just tau2`
-SCORING_VERSION = "1"  # bump when reflexive.outcome's scoring changes
+SCORING_VERSION = "2"  # bump when the scoring or the verdict rules change (v2, 5 Nov: early endings)
 
 
 def _record(episode: Any) -> Record:
@@ -64,6 +66,8 @@ class Tau2Oracle(CustomPredicate):
     def evaluate(self, episode: Any, case: Any = None) -> Outcome:
         try:
             rec = _record(episode)
+            if not rec.get("termination"):
+                return self._out(ERROR, "the record has no ending (termination): it can't be scored", {})
             if is_broken(rec):
                 return self._out(
                     ERROR,
@@ -76,7 +80,7 @@ class Tau2Oracle(CustomPredicate):
                 rec["domain"],
                 str(rec["task_id"]),
                 rec["messages"],
-                rec.get("termination") or "user_stop",
+                rec["termination"],
                 judges=self.judges,
                 language=self.language,
             )
@@ -90,9 +94,11 @@ class Tau2Oracle(CustomPredicate):
             "note": o.note,
             "termination": rec.get("termination"),
         }
-        # Skipped judged checks come first: with judges off, τ²-bench passes a conversation on
-        # its deterministic checks alone, which is a best case, not a verified pass.
-        if o.skipped and (o.passed or all(v == 1.0 for v in o.checks.values())):
+        # An early ending scores 0 with no checks run (o.checks is empty), so it's a failure
+        # whatever was skipped. Otherwise skipped judged checks come before `passed`: with
+        # judges off, τ²-bench passes a conversation on its deterministic checks alone, which
+        # is a best case, not a verified pass.
+        if o.skipped and o.checks and all(v == 1.0 for v in o.checks.values()):
             return self._out(
                 UNKNOWN,
                 f"deterministic checks passed, but {', '.join(o.skipped)} were skipped (judges off)",
@@ -116,7 +122,9 @@ def episode_from_record(rec: Record) -> AgentEpisode:
     for the oracle, which needs the customer's side too. The record's saved verdict is
     ``source_verdict``: provenance only.
     """
-    saved = (rec.get("outcome") or {}).get("passed")
+    saved_outcome = rec.get("outcome") or {}
+    # A verdict saved with judges off isn't verified, so it can't be compared with the oracle's
+    saved = None if saved_outcome.get("skipped") else saved_outcome.get("passed")
     view = [m for m in agent_view_of(rec) if m.get("role") != "system"]
     ep = episode_from_openai_messages(
         view,
@@ -124,7 +132,8 @@ def episode_from_record(rec: Record) -> AgentEpisode:
         source_id=f"{rec.get('arm', '?')}-{rec['domain']}-{rec['task_id']}-{rec.get('sample', 0)}",
         source="reagent.tau2.episode/v0",
     )
-    ep.stop_reason = rec.get("termination")
+    # AuditKIT books a run as the target's fault (not the scorer's) when stop_reason is "error"
+    ep.stop_reason = "error" if is_broken(rec) else rec.get("termination")
     ep.errors = [rec["error"]] if rec.get("error") else []
     ep.source_reward = (rec.get("outcome") or {}).get("reward")
     ep.source_verdict = None if is_broken(rec) or saved is None else (SUCCESS if saved else FAILURE)
