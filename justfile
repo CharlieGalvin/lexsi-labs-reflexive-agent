@@ -50,9 +50,15 @@ test:
 features:
     python -m pytest tests/test_features_*.py --gherkin-terminal-reporter -v -p no:cacheprovider
 
-# Lint the code
+# Lint the code and check its formatting
 lint:
     python -m ruff check src scripts tests
+    python -m ruff format --check src scripts tests
+
+# Format the code (ruff format), then fix what lint can fix by itself
+fmt:
+    python -m ruff format src scripts tests
+    python -m ruff check --fix src scripts tests
 
 # Type checks with ty (Chiara's arms and classifier show as warnings; only errors fail)
 types:
