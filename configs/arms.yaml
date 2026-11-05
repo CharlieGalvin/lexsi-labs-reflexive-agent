@@ -1,0 +1,34 @@
+# The experiment arms (README §2). Every arm uses the same student, harness, decoding and
+# customer: only the fields under `arms` differ. Run one with `just rollout <arm> <domain>`.
+# Arms B (healed adapter) and D (DSPy prompt) are added by their own tickets.
+
+# The student model, served on an OpenAI-compatible endpoint. Default: Aya Expanse 32B via
+# Cohere's API (the student since the 3 Nov re-plan, docs/TEACHER_SETUP.md). For the GPU box,
+# point api_base at the vLLM server and set model to the name it serves.
+student:
+  name: aya32
+  model: c4ai-aya-expanse-32b
+  api_base: https://api.cohere.ai/compatibility/v1
+  api_key_env: COHERE_API_KEY
+  # Data contract (SEL-35): Cohere's `Action:` format, the same prompt Aya's baseline used,
+  # for evaluation and training. Don't change these two per arm.
+  mode: prompted
+  style: cohere
+  temperature: 0.0
+  max_tokens: 1024
+  max_context: 128000
+  reserve: 4096
+  rpm: 0                  # calls/min cap for the whole run (0 = none). Cohere Trial keys: 20
+
+# The simulated customer. null = GPT-4.1 (τ²-bench's default) via OpenAI or OpenRouter.
+customer: null
+
+arms:
+  A:
+    name: baseline
+    description: Standard rollout, τ²-bench's own agent prompt, no healing
+    prompt_variant: default
+  C:
+    name: prompt-only
+    description: Arm A plus a fixed "be careful not to hallucinate" instruction (SEL-41)
+    prompt_variant: careful
