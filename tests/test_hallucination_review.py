@@ -151,3 +151,25 @@ def test_a_retry_in_a_later_turn_is_caught_and_names_the_turn_it_repeats() -> No
     found = classify_hallucination(msgs, TOOLS, customer_tools=CUSTOMER).findings
     retry = [f for f in found if f.kind == "repeated_failed_call"]
     assert len(retry) == 1 and retry[0].turn == 5 and "at turn 2" in retry[0].detail
+
+
+# --- A real phone number with spaces is not a placeholder -------------------------------------
+
+
+def test_a_phone_number_written_with_spaces_is_not_a_placeholder() -> None:
+    for written in ("(555) 123-4567", "555 123 4567"):
+        msgs = [
+            SYSTEM,
+            user(f"My number is {written}."),
+            call("a", "get_customer_by_phone", {"phone_number": written}),
+        ]
+        assert kinds(msgs) == [], written
+
+
+def test_a_described_phone_number_is_still_a_placeholder() -> None:
+    msgs = [
+        SYSTEM,
+        user("hi"),
+        call("a", "get_customer_by_phone", {"phone_number": "customer's phone number"}),
+    ]
+    assert ("ARG", "placeholder") in kinds(msgs)

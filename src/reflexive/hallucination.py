@@ -136,6 +136,7 @@ _SQUASHED = re.compile(  # the same phrases with the spaces taken out: CustomerI
     r"|placeholder|notprovided|goeshere|your(?:phone|customer|line|user|order|reservation|id|email)"
 )
 _UNFILLED = re.compile(r"\d{2}xx\b|\bxx\d|^x+$", re.I)  # 19XX-05-14, XXX
+_PHONE_LIKE = re.compile(r"\+?[\d\s().-]{7,}")  # (555) 123-4567: spaces in a real phone number are fine
 
 
 def _is_placeholder(key: str, value: str) -> bool:
@@ -147,7 +148,7 @@ def _is_placeholder(key: str, value: str) -> bool:
         or _PLACEHOLDER.search(words)
         or _SQUASHED.search(re.sub(r"[\W_]", "", v).lower())
         or _UNFILLED.search(v)
-        or (_ID_KEY.search(key) and " " in v)
+        or (_ID_KEY.search(key) and " " in v and not _PHONE_LIKE.fullmatch(v))
     )
 
 
