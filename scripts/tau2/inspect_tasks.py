@@ -58,10 +58,9 @@ def main() -> None:
             io.append(total)
         over = sum(1 for x in io if fixed + x + CHAT_OVERHEAD > args.context)
         p90 = sorted(io)[int(0.9 * len(io))]
-        tr = len(splits.get("train", [])) if splits else "?"
-        te = len(splits.get("test", [])) if splits else "?"
+        tr, te = len(splits["train"]), len(splits["test"])
         print(
-            f"{d:8s} {tr!s:>5s} {te!s:>4s} {policy_tok:7d} {tools_tok:6d} {fixed:6d} "
+            f"{d:8s} {tr:>5d} {te:>4d} {policy_tok:7d} {tools_tok:6d} {fixed:6d} "
             f"{int(st.median(io)):12d} {p90:5d} {over:4d}/{len(io)}"
         )
 
