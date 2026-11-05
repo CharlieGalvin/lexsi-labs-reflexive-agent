@@ -130,7 +130,8 @@ failed-call retries and no unknown tools.
 - **Teacher:** **GLM-5.3-Flash (MIT licence).** Qwen3.8 27B (thinking off, Apache-2.0) is
   acceptable as a *second* teacher for retail and airline only.
 - **The fixes exist already:** 193 clean fixes for 158 of the 178 train tasks, in
-  `results/fixes/glm53f.jsonl`. The other 20 tasks (10 retail, 8 telecom, 2 airline) have no
+  `results/fixes/glm53f.jsonl`. The other 20 tasks (10 retail, 8 telecom, 2 airline; since the dev split, that's 15 in train
+  and 5 in dev) have no
   fix yet. They're the hard subset's core (SEL-7), and could get retries at temperature 0.7.
 - **After this (4 Nov), all done:**
   1. Dev split frozen (SEL-36): `configs/splits.json`, 36 dev tasks.

@@ -94,38 +94,19 @@ Golden trajectories come only from τ²-bench's **train** tasks. Dev is carved o
 | Dev | 15 | 6 | 15 | **36** | Decisions during the project: checkpoints, the deployment gate, heal cycles, DSPy. Never trained on |
 | Test | 40 | 20 | 40 | **100** | The final four-arm results only (SEL-26) |
 
+**How the counts fit together:** τ²-bench's **178** train tasks became our **142 train + 36 dev**.
+The teacher ran on all 178 and solved **158**, giving **127 train records + 31 dev reference
+records**. The other 20 (15 train, 5 dev) have no trajectory. The **100 test** tasks were never
+run by the teacher.
+
 ## Files
 
-| File | Records | Size | Contents |
-|---|---:|---:|---|
-| `golden_train.jsonl` | 127 | 5.9 MB | One training record per solved **train** task. Train on these. |
-| `golden_dev_reference.jsonl` | 31 | 1.4 MB | Records for solved **dev** tasks, for reference only. Never train on these. |
-| `splits.json` | | 17 KB | The train, dev and test task IDs |
-| `README.md` | | | The data card: source, counts, version, how to load |
-
-## How big a record is
-
-Token counts are estimates at 3.5–4 characters per token. Check them with Aya's tokenizer before
-choosing a maximum sequence length.
-
-| | Characters | ≈ Tokens |
-|---|---:|---:|
-| Typical record (median) | 33,600 | 8.4K–9.6K |
-| Longest record | 44,600 (telecom) | 11.2K–12.7K |
-| System prompt (policy + tool stubs), in every record | 17,400 | 4.3K–5.0K |
-| **Learning targets** per record (median) | 4,200 | 1.0K–1.2K |
-| **Learning targets**, all 127 training records | 563,000 | **≈ 140K–160K** |
-
-Two consequences for training:
-
-1. **Everything fits a 16K context,** even the longest telecom record.
-2. **Only about 13% of each record is learning target.** About half of every record is the
-   system prompt, and most of the rest is customer text and tool results. So the whole
-   training set is roughly 150K target tokens: enough for a LoRA fine-tune and a first heal
-   cycle, but small. Expect later heal cycles (fixes for the student's own failures) to matter
-   more than this set alone.
-
-By domain, a record is typically 24K (airline), 30K (retail) or 39K (telecom) characters.
+| File | Records | Contents |
+|---|---:|---|
+| `golden_train.jsonl` | 127 | One training record per solved **train** task. Train on these. |
+| `golden_dev_reference.jsonl` | 31 | Records for solved **dev** tasks, for reference only. Never train on these. |
+| `splits.json` | | The train, dev and test task IDs |
+| `README.md` | | The data card: source, counts, version, how to load |
 
 ## One record
 

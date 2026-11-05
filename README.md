@@ -198,7 +198,7 @@ scripts/build_golden.py  golden trajectories v1 → data/golden/v1/ (just golden
 scripts/publish_golden.py  private upload to the team HF org with a data card (just golden-publish)
 third_party/             τ²-bench v2.0.0 (with data) and AgentTune, cloned by `just setup-dev` / `just setup`
 tests/                   offline tests (no GPU) — run in CI on every PR
-docs/DATA_CONTRACT.md    what the Curator hands over: the five rules, the files, record format and sizes
+docs/DATA_CONTRACT.md    what the Curator hands over: the five rules, the files and the record format
 docs/TAU2_SETUP.md       τ²-bench setup decisions (splits, judges, context fit, costs)
 docs/TEACHER_SETUP.md    teacher (GLM-5.3-Flash via OpenRouter) and the Cohere prompt format Aya uses
 docs/experiments/        the teacher bake-off and golden trajectories, in order (start at its README)

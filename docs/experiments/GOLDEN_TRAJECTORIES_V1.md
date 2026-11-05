@@ -90,11 +90,7 @@ outcome   {"reward": 1.0, "checks": {"DB": 1.0, "COMMUNICATE": 1.0}}
 teacher   {"model": "z-ai/glm-5.3-flash", "provider": "InferenceNet", "temperature": 0.0, "attempt": 1}
 ```
 
-Training records run from 9 to 73 turns (median 31). A typical record is ~34K characters
-(about 8–10K tokens) and the longest ~45K (about 11–13K), so everything fits a 16K context.
-**Only about 13% of each record is learning target:** the system prompt alone is ~17K
-characters, so the 127 training records hold roughly 150K target tokens in all. Full size
-table: [`../DATA_CONTRACT.md`](../DATA_CONTRACT.md#how-big-a-record-is).
+Training records run from 9 to 73 turns (median 31), and everything fits a 16K context.
 
 ## Questions sent to the Trainer at hand-over (5 Nov; answers pending)
 
