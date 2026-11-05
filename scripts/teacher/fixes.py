@@ -336,9 +336,15 @@ def _note(rec: Record) -> str:
 def run_attempts(
     a: argparse.Namespace, tasks: list[Task], done: dict[Attempt, Record], out: pathlib.Path, customer: str
 ) -> None:
-    """One round per attempt number; a task's retries run only if it hasn't passed yet."""
+    """One round per attempt number; a task's retries run only if it hasn't passed yet.
+
+    On out-of-credits or a missing model, conversations not started yet are cancelled, but the
+    ones already running are waited for anyway: those that finish cleanly are saved, so they
+    aren't paid for twice.
+    """
     mode = "all" if a.all_attempts else "until_pass"
     n = 0
+    stopping = False
     with out.open("a") as f, ThreadPoolExecutor(a.workers) as pool:
         for i in range(1, a.attempts + 1):
             round_todo = [
@@ -365,13 +371,20 @@ def run_attempts(
                 for d, t in round_todo
             }
             for fut in as_completed(futures):
+                if fut.cancelled():
+                    continue
                 d, t = futures[fut]
                 rec = fut.result()
                 if runner.out_of_credits(rec) or runner.model_gone(rec):
-                    for other in futures:
-                        other.cancel()
-                    print(f"   ⛔ stopping: {rec['error'][:200]}. Fix it, then run the same command again.")
-                    return
+                    if not stopping:
+                        for other in futures:
+                            other.cancel()
+                        print(
+                            f"   ⛔ stopping: {rec['error'][:200]}. Saving the conversations already "
+                            "running; then fix it and run the same command again."
+                        )
+                        stopping = True
+                    continue  # not saved: re-run it once fixed
                 n += 1
                 rec["attempt"], rec["attempt_mode"] = i, mode
                 f.write(json.dumps(rec) + "\n")
@@ -382,6 +395,8 @@ def run_attempts(
                     f"   [{n:>3}] {'✅' if rec['outcome']['passed'] else '❌'} {d}:{short:<5} #{i}  "
                     f"{rec['diagnostics']['tools_ran']:>2} tools {rec['wall_s']:>5.0f}s  {_note(rec)}"
                 )
+            if stopping:  # no further attempt rounds
+                return
 
 
 # --- Main ---------------------------------------------------------------------------------------

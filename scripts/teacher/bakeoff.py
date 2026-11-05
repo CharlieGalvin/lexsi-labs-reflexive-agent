@@ -183,25 +183,33 @@ def _flags(rec: Record) -> list[str]:
 def run_model(
     model: str, todo: list[Task], done: dict[Task, Record], out: pathlib.Path, *, workers: int, fresh: bool
 ) -> bool:
-    """Run the missing conversations, saving each as it finishes. False: stop the whole run."""
+    """Run the missing conversations, saving each as it finishes. False: stop the whole run.
+
+    On a stop, conversations not started yet are cancelled, but the ones already running are
+    waited for anyway: those that finish cleanly are saved, so they aren't paid for twice.
+    """
+    carry_on: bool | None = None  # set when stopping: whether the next model should still run
     with out.open("w" if fresh else "a") as f, ThreadPoolExecutor(workers) as pool:
         futures = {pool.submit(runner.run_one, model, d, t): (d, t) for d, t in todo}
         for fut in as_completed(futures):
+            if fut.cancelled():
+                continue
             d, t = futures[fut]
             rec = fut.result()
-            if runner.out_of_credits(rec):  # every other call would fail too, for every model
-                for other in futures:
-                    other.cancel()
-                print(
-                    "   ⛔ OpenRouter is out of credits: stopping. Add credits, then run the same "
-                    "command with --retry-broken (finished tasks are kept)"
-                )
-                return False
-            if runner.model_gone(rec):
-                for other in futures:
-                    other.cancel()
-                print(f"   ⛔ {model}: model not available, stopping ({rec['error'][:160]})")
-                return True
+            if runner.out_of_credits(rec) or runner.model_gone(rec):
+                if carry_on is None:
+                    for other in futures:
+                        other.cancel()
+                    if runner.out_of_credits(rec):  # every other call would fail too, for every model
+                        print(
+                            "   ⛔ OpenRouter is out of credits: stopping. Add credits, then run the "
+                            "same command with --retry-broken (finished tasks are kept)"
+                        )
+                        carry_on = False
+                    else:
+                        print(f"   ⛔ {model}: model not available, stopping ({rec['error'][:160]})")
+                        carry_on = True
+                continue  # not saved: re-run it once fixed
             f.write(json.dumps(rec) + "\n")
             f.flush()
             done[(d, t)] = rec
@@ -210,7 +218,7 @@ def run_model(
                 f"{rec['diagnostics']['tools_ran']:>2} tools  {rec['wall_s']:>5.0f}s  "
                 f"{'; '.join(_flags(rec))}"
             )
-    return True
+    return True if carry_on is None else carry_on
 
 
 # --- Main ---------------------------------------------------------------------------------------

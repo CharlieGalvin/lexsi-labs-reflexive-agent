@@ -68,3 +68,38 @@ def test_overlap_lists_tasks_only_the_teacher_solves(capsys):
     )
     out = capsys.readouterr().out
     assert "qwen → tiny   1   (1 the other way, 1 both)  retail:4" in out
+
+
+def test_on_out_of_credits_the_conversations_already_running_are_still_saved(tmp_path, monkeypatch):
+    """They're paid for: dropping them would mean paying for them again on the next run."""
+    import json
+    import time
+
+    ts = load()
+
+    def run_one(model, domain, task_id):
+        if task_id == "broke":
+            return {"domain": domain, "task_id": task_id, "error": "OutOfCredits: 402"}
+        time.sleep(0.3)  # still running when the other one stops the run
+        return {
+            "domain": domain,
+            "task_id": task_id,
+            "error": None,
+            "termination": "user_stop",
+            "outcome": {"passed": True},
+            "wall_s": 1.0,
+            "flags": {},
+            "diagnostics": {
+                "tools_ran": 2,
+                "unseen_arguments": [],
+                "unknown_tools": 0,
+                "repeated_failures": 0,
+            },
+        }
+
+    monkeypatch.setattr(ts.runner, "run_one", run_one)
+    out, done = tmp_path / "sample.jsonl", {}
+    todo = [("retail", "slow"), ("retail", "broke")]
+    assert ts.run_model("m", todo, done, out, workers=2, fresh=True) is False  # stop the whole run
+    saved = [json.loads(line) for line in out.read_text().splitlines()]
+    assert [r["task_id"] for r in saved] == ["slow"] and list(done) == [("retail", "slow")]

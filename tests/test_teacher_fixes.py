@@ -122,3 +122,29 @@ def test_view_check_spots_customer_actions_shown_to_the_agent():
     hidden = {"domain": "telecom", "messages": full, "agent_view": [full[2]]}
     shown = {"domain": "telecom", "messages": full, "agent_view": full}
     assert sr.view_check([hidden]) == (1, 1, 0) and sr.view_check([shown]) == (1, 1, 1)
+
+
+def test_a_stop_saves_the_running_conversations_and_starts_no_more_rounds(tmp_path, monkeypatch):
+    import argparse
+    import json
+    import time
+
+    fx = load()
+    calls = []
+
+    def run_one(model, domain, task_id, **kw):
+        calls.append(task_id)
+        if task_id == "broke":
+            return {"domain": domain, "task_id": task_id, "error": "NotFoundError: model was removed"}
+        time.sleep(0.3)  # still running when the other one stops the run
+        return {**rec(domain, task_id, 1, passed=False), "wall_s": 1.0, "diagnostics": {"tools_ran": 2}}
+
+    monkeypatch.setattr(fx.runner, "run_one", run_one)
+    a = argparse.Namespace(
+        all_attempts=False, attempts=3, workers=2, no_judges=True, provider=None, model="m"
+    )
+    out, done = tmp_path / "fixes.jsonl", {}
+    fx.run_attempts(a, [("retail", "slow"), ("retail", "broke")], done, out, "gpt-4.1")
+    saved = [json.loads(line) for line in out.read_text().splitlines()]
+    assert [(r["task_id"], r["attempt"]) for r in saved] == [("slow", 1)]  # saved, though it stopped
+    assert sorted(calls) == ["broke", "slow"]  # no attempt 2, although "slow" didn't pass
