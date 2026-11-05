@@ -156,10 +156,10 @@ def run_episode(
             try:
                 ep.step(agent.turn(messages, ep.tool_schemas))
             except ContextTooLong:  # the API's own token count was over the window
-                ep._end_for_context()
+                ep.end_for_context()
     except Exception as e:  # noqa: BLE001 - one bad conversation shouldn't stop the run
         error = f"{type(e).__name__}: {str(e)[:300]}"
-        if ep._env is not None and not ep.done:
+        if ep.has_env and not ep.done:
             ep.finish()
     usage = agent.usage.as_dict() if hasattr(agent, "usage") else None
     extra = {
@@ -198,7 +198,7 @@ def run_episode(
         "unseen_arguments": unseen_arguments(msgs),
         **tool_errors(msgs),
     }
-    if ep._env is not None:  # what the agent was actually shown (system prompt included)
+    if ep.has_env:  # what the agent was actually shown (system prompt included)
         try:
             rec["agent_view"] = ep.messages()
         except Exception:  # noqa: BLE001 - never lose a conversation over this extra

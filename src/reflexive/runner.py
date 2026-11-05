@@ -474,9 +474,9 @@ def _converse(agent: Agent, ep: Tau2Episode) -> str | None:
             try:
                 ep.step(agent.turn(messages, ep.tool_schemas))
             except ContextTooLong:  # the API's own token count was over the window: an overflow
-                ep._end_for_context()
+                ep.end_for_context()
     except Exception as e:  # noqa: BLE001 - one bad conversation shouldn't stop the run
-        if ep._env is not None and not ep.done:
+        if ep.has_env and not ep.done:
             ep.finish()
         return f"{type(e).__name__}: {str(e)[:300]}"
     return None
@@ -572,7 +572,7 @@ def run_one(
         "unseen_arguments": unseen_arguments(msgs),
         **tool_errors(msgs),
     }
-    if ep._env is not None:  # what the agent was actually shown (system prompt included)
+    if ep.has_env:  # what the agent was actually shown (system prompt included)
         try:
             rec["agent_view"] = ep.messages()
         except Exception:  # noqa: BLE001 - never lose a conversation over this extra

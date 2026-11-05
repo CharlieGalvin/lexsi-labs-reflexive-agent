@@ -28,8 +28,10 @@ tool calls. τ²-bench's instructions say "send a message *or* make a tool call,
 a turn with both is passed through as it is, as in an official run.
 
 **Tool results** go back to the model as compact JSON (no indentation): it's the same data in
-fewer tokens. The window defaults to 128K (Aya Expanse 32B's); pass ``max_context`` for a
-smaller model (Tiny Aya, the first student, had 8,192 tokens).
+fewer tokens. The window defaults to 128K (Aya Expanse 32B's) and ``reserve`` to 4,096 (Aya's
+maximum reply), matching ``configs/arms.yaml``. Until PR #41 the defaults were 8,192 and 1,024
+(Tiny Aya, the first student). Runs set both explicitly, so they are unaffected; for a smaller
+model, pass both.
 
 **Hints (teacher only).** ``hints="steps"`` adds τ²-bench's own resolution steps for the task
 (its `llm_agent_gt` setting) to the system prompt, so a teacher producing training data knows
@@ -199,6 +201,11 @@ class Tau2Episode:
             raise RuntimeError("The conversation hasn't started: call reset() first")
         return self._env
 
+    @property
+    def has_env(self) -> bool:
+        """True once ``reset()`` has set up τ²-bench's environment (even if it has since ended)."""
+        return self._env is not None
+
     def reset(self) -> list[dict]:
         """Start the conversation. Returns the new messages (normally the customer's opener)."""
         env = _NoScoreAgentGymEnv(
@@ -331,10 +338,15 @@ class Tau2Episode:
             self.flags["peak_prompt_tokens"], self.count_tokens(full) + self.tool_tokens()
         )
         if not fits:
-            self._end_for_context()
+            self.end_for_context()
         return msgs
 
-    def _end_for_context(self) -> None:
+    def end_for_context(self) -> None:
+        """End the conversation because it no longer fits the window (``context_window_exceeded``).
+
+        ``prompt()`` calls it itself; a driver calls it when the model's API reports the prompt
+        too long by its own count.
+        """
         self._overflowed = True
         self.flags["context_overflow"] = True
         self._send_done()
