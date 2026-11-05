@@ -229,8 +229,8 @@ Same 30 train tasks, database checks only (a best case):
 - **The decision rule is met.** Aya ≤ 3/30 while the same-size reference solved about half. So
   it's Aya, not 32B being too small.
 - **The fix pool is 1 task** (airline 42): unaided, the teacher can't supply ~200 verified
-  fixes. Next is the hinted test (`just teacher-sample aya-steps tiny`). If hints don't rescue
-  it, teacher-free healing (B′, SEL-24) becomes the main path.
+  fixes. The next step was a hinted test (an `aya-steps` model, since removed): the re-plan
+  below made it unnecessary.
 - **Caveats:**
   - 21 runs broke on bugs since fixed: a bundle of tool results the converter didn't handle,
     Qwen's empty replies, an 8K overflow by 35 tokens, and a `None` response. They were counted
@@ -247,13 +247,11 @@ Same 30 train tasks, database checks only (a best case):
   by changing the teacher. Which teacher, open or closed, is the **teacher bake-off** (SEL-58,
   `docs/experiments/TEACHER_BAKEOFF.md`, `just teacher-sample aya bakeoff`).
 - **Aya Expanse 8B is no longer on Cohere's API** (`c4ai-aya-expanse-8b` removed 4 Apr 2026;
-  [deprecations](https://docs.cohere.com/docs/deprecations)). To test it, serve the open weights
-  (`CohereLabs/aya-expanse-8b` on Hugging Face, CC-BY-NC) on any OpenAI-compatible server and
-  point the script at it:
-  `AYA8_API_BASE=http://localhost:11434/v1 AYA8_MODEL=aya-expanse:8b just teacher-sample aya8`
-  (Ollama shown; vLLM on a GPU is much faster). Without those settings the script stops at once
-  instead of logging 30 broken runs. Any removed or misnamed model now stops after the first
-  failure too.
+  [deprecations](https://docs.cohere.com/docs/deprecations)). Its open weights
+  (`CohereLabs/aya-expanse-8b` on Hugging Face, CC-BY-NC) can be served on any OpenAI-compatible
+  server, but the script's `aya8` entry was removed on 5 Nov, so `just teacher-sample aya8` now
+  stops with "unknown model". A removed or misnamed model stops after the first failure instead
+  of logging 30 broken runs.
 - **Tiny Aya's probe:** no native tool calling (it answered in prose). Prompted, it wrote
   `Action: get_order_details({...})` in function-call style, which the parser now also reads.
 
