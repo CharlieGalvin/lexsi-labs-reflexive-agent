@@ -23,9 +23,10 @@
     job is over, and a conversation that runs on is the customer simulator's doing.
 
 The **primary** failure is the earliest finding, because later ones usually follow from it
-(an invented ID gets an error, the agent retries it, and the retry is a loop). Ties within
-one turn go TOOL, then ARG, then LOOP. ``NONE`` means no structural failure: a conversation can
-still fail τ²-bench for reasoning or policy reasons, which this classifier doesn't judge.
+(an invented ID gets an error, the agent retries it, and the retry is a loop). Within one
+turn, an earlier call comes first; findings on the same call go TOOL, then ARG, then LOOP.
+``NONE`` means no structural failure: a conversation can still fail τ²-bench for reasoning or
+policy reasons, which this classifier doesn't judge.
 
 It is deterministic and cheap, so it runs on every conversation. It needs no τ²-bench install:
 the tool schemas come from ``configs/tool_schemas.json`` (``scripts/dump_tool_schemas.py``).
