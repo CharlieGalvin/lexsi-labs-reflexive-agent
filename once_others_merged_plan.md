@@ -121,6 +121,22 @@ scripts/
   counted as a model failure
 - [ ] `publishing.feature`: what `golden-publish` checks before upload; it refuses a public repo
 
+## 8b. Follow-ups from the #38 review (5 Nov)
+
+- [ ] Make `FakeApi` in `tests/test_publish_golden.py` keep tag state, like the real Hub
+  (`create_tag` raises if the tag exists; `delete_tag` removes it), so the re-tag test proves
+  the behaviour rather than the order of calls
+- [ ] Tag the commit that was uploaded: `info = api.upload_folder(...)`, then
+  `create_tag(..., revision=info.oid)`
+- [ ] `--dry-run` reports whether `v1` already exists (today it returns before contacting the Hub)
+- [ ] `--retag` help: after the hand-over, publish `v1.1`/`v2` instead of moving `v1`
+- [ ] A half-written `.jsonl` line gives a "⛔" message, not a traceback (`load()` in `main`)
+- [ ] `build_golden.py`'s console summary: "of 142 / of 36" derived, not typed
+- [ ] Move `load`/`sha256` from `build_golden.py` into the package (the publish script imports a script)
+- [ ] `Tau2Episode`'s default `max_context=8192` (the Tiny Aya leftover) → 128K, or make it required
+  (a GRPO loop building episodes directly would cut telecom short)
+- [ ] `TeacherClient` records the API's `finish_reason`, so a reply cut by `max_tokens` is visible
+
 ## 9. Verify, then raise the PR
 
 - [ ] `just check` (lint, format check, tests) and `just features`
