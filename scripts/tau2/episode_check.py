@@ -21,9 +21,8 @@ import sys
 
 from loguru import logger
 
-sys.path.insert(0, str(pathlib.Path(__file__).parents[2] / "src"))
-from reflexive.episode import Tau2Episode  # noqa: E402
-from reflexive.llm import default_model  # noqa: E402
+from reflexive.episode import Tau2Episode
+from reflexive.llm import default_model
 
 logger.remove()
 logger.add(sys.stderr, level="ERROR")

@@ -19,14 +19,10 @@ import collections
 import datetime as dt
 import json
 import subprocess
-import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "src"))
-
-from reflexive import golden, splits  # noqa: E402
-from reflexive.files import BadJsonLine, read_jsonl, sha256, shown  # noqa: E402
+from reflexive import golden, splits
+from reflexive.files import ROOT, BadJsonLine, read_jsonl, sha256, shown
 
 DIR = ROOT / "data" / "golden" / "v1"
 REPO = "reagent-lexsi/tau2-golden-trajectories"

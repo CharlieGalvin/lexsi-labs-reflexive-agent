@@ -11,11 +11,9 @@ through, but treat these as estimates: your OpenRouter activity page shows actua
 
 from __future__ import annotations
 
-import pathlib
 import sys
 
-sys.path.insert(0, str(pathlib.Path(__file__).parents[2] / "src"))
-from reflexive.llm import register_openrouter_prices  # noqa: E402
+from reflexive.llm import register_openrouter_prices
 
 
 def main() -> None:

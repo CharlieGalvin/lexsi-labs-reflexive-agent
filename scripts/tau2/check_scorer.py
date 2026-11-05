@@ -21,8 +21,7 @@ import sys
 
 from loguru import logger
 
-sys.path.insert(0, str(pathlib.Path(__file__).parents[2] / "src"))
-from reflexive.outcome import JUDGED, scorer, to_openai  # noqa: E402
+from reflexive.outcome import JUDGED, scorer, to_openai
 
 logger.remove()
 logger.add(sys.stderr, level="ERROR")

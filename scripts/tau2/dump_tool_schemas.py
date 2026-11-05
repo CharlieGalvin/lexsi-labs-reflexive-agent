@@ -12,14 +12,10 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
-from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "src"))
-
-from reflexive import splits  # noqa: E402
-from reflexive.hallucination import SCHEMAS_PATH  # noqa: E402
+from reflexive import splits
+from reflexive.files import ROOT
+from reflexive.hallucination import SCHEMAS_PATH
 
 
 def build() -> dict:

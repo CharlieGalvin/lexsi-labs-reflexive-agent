@@ -16,13 +16,9 @@ import argparse
 import collections
 import json
 import random
-import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "src"))
-
-from reflexive.hallucination import FailureType, agent_view_of, classify_record  # noqa: E402
+from reflexive.hallucination import FailureType, agent_view_of, classify_record
 
 SEED = "sel-12-spot-check-v1"
 

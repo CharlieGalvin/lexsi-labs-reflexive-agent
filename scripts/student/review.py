@@ -55,9 +55,6 @@ def tool_name(tc: dict) -> str:
 def _current_unseen(rec: dict) -> list[str]:
     """Re-run today's invented-ID check (it now skips dates); fall back to what was saved."""
     try:
-        import sys
-
-        sys.path.insert(0, str(pathlib.Path(__file__).parents[2] / "src"))
         from reflexive.teacher import unseen_arguments
 
         return unseen_arguments(rec["messages"])
