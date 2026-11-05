@@ -4,6 +4,8 @@ import copy
 import sys
 from pathlib import Path
 
+import pytest
+
 from reflexive import golden, splits
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
@@ -58,6 +60,21 @@ def test_malformed_record_is_a_problem_not_a_crash():
     probs = pg.validate(r, report())
     assert any("malformed" in p for p in probs)
     assert any("belongs to no split" in p for p in probs)
+
+
+@pytest.mark.parametrize("key", ["domain", "task_id", "id", "split", "messages"])
+def test_record_missing_any_key_is_a_problem_not_a_crash(key):
+    """Every field validate() reads, including the ones used to spot tasks in both files."""
+    r = rows()
+    del r["train"][0][key]
+    probs = pg.validate(r, report())
+    assert any(f"train record 1: malformed (KeyError: '{key}')" in p for p in probs), probs
+
+
+def test_record_that_is_not_an_object_is_a_problem_not_a_crash():
+    r = rows()
+    r["train"][0] = ["not", "a", "record"]
+    assert any("train record 1: malformed" in p for p in pg.validate(r, report()))
 
 
 def test_card_counts_unsolved_train_and_dev_separately():

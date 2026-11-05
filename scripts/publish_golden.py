@@ -38,11 +38,12 @@ TAG = "v1"
 
 def validate(rows: dict[str, list[dict]], report: dict) -> list[str]:
     """Problems that must stop an upload."""
-    problems, ids, tasks = [], collections.Counter(), {}
+    problems, ids = [], collections.Counter()
+    tasks: dict[str, set[tuple[str, str]]] = {split: set() for split in rows}
     for split, recs in rows.items():
-        tasks[split] = {(r["domain"], r["task_id"]) for r in recs}
         for n, r in enumerate(recs):
-            try:
+            try:  # every key is read inside the try: a malformed record is a problem, never a crash
+                tasks[split].add((r["domain"], r["task_id"]))
                 ids[r["id"]] += 1
                 if r["format"] != golden.FORMAT:
                     problems.append(f"{r['id']}: format {r['format']}")
