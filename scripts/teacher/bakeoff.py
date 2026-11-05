@@ -33,6 +33,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
 from reflexive import runner
+from reflexive.files import resume_jsonl
 from reflexive.runner import Record, Task, is_broken
 from reflexive.stats import wilson
 
@@ -140,8 +141,7 @@ def load_done(out: pathlib.Path, *, fresh: bool, retry_broken: bool) -> dict[Tas
     if fresh or not out.exists():
         return {}
     done = {}
-    for line in out.read_text().splitlines():
-        r = json.loads(line)
+    for r in resume_jsonl(out):  # survives a half-written last line from a stopped run
         if not (retry_broken and is_broken(r)):
             done[(r["domain"], r["task_id"])] = r
     if retry_broken:  # rewrite the file without the broken conversations about to be redone

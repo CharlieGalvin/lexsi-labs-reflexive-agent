@@ -240,6 +240,7 @@ def test_rollout_reruns_crashed_conversations_and_counts_them_apart(tmp_path, mo
             json.dumps(r) + "\n"
             for r in [rec("t1", passed=True), rec("t2", error="RateLimitError: trial key")]
         )
+        + '{"task_id": "t3", "sam'  # the last run stopped while writing t3's record
     )
     calls = []
 

@@ -32,6 +32,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from reflexive import splits
 from reflexive.arms import get_arm, make_student, run_episode
+from reflexive.files import resume_jsonl
 from reflexive.teacher import RateLimiter
 
 
@@ -70,10 +71,8 @@ def main() -> int:
 
     kept: list[str] = []  # clean records from earlier runs; crashed ones are dropped and re-run
     if out.exists() and not a.fresh:
-        kept = [
-            line
-            for line in out.read_text().splitlines()
-            if line.strip() and not json.loads(line).get("error")
+        kept = [  # resume_jsonl survives a half-written last line from a stopped run
+            json.dumps(r, ensure_ascii=False) for r in resume_jsonl(out) if not r.get("error")
         ]
     done = {(r["task_id"], r.get("sample", 0)) for r in map(json.loads, kept)}
     todo = [(t, s) for t in tasks for s in range(a.samples) if (t, s) not in done]

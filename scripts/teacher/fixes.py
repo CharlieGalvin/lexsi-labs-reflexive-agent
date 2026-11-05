@@ -40,6 +40,7 @@ from typing import Any
 
 from reflexive import runner
 from reflexive.episode import official_split
+from reflexive.files import read_jsonl, resume_jsonl
 from reflexive.runner import Record, Task, is_broken
 from reflexive.stats import wilson
 
@@ -195,7 +196,7 @@ def rejudge(path: pathlib.Path, workers: int = 2, tries: int = 6) -> tuple[int, 
 
     from reflexive.outcome import score
 
-    recs = [json.loads(x) for x in path.read_text().splitlines()]
+    recs = resume_jsonl(path)  # rewritten below, so a half-written last line is dropped
     todo = [r for r in recs if needs_judging(r)]
 
     def one(r: Record) -> bool:
@@ -286,8 +287,7 @@ def load_done(out: pathlib.Path, *, retry_broken: bool) -> dict[Attempt, Record]
     done: dict[Attempt, Record] = {}
     if not out.exists():
         return done
-    for line in out.read_text().splitlines():
-        r = json.loads(line)
+    for r in resume_jsonl(out):  # survives a half-written last line from a stopped run
         if not (retry_broken and is_broken(r)):
             done[(r["domain"], r["task_id"], r["attempt"])] = r
     if retry_broken:  # rewrite the file without the broken attempts about to be redone
@@ -435,7 +435,7 @@ def main() -> int:
         print(f"re-judged {ok}/{n} conversations" + ("" if ok == n else "; run --rejudge again for the rest"))
         a.report = True
     if a.report:
-        recs = [json.loads(x) for x in out.read_text().splitlines()] if out.exists() else []
+        recs = read_jsonl(out, partial_last_ok=True) if out.exists() else []
         print_report(a.model, report(recs, a.attempts))
         return 0
 
