@@ -18,7 +18,7 @@ Read these in order. Each page says at the top whether it's final, and what supe
   [`../TAU2_SETUP.md`](../TAU2_SETUP.md).
 - **Data contract v1** (4 Nov): Cohere `Action:` format, the agent's view, loss on assistant
   turns, one trajectory per solved task, dev split by task.
-  [Contract doc](https://claude.ai/artifact/Ew1amyTBrTHbdiW92DQzNw); page 4.
+  [`../DATA_CONTRACT.md`](../DATA_CONTRACT.md); page 4.
 - **Splits frozen** (4 Nov): train 142, dev 36, test 100. `configs/splits.json`.
 - **Prompting alone doesn't fix it** (4 Nov, Chiara): on all 74 telecom train tasks, Arm C
   (a fixed "be careful not to hallucinate" instruction) passed 2 vs Arm A's 5 (exact McNemar

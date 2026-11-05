@@ -8,8 +8,7 @@
 solved a τ²-bench **train** task, verified by τ²-bench's own evaluator. They're formatted
 exactly as Aya Expanse 32B (the student) sees a conversation, with its turns marked as the
 learning targets. There are also 31 dev conversations, for reference only and never trained on.
-The format is fixed by the [data contract v1](https://claude.ai/artifact/Ew1amyTBrTHbdiW92DQzNw),
-agreed on 4 Nov.
+The format is fixed by the [data contract v1](../DATA_CONTRACT.md), agreed on 4 Nov.
 
 **Rebuild it yourself (no API calls, ~10 s).** The raw run files are backed up in the same
 dataset under `raw/` (team members only):
@@ -91,8 +90,11 @@ outcome   {"reward": 1.0, "checks": {"DB": 1.0, "COMMUNICATE": 1.0}}
 teacher   {"model": "z-ai/glm-5.3-flash", "provider": "InferenceNet", "temperature": 0.0, "attempt": 1}
 ```
 
-Training records run from 9 to 73 turns (median 31), and the longest is ~45K characters,
-roughly 11–13K tokens. Everything fits a 16K context.
+Training records run from 9 to 73 turns (median 31). A typical record is ~34K characters
+(about 8–10K tokens) and the longest ~45K (about 11–13K), so everything fits a 16K context.
+**Only about 13% of each record is learning target:** the system prompt alone is ~17K
+characters, so the 127 training records hold roughly 150K target tokens in all. Full size
+table: [`../DATA_CONTRACT.md`](../DATA_CONTRACT.md#how-big-a-record-is).
 
 ## Questions sent to the Trainer at hand-over (5 Nov; answers pending)
 

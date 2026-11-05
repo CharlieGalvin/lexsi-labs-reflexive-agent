@@ -53,7 +53,7 @@ towards verified correctness through automated, gated weight updates.
 ## 2. Experiment design — "the proof"
 
 **Task suites** (decision 2 Nov: public benchmarks instead of a synthetic suite, so our numbers are
-comparable with published results; see the [dataset options doc](https://claude.ai/artifact/F3PaRT61su9kdYb6LcWtxe)):
+comparable with published results; setup, splits and costs: [`docs/TAU2_SETUP.md`](docs/TAU2_SETUP.md)):
 
 - **[τ²-bench](https://github.com/sierra-research/tau2-bench)** (MIT): retail, airline and telecom
   customer-service tasks with database write tools and an LLM-simulated user, scored by final database
@@ -198,6 +198,7 @@ scripts/build_golden.py  golden trajectories v1 → data/golden/v1/ (just golden
 scripts/publish_golden.py  private upload to the team HF org with a data card (just golden-publish)
 third_party/             τ²-bench v2.0.0 (with data) and AgentTune, cloned by `just setup-dev` / `just setup`
 tests/                   offline tests (no GPU) — run in CI on every PR
+docs/DATA_CONTRACT.md    what the Curator hands over: the five rules, the files, record format and sizes
 docs/TAU2_SETUP.md       τ²-bench setup decisions (splits, judges, context fit, costs)
 docs/TEACHER_SETUP.md    teacher (GLM-5.3-Flash via OpenRouter) and the Cohere prompt format Aya uses
 docs/experiments/        the teacher bake-off and golden trajectories, in order (start at its README)
