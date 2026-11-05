@@ -4,18 +4,20 @@ from __future__ import annotations
 
 import json
 from types import SimpleNamespace as NS
+from typing import Any
 
 import pytest
 
 from reflexive.teacher import (
     TOOL_RESULT,
+    CohereClient,
     ContextTooLong,
     EmptyTeacherReply,
     RateLimiter,
-    TeacherClient,
     find_prompted_calls,
     parse_prompted,
     to_prompted,
+    tool_errors,
     tool_stub,
     unseen_arguments,
 )
@@ -33,12 +35,15 @@ def fake_completion(replies):
         if isinstance(r, str):
             msg = NS(content=r, tool_calls=None)
         else:  # native tool calls
-            msg = NS(content=None, tool_calls=[
-                NS(id=c["id"], function=NS(name=c["name"], arguments=json.dumps(c["args"])))
-                for c in r])
+            msg = NS(
+                content=None,
+                tool_calls=[
+                    NS(id=c["id"], function=NS(name=c["name"], arguments=json.dumps(c["args"]))) for c in r
+                ],
+            )
         return NS(choices=[NS(message=msg)], usage=NS(prompt_tokens=1000, completion_tokens=50))
 
-    completion.calls = calls
+    completion.calls = calls  # ty: ignore[unresolved-attribute]  # the test reads it back
     return completion
 
 
@@ -50,51 +55,80 @@ def test_to_prompted_puts_tools_in_system_and_folds_results():
         {"role": "system", "content": "POLICY"},
         {"role": "assistant", "content": "Hi! How can I help you today?"},
         {"role": "user", "content": "Where's my order?"},
-        {"role": "assistant", "content": None, "tool_calls": [
-            {"id": "c1", "type": "function",
-             "function": {"name": "get_order_details", "arguments": '{"order_id": "#W1"}'}}]},
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "c1",
+                    "type": "function",
+                    "function": {"name": "get_order_details", "arguments": '{"order_id": "#W1"}'},
+                }
+            ],
+        },
         {"role": "tool", "tool_call_id": "c1", "content": '{"status":"pending"}'},
     ]
     out = to_prompted(convo, TOOLS)
     assert out[0]["role"] == "system" and out[0]["content"].startswith("POLICY")
     assert "get_order_details" in out[0]["content"] and '"tool_name"' in out[0]["content"]
     assert json.loads(out[3]["content"]) == [
-        {"tool_name": "get_order_details", "parameters": {"order_id": "#W1"}}]
-    assert out[4] == {"role": "user", "content": TOOL_RESULT.format(
-        name="get_order_details", content='{"status":"pending"}')}
+        {"tool_name": "get_order_details", "parameters": {"order_id": "#W1"}}
+    ]
+    assert out[4] == {
+        "role": "user",
+        "content": TOOL_RESULT.format(name="get_order_details", content='{"status":"pending"}'),
+    }
     assert all(m["role"] != "tool" for m in out)
 
 
 def test_to_prompted_merges_adjacent_turns_from_the_same_role():
-    convo = [{"role": "assistant", "content": None, "tool_calls": [
-        {"id": "a", "function": {"name": "x", "arguments": {}}},
-        {"id": "b", "function": {"name": "y", "arguments": {}}}]},
+    convo = [
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {"id": "a", "function": {"name": "x", "arguments": {}}},
+                {"id": "b", "function": {"name": "y", "arguments": {}}},
+            ],
+        },
         {"role": "tool", "tool_call_id": "a", "content": "1"},
-        {"role": "tool", "tool_call_id": "b", "content": "2"}]
+        {"role": "tool", "tool_call_id": "b", "content": "2"},
+    ]
     out = to_prompted(convo, TOOLS)
     assert [m["role"] for m in out] == ["assistant", "user"]
     assert "Tool result for x: 1" in out[1]["content"] and "Tool result for y: 2" in out[1]["content"]
 
 
-@pytest.mark.parametrize("text,expected", [
-    ('[{"tool_name": "get_order_details", "parameters": {"order_id": "#W1"}}]',
-     [("get_order_details", {"order_id": "#W1"})]),
-    ('{"tool_name": "get_order_details", "parameters": {}}', [("get_order_details", {})]),
-    ('```json\n[{"name": "get_order_details", "arguments": {"order_id": "#W2"}}]\n```',
-     [("get_order_details", {"order_id": "#W2"})]),
-    ('[{"tool_name": "made_up_tool", "parameters": {}}]', [("made_up_tool", {})]),  # kept
-])
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        (
+            '[{"tool_name": "get_order_details", "parameters": {"order_id": "#W1"}}]',
+            [("get_order_details", {"order_id": "#W1"})],
+        ),
+        ('{"tool_name": "get_order_details", "parameters": {}}', [("get_order_details", {})]),
+        (
+            '```json\n[{"name": "get_order_details", "arguments": {"order_id": "#W2"}}]\n```',
+            [("get_order_details", {"order_id": "#W2"})],
+        ),
+        ('[{"tool_name": "made_up_tool", "parameters": {}}]', [("made_up_tool", {})]),  # kept
+    ],
+)
 def test_parse_prompted_reads_tool_calls(text, expected):
     calls = parse_prompted(text)
+    assert calls is not None
     assert [(c["function"]["name"], json.loads(c["function"]["arguments"])) for c in calls] == expected
 
 
-@pytest.mark.parametrize("text", [
-    "Your order #W1 is pending.",
-    'I can look that up. Send me {"order_id": ...} please.',  # mentions JSON, doesn't start with it
-    "[not json",
-    '[{"parameters": {}}]',  # no tool name
-])
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Your order #W1 is pending.",
+        'I can look that up. Send me {"order_id": ...} please.',  # mentions JSON, doesn't start with it
+        "[not json",
+        '[{"parameters": {}}]',  # no tool name
+    ],
+)
 def test_parse_prompted_leaves_messages_alone(text):
     assert parse_prompted(text) is None
 
@@ -142,25 +176,31 @@ The certificate has been successfully sent to your registered email address, Emm
 TELECOM_REPLY = (
     "Please provide me with your account details so I can transfer you to a human agent.\n\n"
     '[{"tool_name": "transfer_to_human_agents", "parameters": {"summary": "MMS still failing."}}]'
-    "\n\nYOU ARE BEING TRANSFERRED TO A HUMAN AGENT. PLEASE HOLD ON.")
+    "\n\nYOU ARE BEING TRANSFERRED TO A HUMAN AGENT. PLEASE HOLD ON."
+)
 
 
-@pytest.mark.parametrize("text,name", [
-    (RETAIL_REPLY, "exchange_delivered_order_items"),
-    (AIRLINE_REPLY, "send_certificate"),
-    (TELECOM_REPLY, "transfer_to_human_agents"),
-])
+@pytest.mark.parametrize(
+    "text,name",
+    [
+        (RETAIL_REPLY, "exchange_delivered_order_items"),
+        (AIRLINE_REPLY, "send_certificate"),
+        (TELECOM_REPLY, "transfer_to_human_agents"),
+    ],
+)
 def test_tool_calls_embedded_in_prose_are_found(text, name):
     calls, embedded = find_prompted_calls(text)
-    assert embedded and [c["function"]["name"] for c in calls] == [name]
+    assert calls is not None and embedded and [c["function"]["name"] for c in calls] == [name]
 
 
 def test_embedded_call_drops_the_prose_and_any_made_up_result():
-    t = TeacherClient("prompted", completion=fake_completion([AIRLINE_REPLY]), rpm=0)
+    t = CohereClient("prompted", completion=fake_completion([AIRLINE_REPLY]), rpm=0)
     turn = t.turn([{"role": "user", "content": "go ahead"}], TOOLS)
     assert turn["content"] is None  # not "...successfully sent..." to the customer
     assert json.loads(turn["tool_calls"][0]["function"]["arguments"]) == {
-        "user_id": "emma_kim_9957", "amount": 200}
+        "user_id": "emma_kim_9957",
+        "amount": 200,
+    }
     assert t.usage.embedded == 1 and t.usage.as_dict()["embedded"] == 1
 
 
@@ -176,12 +216,21 @@ def test_reply_that_is_only_json_is_not_counted_as_embedded():
 
 # --- Aya's own (Cohere) prompt style -----------------------------------------------------------
 
-ORDER_TOOL = {"type": "function", "function": {
-    "name": "get_order_details", "description": "Get the status of an order.\nMore detail here.",
-    "parameters": {"type": "object", "properties": {
-        "order_id": {"type": "string", "description": "The order id."},
-        "item_ids": {"type": "array", "items": {"type": "string"}, "description": "Items."}},
-        "required": ["order_id"]}}}
+ORDER_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "get_order_details",
+        "description": "Get the status of an order.\nMore detail here.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "order_id": {"type": "string", "description": "The order id."},
+                "item_ids": {"type": "array", "items": {"type": "string"}, "description": "Items."},
+            },
+            "required": ["order_id"],
+        },
+    },
+}
 
 
 def test_tool_stub_renders_python_signature_and_args():
@@ -195,27 +244,34 @@ def test_tool_stub_renders_python_signature_and_args():
 def test_cohere_style_uses_action_format_and_results_tags():
     convo = [
         {"role": "system", "content": "POLICY"},
-        {"role": "assistant", "content": None, "tool_calls": [
-            {"id": "c1", "function": {"name": "get_order_details", "arguments": '{"order_id": "#W1"}'}}]},
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {"id": "c1", "function": {"name": "get_order_details", "arguments": '{"order_id": "#W1"}'}}
+            ],
+        },
         {"role": "tool", "tool_call_id": "c1", "content": "pending"},
     ]
     out = to_prompted(convo, [ORDER_TOOL], "cohere")
     assert out[0]["content"].startswith("POLICY\n\n## Available Tools")
     assert "def get_order_details(" in out[0]["content"] and "Write 'Action:'" in out[0]["content"]
     assert out[1]["content"].startswith("Action: ```json")
-    assert out[2]["content"] == ("<results>\nDocument: 0\ntool_name: get_order_details\n"
-                                 "result: pending\n</results>")
+    assert out[2]["content"] == (
+        "<results>\nDocument: 0\ntool_name: get_order_details\nresult: pending\n</results>"
+    )
 
 
 def test_action_prefixed_reply_is_a_call_not_embedded():
     calls, embedded = find_prompted_calls(
-        'Action: ```json\n[{"tool_name": "get_order_details", "parameters": {"order_id": "#W1"}}]\n```')
+        'Action: ```json\n[{"tool_name": "get_order_details", "parameters": {"order_id": "#W1"}}]\n```'
+    )
     assert calls and not embedded
 
 
 def test_cohere_turn_sends_stop_sequences():
     fc = fake_completion(['Action: ```json\n[{"tool_name": "get_order_details", "parameters": {}}]\n```'])
-    t = TeacherClient("prompted", completion=fc, rpm=0)
+    t = CohereClient("prompted", completion=fc, rpm=0)
     assert t.style == "cohere"  # Aya's own format is the teacher's default
     turn = t.turn([{"role": "system", "content": "P"}, {"role": "user", "content": "hi"}], [ORDER_TOOL])
     assert turn["tool_calls"][0]["function"]["name"] == "get_order_details"
@@ -223,18 +279,24 @@ def test_cohere_turn_sends_stop_sequences():
 
 
 def test_directly_answer_with_prose_becomes_a_message():
-    reply = ('Your order is on its way!\n\nAction: ```json\n'
-             '[{"tool_name": "directly-answer", "parameters": {}}]\n```')
-    t = TeacherClient("prompted", completion=fake_completion([reply]), rpm=0)
+    reply = (
+        "Your order is on its way!\n\nAction: ```json\n"
+        '[{"tool_name": "directly-answer", "parameters": {}}]\n```'
+    )
+    t = CohereClient("prompted", completion=fake_completion([reply]), rpm=0)
     turn = t.turn([{"role": "user", "content": "thanks"}], [ORDER_TOOL])
     assert turn == {"role": "assistant", "content": "Your order is on its way!"}
     assert t.usage.directly_answer == 1 and t.usage.calls == 1
 
 
 def test_directly_answer_alone_asks_once_for_the_reply():
-    fc = fake_completion(['Action: ```json\n[{"tool_name": "directly-answer", "parameters": {}}]\n```',
-                          "You're welcome, have a nice day!"])
-    t = TeacherClient("prompted", completion=fc, rpm=0)
+    fc = fake_completion(
+        [
+            'Action: ```json\n[{"tool_name": "directly-answer", "parameters": {}}]\n```',
+            "You're welcome, have a nice day!",
+        ]
+    )
+    t = CohereClient("prompted", completion=fc, rpm=0)
     turn = t.turn([{"role": "user", "content": "thanks"}], [ORDER_TOOL])
     assert turn == {"role": "assistant", "content": "You're welcome, have a nice day!"}
     assert t.usage.calls == 2 and "plain text" in fc.calls[1]["messages"][-1]["content"]
@@ -242,21 +304,21 @@ def test_directly_answer_alone_asks_once_for_the_reply():
 
 def test_empty_reply_is_re_asked_once_without_stop_sequences():
     fc = fake_completion(["", "Could you share your order number?"])
-    t = TeacherClient("prompted", completion=fc, rpm=0)
+    t = CohereClient("prompted", completion=fc, rpm=0)
     turn = t.turn([{"role": "user", "content": "hi"}], [ORDER_TOOL])
     assert turn == {"role": "assistant", "content": "Could you share your order number?"}
     assert t.usage.empty == 1 and "stop" in fc.calls[0] and "stop" not in fc.calls[1]
 
 
 def test_twice_empty_reply_raises_instead_of_sending_an_empty_turn():
-    t = TeacherClient("prompted", completion=fake_completion(["", "   "]), rpm=0)
+    t = CohereClient("prompted", completion=fake_completion(["", "   "]), rpm=0)
     with pytest.raises(EmptyTeacherReply):
         t.turn([{"role": "user", "content": "hi"}], [ORDER_TOOL])
 
 
 def test_message_is_cut_before_invented_results():
     reply = "Let me check that for you.\n<results>\nDocument: 0\nresult: shipped\n</results>"
-    t = TeacherClient("prompted", completion=fake_completion(["", reply]), rpm=0)
+    t = CohereClient("prompted", completion=fake_completion(["", reply]), rpm=0)
     turn = t.turn([{"role": "user", "content": "hi"}], [ORDER_TOOL])
     assert turn["content"] == "Let me check that for you."
 
@@ -266,34 +328,68 @@ def test_unseen_arguments_flags_invented_ids_from_a_real_transcript():
     # the user ID from a tool result, but the item IDs and payment method were invented.
     convo = [
         {"role": "user", "content": "order number W2378156 ... Yusuf Rossi, zip code 19122"},
-        {"role": "assistant", "content": None, "tool_calls": [{"id": "a", "function": {
-            "name": "find_user_id_by_name_zip",
-            "arguments": '{"first_name": "Yusuf", "last_name": "Rossi", "zip": "19122"}'}}]},
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "a",
+                    "function": {
+                        "name": "find_user_id_by_name_zip",
+                        "arguments": '{"first_name": "Yusuf", "last_name": "Rossi", "zip": "19122"}',
+                    },
+                }
+            ],
+        },
         {"role": "tool", "tool_call_id": "a", "content": "yusuf_rossi_9620"},
-        {"role": "assistant", "content": None, "tool_calls": [{"id": "b", "function": {
-            "name": "exchange_delivered_order_items", "arguments": json.dumps({
-                "order_id": "#W2378156", "item_ids": ["1012345678", "9876543210"],
-                "new_item_ids": ["1012345679", "9876543211"],
-                "payment_method_id": "credit_card_0000000"})}}]},
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "b",
+                    "function": {
+                        "name": "exchange_delivered_order_items",
+                        "arguments": json.dumps(
+                            {
+                                "order_id": "#W2378156",
+                                "item_ids": ["1012345678", "9876543210"],
+                                "new_item_ids": ["1012345679", "9876543211"],
+                                "payment_method_id": "credit_card_0000000",
+                            }
+                        ),
+                    },
+                }
+            ],
+        },
     ]
-    assert unseen_arguments(convo) == ["1012345678", "9876543210", "1012345679", "9876543211",
-                                       "credit_card_0000000"]
+    assert unseen_arguments(convo) == [
+        "1012345678",
+        "9876543210",
+        "1012345679",
+        "9876543211",
+        "credit_card_0000000",
+    ]
 
 
 def test_pseudo_tool_call_text_is_counted_as_unparsed():
     # Seen 3 Nov: "[(tool_name: get_reservation_details, parameters: {...})]" is not JSON
     text = 'Let me check.\n\n[(tool_name: get_reservation_details, parameters: {"reservation_id": "X"})]'
-    t = TeacherClient("prompted", style="agenttune", completion=fake_completion([text]), rpm=0)
+    t = CohereClient("prompted", style="agenttune", completion=fake_completion([text]), rpm=0)
     turn = t.turn([{"role": "user", "content": "hi"}], TOOLS)
     assert "tool_calls" not in turn and t.usage.unparsed == 1
 
 
-@pytest.mark.parametrize("text,args", [
-    ('Action: get_order_details({"order_id": "#W2378156"})', {"order_id": "#W2378156"}),  # Tiny Aya
-    ("get_order_details()", {}),
-])
+@pytest.mark.parametrize(
+    "text,args",
+    [
+        ('Action: get_order_details({"order_id": "#W2378156"})', {"order_id": "#W2378156"}),  # Tiny Aya
+        ("get_order_details()", {}),
+    ],
+)
 def test_function_call_style_is_read(text, args):
     calls, embedded = find_prompted_calls(text)
+    assert calls is not None
     assert calls[0]["function"]["name"] == "get_order_details" and not embedded
     assert json.loads(calls[0]["function"]["arguments"]) == args
 
@@ -301,6 +397,7 @@ def test_function_call_style_is_read(text, args):
 def test_function_call_with_keyword_arguments_uses_taus_parser():
     pytest.importorskip("tau2")
     calls, _ = find_prompted_calls("get_order_details(order_id='#W1')")
+    assert calls is not None
     assert json.loads(calls[0]["function"]["arguments"]) == {"order_id": "#W1"}
 
 
@@ -318,7 +415,7 @@ def test_no_response_from_the_api_is_retried(monkeypatch):
         calls.append(1)
         return None if len(calls) == 1 else ok(**kw)
 
-    t = TeacherClient("prompted", completion=flaky, rpm=0)
+    t = CohereClient("prompted", completion=flaky, rpm=0)
     assert t.turn([{"role": "user", "content": "hi"}], TOOLS)["content"] == "fine" and len(calls) == 2
 
 
@@ -329,7 +426,7 @@ def test_too_many_tokens_becomes_context_too_long():
     def refuse(**kw):
         raise BadRequestError("too many tokens: size limit exceeded by 35 tokens. The limit is 8192")
 
-    t = TeacherClient("prompted", completion=refuse, rpm=0)
+    t = CohereClient("prompted", completion=refuse, rpm=0)
     with pytest.raises(ContextTooLong):
         t.turn([{"role": "user", "content": "hi"}], TOOLS)
 
@@ -338,9 +435,10 @@ def test_too_many_tokens_becomes_context_too_long():
 
 
 def test_prompted_turn_returns_tool_calls_and_counts_usage():
-    fc = fake_completion(['[{"tool_name": "get_order_details", "parameters": {"order_id": "#W1"}}]',
-                          "Your order is pending."])
-    t = TeacherClient("prompted", completion=fc, rpm=0)
+    fc = fake_completion(
+        ['[{"tool_name": "get_order_details", "parameters": {"order_id": "#W1"}}]', "Your order is pending."]
+    )
+    t = CohereClient("prompted", completion=fc, rpm=0)
     turn = t.turn([{"role": "system", "content": "P"}, {"role": "user", "content": "hi"}], TOOLS)
     assert turn["content"] is None and turn["tool_calls"][0]["function"]["name"] == "get_order_details"
     assert "tools" not in fc.calls[0]  # prompted: no native tools parameter
@@ -354,15 +452,14 @@ def test_prompted_turn_returns_tool_calls_and_counts_usage():
 
 def test_native_turn_passes_tools_and_reads_structured_calls():
     fc = fake_completion([[{"id": "x1", "name": "get_order_details", "args": {"order_id": "#W1"}}]])
-    t = TeacherClient("native", completion=fc, rpm=0)
+    t = CohereClient("native", completion=fc, rpm=0)
     turn = t.turn([{"role": "user", "content": "hi"}], TOOLS)
     assert fc.calls[0]["tools"] == TOOLS
     assert turn["tool_calls"][0]["id"] == "x1"
 
 
 def test_unparsable_json_reply_is_sent_as_a_message_and_counted():
-    t = TeacherClient("prompted", completion=fake_completion(['[{"tool_name": "x", "parameters": ']),
-                      rpm=0)
+    t = CohereClient("prompted", completion=fake_completion(['[{"tool_name": "x", "parameters": ']), rpm=0)
     turn = t.turn([{"role": "user", "content": "hi"}], TOOLS)
     assert "tool_calls" not in turn and t.usage.unparsed == 1
 
@@ -399,7 +496,7 @@ def test_retries_transient_errors_but_not_rejected_requests(monkeypatch):
             raise RateLimitError("429")
         return ok(**kw)
 
-    t = TeacherClient("prompted", completion=flaky, rpm=0)
+    t = CohereClient("prompted", completion=flaky, rpm=0)
     assert t.turn([{"role": "user", "content": "hi"}], TOOLS)["content"] == "fine"
     assert len(attempts) == 3 and t.usage.calls == 1 and t.usage.errors == 0
 
@@ -409,7 +506,7 @@ def test_retries_transient_errors_but_not_rejected_requests(monkeypatch):
         rejected.append(1)
         raise BadRequestError("tool use is not supported by the provided model")
 
-    t = TeacherClient("native", completion=bad, rpm=0)
+    t = CohereClient("native", completion=bad, rpm=0)
     with pytest.raises(BadRequestError):
         t.turn([{"role": "user", "content": "hi"}], TOOLS)
     assert len(rejected) == 1 and t.usage.errors == 1
@@ -417,16 +514,16 @@ def test_retries_transient_errors_but_not_rejected_requests(monkeypatch):
 
 def test_no_rate_limit_by_default(monkeypatch):
     monkeypatch.delenv("TEACHER_RPM", raising=False)
-    t = TeacherClient(completion=fake_completion([]))
+    t = CohereClient(completion=fake_completion([]))
     assert t.limiter.interval == 0.0
     monkeypatch.setenv("TEACHER_RPM", "20")
-    assert TeacherClient(completion=fake_completion([])).limiter.interval == pytest.approx(3.0)
+    assert CohereClient(completion=fake_completion([])).limiter.interval == pytest.approx(3.0)
 
 
 def test_missing_key_is_explained(monkeypatch):
     monkeypatch.delenv("COHERE_API_KEY", raising=False)
     with pytest.raises(RuntimeError, match="COHERE_API_KEY"):
-        TeacherClient()
+        CohereClient()
 
 
 # --- End to end through Tau2Episode (needs τ²-bench) -------------------------------------------
@@ -441,13 +538,20 @@ def test_prompted_teacher_solves_a_task_through_the_episode():
 
     logger.disable("tau2")
     gold = [m for m in scorer("retail").gold_trajectory("0") if m["role"] == "assistant"]
-    replies = [json.dumps([{"tool_name": tc["name"], "parameters": tc["arguments"]}
-                           for tc in m["tool_calls"]]) for m in gold]
+    replies = [
+        json.dumps([{"tool_name": tc["name"], "parameters": tc["arguments"]} for tc in m["tool_calls"]])
+        for m in gold
+    ]
     replies.append("Your exchange is confirmed. ###STOP###")  # τ²-bench's agent stop
-    teacher = TeacherClient("prompted", completion=fake_completion(replies), rpm=0)
-    ep = Tau2Episode("retail", "0", user_llm="gpt-4.1",
-                     user_llm_args={"mock_response": "Yes, please go ahead."},
-                     max_context=128_000, reserve=4_096)
+    teacher = CohereClient("prompted", completion=fake_completion(replies), rpm=0)
+    ep = Tau2Episode(
+        "retail",
+        "0",
+        user_llm="gpt-4.1",
+        user_llm_args={"mock_response": "Yes, please go ahead."},
+        max_context=128_000,
+        reserve=4_096,
+    )
     ep.reset()
     while not ep.done:
         ep.step(teacher.turn(ep.prompt(), ep.tool_schemas))
@@ -461,8 +565,67 @@ def test_prompted_teacher_solves_a_task_through_the_episode():
 def test_dates_are_not_invented_ids():
     from reflexive.teacher import unseen_arguments
 
-    msgs = [{"role": "user", "content": "I want to fly next Friday"},
-            {"role": "assistant", "content": None, "tool_calls": [{"id": "a", "type": "function",
-             "function": {"name": "search_direct_flight",
-                          "arguments": '{"date": "2024-05-24", "user_id": "mia_li_3668"}'}}]}]
+    msgs = [
+        {"role": "user", "content": "I want to fly next Friday"},
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "a",
+                    "type": "function",
+                    "function": {
+                        "name": "search_direct_flight",
+                        "arguments": '{"date": "2024-05-24", "user_id": "mia_li_3668"}',
+                    },
+                }
+            ],
+        },
+    ]
     assert unseen_arguments(msgs) == ["mia_li_3668"]
+
+
+def test_the_old_name_still_works() -> None:
+    """reflexive.arms imports the client under its first name."""
+    from reflexive.teacher import TeacherClient
+
+    assert TeacherClient is CohereClient
+
+
+def test_tool_errors_counts_unknown_tools_and_retried_failures() -> None:
+    def call(i, name, args):
+        return {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [{"id": i, "function": {"name": name, "arguments": json.dumps(args)}}],
+        }
+
+    msgs = [
+        call("a", "check_apn_settings", {}),
+        {"role": "tool", "tool_call_id": "a", "content": "Error: Tool 'check_apn_settings' not found."},
+        call("b", "exchange", {"item_ids": ["1012345678"]}),
+        {"role": "tool", "tool_call_id": "b", "content": "Error: Number of 1012345678 not found."},
+        call("c", "exchange", {"item_ids": ["1012345678"]}),  # identical retry of a failure
+        {"role": "tool", "tool_call_id": "c", "content": "Error: Number of 1012345678 not found."},
+        call("d", "exchange", {"item_ids": ["1151293680"]}),  # different args: not a retry
+        {"role": "tool", "tool_call_id": "d", "content": '{"status": "exchange requested"}'},
+    ]
+    assert tool_errors(msgs) == {"unknown_tools": 1, "repeated_failures": 1}
+
+
+def test_a_reply_cut_off_at_max_tokens_is_counted() -> None:
+    """finish_reason "length" means the API stopped at max_tokens (1024 for Aya), mid-reply."""
+    reasons = iter(["length", "stop"])
+
+    def completion(**kwargs: Any) -> NS:
+        msg = NS(content="Let me check that order for you", tool_calls=None)
+        return NS(
+            choices=[NS(message=msg, finish_reason=next(reasons))],
+            usage=NS(prompt_tokens=1, completion_tokens=1),
+        )
+
+    t = CohereClient("prompted", completion=completion, rpm=0)
+    for _ in range(2):
+        t.turn([{"role": "user", "content": "hi"}], [])
+    assert t.usage.cut_off == 1 and t.usage.as_dict()["cut_off"] == 1
+    assert [c["finish_reason"] for c in t.usage.per_call] == ["length", "stop"]

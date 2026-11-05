@@ -29,7 +29,7 @@ turn, an earlier call comes first; findings on the same call go TOOL, then ARG, 
 policy reasons, which this classifier doesn't judge.
 
 It is deterministic and cheap, so it runs on every conversation. It needs no τ²-bench install:
-the tool schemas come from ``configs/tool_schemas.json`` (``scripts/dump_tool_schemas.py``).
+the tool schemas come from ``configs/tool_schemas.json`` (``scripts/tau2/dump_tool_schemas.py``).
 """
 
 from __future__ import annotations

@@ -14,4 +14,6 @@ jobs:
           python-version: "3.12"
       - run: pip install -e ".[dev]"
       - run: ruff check src scripts tests
+      - run: ruff format --check src scripts tests   # `just fmt` fixes it
+      - run: ty check --exit-zero-on-warning   # ty is pinned in the dev extra
       - run: pytest -q

@@ -1,18 +1,14 @@
-"""scripts/tau2_report.py: per-message cost summing and the token-based fallback."""
+"""scripts/tau2/run_report.py: per-message cost summing and the token-based fallback."""
 
 from __future__ import annotations
 
-import importlib.util
 import json
-import pathlib
 import sys
 
 import pytest
+from _scripts import load_script
 
-_PATH = pathlib.Path(__file__).parents[1] / "scripts" / "tau2_report.py"
-_spec = importlib.util.spec_from_file_location("tau2_report", _PATH)
-tau2_report = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(tau2_report)
+tau2_report = load_script("tau2/run_report")
 
 
 def _run(tmp_path, monkeypatch, capsys, messages):
@@ -25,21 +21,31 @@ def _run(tmp_path, monkeypatch, capsys, messages):
 
 
 def test_sums_message_costs_and_ignores_uncosted_greeting(tmp_path, monkeypatch, capsys):
-    out = _run(tmp_path, monkeypatch, capsys, [
-        {"role": "assistant", "content": "Hi! How can I help you today?", "cost": None},
-        {"role": "user", "cost": 0.02, "usage": {"prompt_tokens": 100, "completion_tokens": 10}},
-        {"role": "assistant", "cost": 0.011, "usage": {"prompt_tokens": 100, "completion_tokens": 10}},
-        {"role": "tool"},
-    ])
+    out = _run(
+        tmp_path,
+        monkeypatch,
+        capsys,
+        [
+            {"role": "assistant", "content": "Hi! How can I help you today?", "cost": None},
+            {"role": "user", "cost": 0.02, "usage": {"prompt_tokens": 100, "completion_tokens": 10}},
+            {"role": "assistant", "cost": 0.011, "usage": {"prompt_tokens": 100, "completion_tokens": 10}},
+            {"role": "tool"},
+        ],
+    )
     assert "agent:" in out and "$0.0110" in out
     assert "$0.0200" in out
     assert "total: $0.0310 for 1 task(s)" in out
 
 
 def test_estimates_from_tokens_when_no_message_has_a_cost(tmp_path, monkeypatch, capsys):
-    out = _run(tmp_path, monkeypatch, capsys, [
-        {"role": "assistant", "usage": {"prompt_tokens": 1000, "completion_tokens": 100}},
-    ])
+    out = _run(
+        tmp_path,
+        monkeypatch,
+        capsys,
+        [
+            {"role": "assistant", "usage": {"prompt_tokens": 1000, "completion_tokens": 100}},
+        ],
+    )
     assert "~$0.0028 (estimated)" in out
 
 

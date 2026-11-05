@@ -100,10 +100,10 @@ is the real question, but it's only worth doing if phase 2 leaves two close cand
 ## How to run
 
 ```bash
-python scripts/teacher_sample.py --models haiku --limit 2               # smoke test one model
+python scripts/teacher/bakeoff.py --models haiku --limit 2               # smoke test one model
 just teacher-sample aya bakeoff                                         # phase 1, resumes
-python scripts/teacher_sample.py --models aya bakeoff --json results/bakeoff.json
-python scripts/teacher_sample.py --models or:moonshotai/kimi-k2.6       # any other OpenRouter model
+python scripts/teacher/bakeoff.py --models aya bakeoff --json results/bakeoff.json
+python scripts/teacher/bakeoff.py --models or:moonshotai/kimi-k2.6       # any other OpenRouter model
 ```
 
 **Phase 1 results:** [`TEACHER_BAKEOFF_RESULTS.md`](TEACHER_BAKEOFF_RESULTS.md) (3 Nov).

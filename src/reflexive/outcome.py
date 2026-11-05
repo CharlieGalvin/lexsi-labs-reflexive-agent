@@ -38,9 +38,10 @@ import json
 import uuid
 from dataclasses import dataclass, field
 from functools import cache
-from typing import Any
+from typing import Any, Literal, cast
 
 JUDGED = {"NL_ASSERTION", "COMMUNICATE"}
+Requestor = Literal["user", "assistant"]  # who made a tool call (τ²-bench ToolMessage)
 NORMAL_STOPS = {"agent_stop", "user_stop"}
 
 
@@ -70,8 +71,12 @@ def _tool_call(tc: dict, requestor: str) -> dict:
         name = tc["name"]
     if isinstance(args, str):
         args = json.loads(args) if args.strip() else {}
-    return {"id": tc.get("id") or "", "name": name, "arguments": args,
-            "requestor": tc.get("requestor", requestor)}
+    return {
+        "id": tc.get("id") or "",
+        "name": name,
+        "arguments": args,
+        "requestor": tc.get("requestor", requestor),
+    }
 
 
 def from_openai(messages: list[Any]) -> list[Any]:
@@ -100,11 +105,15 @@ def from_openai(messages: list[Any]) -> list[Any]:
             content = m.get("content")
             if not isinstance(content, str) and content is not None:
                 content = json.dumps(content)
-            out.append(ToolMessage(
-                id=call_id, role="tool", content=content,
-                requestor=m.get("requestor") or requestor_of.get(call_id, "assistant"),
-                error=bool(m.get("error", False)),
-            ))
+            out.append(
+                ToolMessage(
+                    id=call_id,
+                    role="tool",
+                    content=content,
+                    requestor=cast(Requestor, m.get("requestor") or requestor_of.get(call_id, "assistant")),
+                    error=bool(m.get("error", False)),
+                )
+            )
         else:
             raise ValueError(f"Unknown message role {role!r}")
     return out
@@ -123,8 +132,11 @@ def to_openai(messages: list[Any]) -> list[dict]:
         d: dict[str, Any] = {"role": m.role, "content": m.content}
         if m.tool_calls:
             d["tool_calls"] = [
-                {"id": tc.id, "type": "function",
-                 "function": {"name": tc.name, "arguments": json.dumps(tc.arguments)}}
+                {
+                    "id": tc.id,
+                    "type": "function",
+                    "function": {"name": tc.name, "arguments": json.dumps(tc.arguments)},
+                }
                 for tc in m.tool_calls
             ]
         out.append(d)
@@ -137,7 +149,7 @@ def to_openai(messages: list[Any]) -> list[dict]:
 class Tau2Scorer:
     """Task definitions + evaluation environment for one domain, set up as `tau2 run` does."""
 
-    def __init__(self, domain: str, language: str = "en"):
+    def __init__(self, domain: str, language: str = "en") -> None:
         from tau2.data_model.simulation import TextRunConfig
         from tau2.multilingual.runtime import language_environment_kwargs, load_run_language
 
@@ -150,45 +162,61 @@ class Tau2Scorer:
         self.communicate_scoring = self.config.communicate_scoring
         self.customer_language = None  # English runs are not cross-lingual
 
-    def task(self, task_id: str):
+    def task(self, task_id: str) -> Any:  # a τ²-bench Task
         try:
             return self.tasks[task_id]
         except KeyError:
             raise KeyError(f"No {self.domain} task {task_id!r}") from None
 
-    def score(self, task_id: str, messages: list[Any], termination: str,
-              judges: bool = True) -> Outcome:
+    def score(self, task_id: str, messages: list[Any], termination: str, judges: bool = True) -> Outcome:
         from tau2.data_model.simulation import SimulationRun, TerminationReason
         from tau2.evaluator.evaluator import EvaluationType, evaluate_simulation
 
         task = self.task(task_id)
-        basis = [b.value for b in (task.evaluation_criteria.reward_basis
-                                   if task.evaluation_criteria else [])]
+        basis = [b.value for b in (task.evaluation_criteria.reward_basis if task.evaluation_criteria else [])]
         skipped = [] if judges else [b for b in basis if b in JUDGED]
         if skipped:  # grade only the deterministic part of the basis
-            crit = task.evaluation_criteria.model_copy(update={
-                "reward_basis": [b for b in task.evaluation_criteria.reward_basis
-                                 if b.value not in JUDGED]})
+            crit = task.evaluation_criteria.model_copy(
+                update={
+                    "reward_basis": [
+                        b for b in task.evaluation_criteria.reward_basis if b.value not in JUDGED
+                    ]
+                }
+            )
             task = task.model_copy(update={"evaluation_criteria": crit})
 
         sim = SimulationRun(
-            id=str(uuid.uuid4()), task_id=task_id, start_time="", end_time="", duration=0.0,
-            termination_reason=TerminationReason(termination), messages=from_openai(messages),
+            id=str(uuid.uuid4()),
+            task_id=task_id,
+            start_time="",
+            end_time="",
+            duration=0.0,
+            termination_reason=TerminationReason(termination),
+            messages=from_openai(messages),
         )
         info = evaluate_simulation(
-            simulation=sim, task=task, evaluation_type=EvaluationType.ALL, solo_mode=False,
-            domain=self.domain, env_kwargs=self.env_kwargs, strict_replay=False,
+            simulation=sim,
+            task=task,
+            evaluation_type=EvaluationType.ALL,
+            solo_mode=False,
+            # τ²-bench hints env_kwargs as `dict = None` and turns None into {} itself
+            domain=self.domain,
+            env_kwargs=self.env_kwargs,  # ty: ignore[invalid-argument-type]
+            strict_replay=False,
             communicate_scoring=self.communicate_scoring,
             customer_language=self.customer_language,
         )
         checks = {getattr(k, "value", str(k)): v for k, v in (info.reward_breakdown or {}).items()}
         note = (info.info or {}).get("note") if isinstance(info.info, dict) else None
         return Outcome(
-            passed=info.reward == 1.0, reward=info.reward, checks=checks,
+            passed=info.reward == 1.0,
+            reward=info.reward,
+            checks=checks,
             judged=termination in NORMAL_STOPS and any(b in JUDGED for b in basis) and not skipped,
-            skipped=skipped, note=note, reward_info=info,
+            skipped=skipped,
+            note=note,
+            reward_info=info,
         )
-
 
     def gold_trajectory(self, task_id: str, drop: int | None = None) -> list[dict]:
         """The task's correct actions as an OpenAI-style conversation, with real tool outputs.
@@ -203,19 +231,30 @@ class Tau2Scorer:
         task = self.task(task_id)
         env = registry.get_env_constructor(self.domain)(**(self.env_kwargs or {}))
         ist = task.initial_state
-        env.set_state(ist.initialization_data if ist else None,
-                      ist.initialization_actions if ist else None, [])
+        env.set_state(
+            ist.initialization_data if ist else None, ist.initialization_actions if ist else None, []
+        )
         msgs: list[dict] = []
         for i, a in enumerate(task.evaluation_criteria.actions or []):
             if i == drop:
                 continue
-            tc = {"id": f"call_{i}", "name": a.name, "arguments": a.arguments,
-                  "requestor": a.requestor}
+            tc = {"id": f"call_{i}", "name": a.name, "arguments": a.arguments, "requestor": a.requestor}
             result = env.get_response(ToolCall(**tc))
-            msgs.append({"role": "assistant" if a.requestor == "assistant" else "user",
-                         "content": None, "tool_calls": [tc]})
-            msgs.append({"role": "tool", "tool_call_id": result.id, "content": result.content,
-                         "requestor": a.requestor})
+            msgs.append(
+                {
+                    "role": "assistant" if a.requestor == "assistant" else "user",
+                    "content": None,
+                    "tool_calls": [tc],
+                }
+            )
+            msgs.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": result.id,
+                    "content": result.content,
+                    "requestor": a.requestor,
+                }
+            )
         msgs.append({"role": "user", "content": "Thanks, that's everything. ###STOP###"})
         return msgs
 
@@ -234,7 +273,13 @@ def scorer(domain: str, language: str = "en") -> Tau2Scorer:
     return Tau2Scorer(domain, language)
 
 
-def score(domain: str, task_id: str, messages: list[Any], termination: str,
-          judges: bool = True, language: str = "en") -> Outcome:
+def score(
+    domain: str,
+    task_id: str,
+    messages: list[Any],
+    termination: str,
+    judges: bool = True,
+    language: str = "en",
+) -> Outcome:
     """Pass/fail for one trajectory. See the module docstring for the message format."""
     return scorer(domain, language).score(task_id, messages, termination, judges=judges)

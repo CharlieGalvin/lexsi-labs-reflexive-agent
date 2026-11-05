@@ -3,7 +3,7 @@
     ep = Tau2Episode("telecom", task_id)          # customer: GPT-4.1 (τ²-bench's default)
     ep.reset()
     while not ep.done:
-        messages = ep.prompt()                    # system prompt + conversation, fitted to 8K
+        messages = ep.prompt()                    # system prompt + conversation, fitted to the window
         if ep.done:                               # didn't fit even after trimming → ended
             break
         reply = my_model(messages, tools=ep.tool_schemas)   # {"role": "assistant", ...}
@@ -28,7 +28,10 @@ tool calls. τ²-bench's instructions say "send a message *or* make a tool call,
 a turn with both is passed through as it is, as in an official run.
 
 **Tool results** go back to the model as compact JSON (no indentation): it's the same data in
-fewer tokens, which matters with Tiny Aya's 8,192-token window.
+fewer tokens. The window defaults to 128K (Aya Expanse 32B's) and ``reserve`` to 4,096 (Aya's
+maximum reply), matching ``configs/arms.yaml``. Until PR #41 the defaults were 8,192 and 1,024
+(Tiny Aya, the first student). Runs set both explicitly, so they are unaffected; for a smaller
+model, pass both.
 
 **Hints (teacher only).** ``hints="steps"`` adds τ²-bench's own resolution steps for the task
 (its `llm_agent_gt` setting) to the system prompt, so a teacher producing training data knows
@@ -76,7 +79,9 @@ PROMPT_VERSIONS: dict[str, str] = {k: v["version"] for k, v in _PROMPTS.items()}
 CAREFUL_INSTRUCTION = PROMPT_VARIANTS["careful"]  # Arm C's instruction
 CAREFUL_VERSION = PROMPT_VERSIONS["careful"]
 DEFAULT_MAX_STEPS = 200  # same as `tau2 run`
-DEFAULT_MAX_ERRORS = 10
+# τ²-bench also ends a conversation after 10 tool errors in a row (termination
+# "too_many_errors"). That's its own DEFAULT_MAX_ERRORS: the Gym environment we drive doesn't
+# take an error limit as a setting, so there's nothing for us to pass.
 
 
 def estimate_tokens(messages: list[dict]) -> int:
@@ -99,9 +104,9 @@ def compact_json(text: str | None) -> str | None:
         return text
 
 
-def fit_context(messages: list[dict], budget: int,
-                count_tokens: Callable[[list[dict]], int] = estimate_tokens
-                ) -> tuple[list[dict], int, bool]:
+def fit_context(
+    messages: list[dict], budget: int, count_tokens: Callable[[list[dict]], int] = estimate_tokens
+) -> tuple[list[dict], int, bool]:
     """Trim the oldest tool results until ``messages`` fits in ``budget`` tokens.
 
     Returns ``(messages, n_trimmed, fits)``. The system prompt, every agent and customer turn,
@@ -119,21 +124,42 @@ def fit_context(messages: list[dict], budget: int,
     return out, trimmed, count_tokens(out) <= budget
 
 
-def _split(domain: str, name: str) -> set[str]:
+def official_split(domain: str, name: str) -> list[str]:
+    """Task IDs in τ²-bench's own split (``train``: 178 tasks, ``test``: 100), as it lists them.
+
+    Our frozen splits (``reflexive.splits``) cut τ²-bench's train into train and dev.
+    """
     from tau2.registry import registry
 
-    return set(registry.get_task_splits_loader(domain)()[name])
+    loader = registry.get_task_splits_loader(domain)
+    if loader is None:
+        raise ValueError(f"τ²-bench has no task splits for {domain!r}")
+    return list(loader()[name])
+
+
+def _split(domain: str, name: str) -> set[str]:
+    return set(official_split(domain, name))
 
 
 class Tau2Episode:
     """One τ²-bench conversation: our code plays the agent, τ²-bench plays everything else."""
 
-    def __init__(self, domain: str, task_id: str, *, user_llm: str | None = None,
-                 user_llm_args: dict | None = None, max_steps: int = DEFAULT_MAX_STEPS,
-                 max_context: int = 8192, reserve: int = 1024,
-                 count_tokens: Callable[[list[dict]], int] = estimate_tokens,
-                 language: str = "en", seed: int | None = None, hints: str = "none",
-                 prompt_variant: str = "default"):
+    def __init__(
+        self,
+        domain: str,
+        task_id: str,
+        *,
+        user_llm: str | None = None,
+        user_llm_args: dict[str, Any] | None = None,
+        max_steps: int = DEFAULT_MAX_STEPS,
+        max_context: int = 128_000,
+        reserve: int = 4_096,
+        count_tokens: Callable[[list[dict]], int] = estimate_tokens,
+        language: str = "en",
+        seed: int | None = None,
+        hints: str = "none",
+        prompt_variant: str = "default",
+    ) -> None:
         from reflexive.llm import default_model, register_openrouter_prices
 
         if hints not in HINTS:
@@ -154,21 +180,41 @@ class Tau2Episode:
             # Hints come from the task's answer key: allowed only for producing training data,
             # never for anything that is evaluated (test split, the four arms).
             raise ValueError(f"hints are only allowed on train-split tasks ({domain} {task_id!r})")
-        self._env = None
+        self._env: Any = None  # τ²-bench's Gym environment, made by reset() (a class built at run time)
         self._view: list[Any] = []  # what the agent has seen so far (τ²-bench messages)
-        self.flags: dict[str, Any] = {"context_overflow": False, "tool_results_trimmed": 0,
-                                      "peak_prompt_tokens": 0}
+        self.flags: dict[str, Any] = {
+            "context_overflow": False,
+            "tool_results_trimmed": 0,
+            "peak_prompt_tokens": 0,
+        }
         self.done = False
         self._overflowed = False
-        self.started = self.ended = None
+        self.started: float | None = None
+        self.ended: float | None = None
 
     # --- Lifecycle -----------------------------------------------------------------------
+
+    @property
+    def env(self) -> Any:
+        """τ²-bench's environment for this conversation; only exists after ``reset()``."""
+        if self._env is None:
+            raise RuntimeError("The conversation hasn't started: call reset() first")
+        return self._env
+
+    @property
+    def has_env(self) -> bool:
+        """True once ``reset()`` has set up τ²-bench's environment (even if it has since ended)."""
+        return self._env is not None
 
     def reset(self) -> list[dict]:
         """Start the conversation. Returns the new messages (normally the customer's opener)."""
         env = _NoScoreAgentGymEnv(
-            domain=self.domain, task_id=self.task_id, max_steps=self.max_steps,
-            user_llm=self.user_llm, user_llm_args=self.user_llm_args, language=self.language,
+            domain=self.domain,
+            task_id=self.task_id,
+            max_steps=self.max_steps,
+            user_llm=self.user_llm,
+            user_llm_args=self.user_llm_args,
+            language=self.language,
         )
         self._env = env
         self.started = time.time()
@@ -188,7 +234,7 @@ class Tau2Episode:
             # τ²-bench rejects this and the whole run crashes, losing the conversation
             raise ValueError("An agent turn needs a message or at least one tool call (got neither)")
         (msg,) = from_openai([{**reply, "role": "assistant"}])
-        self._env._agent.set_action(msg)
+        self.env._agent.set_action(msg)
         self._wait_for_turn()
         new = self._sync()
         if new and new[0]["role"] == "assistant":  # our own turn, echoed back
@@ -196,21 +242,21 @@ class Tau2Episode:
         return new
 
     def _wait_for_turn(self) -> None:
-        env = self._env
+        env = self.env
         while not env._simulation_done.is_set() and not env._agent.is_agent_turn:
             env._simulation_done.wait(timeout=0.01)
 
     def _sync(self) -> list[dict]:
         """New agent-visible messages since the last call, as OpenAI-style dicts."""
-        if self._env._simulation_done.is_set():
+        if self.env._simulation_done.is_set():
             self.done = True
             self.ended = time.time()
-        obs = self._env._agent.observation
+        obs = self.env._agent.observation
         if len(obs) < len(self._view):
             # τ²-bench clears the agent's observation when the run ends. Keep what the agent saw,
             # or `messages()` (the agent's view) would be only the system prompt afterwards.
             return []
-        new = obs[len(self._view):]
+        new = obs[len(self._view) :]
         self._view = list(obs)
         return [self._for_model(m) for m in to_openai(new)]
 
@@ -241,8 +287,9 @@ class Tau2Episode:
         instruction = f"{AGENT_INSTRUCTION}\n\n{extra}" if extra else AGENT_INSTRUCTION
         steps = self.resolution_steps()
         if steps:
-            return SYSTEM_PROMPT_GT.format(agent_instruction=instruction,
-                                           domain_policy=self.policy, resolution_steps=steps)
+            return SYSTEM_PROMPT_GT.format(
+                agent_instruction=instruction, domain_policy=self.policy, resolution_steps=steps
+            )
         return SYSTEM_PROMPT.format(agent_instruction=instruction, domain_policy=self.policy)
 
     def resolution_steps(self) -> str:
@@ -258,7 +305,8 @@ class Tau2Episode:
         return "\n".join(
             f"[Step {i + 1}] "
             f"{LLMGTAgent.make_agent_instructions_from_action(a, include_function_args=with_args)}"
-            for i, a in enumerate(task.evaluation_criteria.actions))
+            for i, a in enumerate(task.evaluation_criteria.actions)
+        )
 
     @property
     def tool_schemas(self) -> list[dict]:
@@ -287,12 +335,18 @@ class Tau2Episode:
         msgs, trimmed, fits = fit_context(full, budget, self.count_tokens)
         self.flags["tool_results_trimmed"] = max(self.flags["tool_results_trimmed"], trimmed)
         self.flags["peak_prompt_tokens"] = max(  # untrimmed size: evidence for the telecom decision
-            self.flags["peak_prompt_tokens"], self.count_tokens(full) + self.tool_tokens())
+            self.flags["peak_prompt_tokens"], self.count_tokens(full) + self.tool_tokens()
+        )
         if not fits:
-            self._end_for_context()
+            self.end_for_context()
         return msgs
 
-    def _end_for_context(self) -> None:
+    def end_for_context(self) -> None:
+        """End the conversation because it no longer fits the window (``context_window_exceeded``).
+
+        ``prompt()`` calls it itself; a driver calls it when the model's API reports the prompt
+        too long by its own count.
+        """
         self._overflowed = True
         self.flags["context_overflow"] = True
         self._send_done()
@@ -300,8 +354,11 @@ class Tau2Episode:
     def finish(self) -> None:
         """End the conversation from the agent's side (termination ``agent_stop``).
 
-        For test drivers. A model ends a conversation the way τ²-bench's agent does: by
-        writing ``###STOP###`` in a message, or by transferring to a human agent.
+        For test drivers. A model ends a conversation the way τ²-bench's agent does: by writing
+        ``###STOP###`` in a message. A hand-off takes two steps: the ``transfer_to_human_agents``
+        call, then the policy's sentence ("YOU ARE BEING TRANSFERRED TO A HUMAN AGENT. PLEASE
+        HOLD ON."), after which the simulated customer ends it with ``###TRANSFER###``. Without
+        that sentence the conversation carries on (conversation A56 in Arm A ran to the step limit).
         """
         if not self.done:
             self._send_done()
@@ -309,9 +366,10 @@ class Tau2Episode:
     def _send_done(self) -> None:
         from tau2.data_model.message import AssistantMessage, ToolCall
 
-        stop = AssistantMessage(role="assistant", content=None, tool_calls=[
-            ToolCall(id="end", name="done", arguments={})])
-        self._env._agent.set_action(stop)
+        stop = AssistantMessage(
+            role="assistant", content=None, tool_calls=[ToolCall(id="end", name="done", arguments={})]
+        )
+        self.env._agent.set_action(stop)
         self._wait_for_turn()
         self._sync()
 
@@ -326,12 +384,15 @@ class Tau2Episode:
         """
         return [self._tool_function(t) for t in self._tools]
 
-    def _tool_function(self, tool) -> Callable[..., str]:
+    def _tool_function(self, tool: Any) -> Callable[..., str]:  # tool: a τ²-bench Tool
         episode = self
 
         def call(**kwargs: Any) -> str:
-            reply = {"role": "assistant", "content": None, "tool_calls": [
-                {"id": f"call_{len(episode._view)}", "name": tool.name, "arguments": kwargs}]}
+            reply = {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [{"id": f"call_{len(episode._view)}", "name": tool.name, "arguments": kwargs}],
+            }
             new = episode.step(reply)
             results = [m["content"] for m in new if m["role"] == "tool"]
             return results[0] if results else ""
@@ -340,8 +401,9 @@ class Tau2Episode:
         call.__qualname__ = tool.name
         call.__doc__ = tool._get_description()
         sig = tool.__signature__
-        call.__signature__ = sig.replace(parameters=[
-            p for p in sig.parameters.values() if p.kind != inspect.Parameter.VAR_KEYWORD])
+        params = [p for p in sig.parameters.values() if p.kind != inspect.Parameter.VAR_KEYWORD]
+        # Python lets a function carry a __signature__ (inspect reads it); ty doesn't know that
+        call.__signature__ = sig.replace(parameters=params)  # ty: ignore[unresolved-attribute]
         return call
 
     # --- Result --------------------------------------------------------------------------
@@ -360,11 +422,11 @@ class Tau2Episode:
 
         If τ²-bench's run crashed, this is the conversation up to the crash.
         """
-        run = self._env._simulation_run
+        run = self.env._simulation_run
         if run is not None and run.messages:
             return to_openai(run.messages)
         try:  # crashed run: recover what the orchestrator had so far
-            return to_openai(self._env._orchestrator.get_messages())
+            return to_openai(self.env._orchestrator.get_messages())
         except Exception:  # noqa: BLE001 - best effort; an empty trajectory is still valid
             return []
 
@@ -377,21 +439,32 @@ class Tau2Episode:
             raise RuntimeError("The conversation hasn't ended yet")
         traj = self.trajectory()
         outcome = scorer(self.domain, self.language).score(
-            self.task_id, traj, self.termination, judges=judges)
-        run = self._env._simulation_run
+            self.task_id, traj, self.termination, judges=judges
+        )
+        run = self.env._simulation_run
         return {
             "format": "reagent.tau2.episode/v0",
-            "domain": self.domain, "task_id": self.task_id, "language": self.language,
-            "hints": self.hints, "hinted": bool(self.resolution_steps()),
+            "domain": self.domain,
+            "task_id": self.task_id,
+            "language": self.language,
+            "hints": self.hints,
+            "hinted": bool(self.resolution_steps()),
             "prompt_variant": self.prompt_variant,
             "prompt_version": PROMPT_VERSIONS[self.prompt_variant],
             "termination": self.termination,
-            "outcome": {"passed": outcome.passed, "reward": outcome.reward,
-                        "checks": outcome.checks, "judged": outcome.judged,
-                        "skipped": outcome.skipped, "note": outcome.note},
+            "outcome": {
+                "passed": outcome.passed,
+                "reward": outcome.reward,
+                "checks": outcome.checks,
+                "judged": outcome.judged,
+                "skipped": outcome.skipped,
+                "note": outcome.note,
+            },
             "flags": dict(self.flags),
-            "user_llm": self.user_llm, "seed": self.seed,
-            "max_context": self.max_context, "reserve": self.reserve,
+            "user_llm": self.user_llm,
+            "seed": self.seed,
+            "max_context": self.max_context,
+            "reserve": self.reserve,
             "user_cost": getattr(run, "user_cost", None) if run else None,
             "duration_s": round((self.ended or time.time()) - (self.started or time.time()), 2),
             "messages": traj,
@@ -399,13 +472,13 @@ class Tau2Episode:
         }
 
 
-def _no_score_env_class():
+def _no_score_env_class() -> type:
     from tau2.gym.gym_agent import AgentGymEnv
 
     class NoScoreAgentGymEnv(AgentGymEnv):
         """τ²-bench's Gym environment, minus the in-run scoring (see module docstring)."""
 
-        def _run_orchestrator(self):
+        def _run_orchestrator(self) -> None:
             simulation_run = None
             try:
                 if self._orchestrator:
@@ -416,7 +489,7 @@ def _no_score_env_class():
                 self._simulation_run = simulation_run
                 self._simulation_done.set()
 
-        def _get_reward(self):
+        def _get_reward(self) -> tuple[float, str]:
             return 0.0, "{}"
 
     return NoScoreAgentGymEnv
@@ -425,7 +498,7 @@ def _no_score_env_class():
 _REGISTERED = False
 
 
-def _NoScoreAgentGymEnv(**kwargs):  # noqa: N802 - lazy import keeps tau2 optional
+def _NoScoreAgentGymEnv(**kwargs: Any) -> Any:  # noqa: N802 - lazy import keeps tau2 optional
     global _REGISTERED
     if not _REGISTERED:  # registers τ²-bench's Gym agent/customer roles, once per process
         from tau2.gym import register_gym_agent

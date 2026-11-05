@@ -63,7 +63,8 @@ def test_prompt_versions_are_never_edited_in_place():
             continue
         assert version in PINNED_PROMPTS, f"{version} is new: pin its hash in PINNED_PROMPTS"
         assert hashlib.sha256(text.encode()).hexdigest() == PINNED_PROMPTS[version], (
-            f"{variant} ({version}) was edited in place: add a new variant and version instead")
+            f"{variant} ({version}) was edited in place: add a new variant and version instead"
+        )
     assert len(set(PROMPT_VERSIONS.values())) == len(PROMPT_VERSIONS)  # versions are unique
 
 
@@ -105,8 +106,11 @@ class ScriptedAgent:
     def __init__(self, domain: str, task_id: str):
         from reflexive.outcome import scorer
 
-        self.calls = [m["tool_calls"] for m in scorer(domain).gold_trajectory(task_id)
-                      if m["role"] == "assistant" and m.get("tool_calls")]
+        self.calls = [
+            m["tool_calls"]
+            for m in scorer(domain).gold_trajectory(task_id)
+            if m["role"] == "assistant" and m.get("tool_calls")
+        ]
         self.prompts: list[list[dict]] = []
 
     def turn(self, messages, tool_schemas):
@@ -145,8 +149,16 @@ def test_an_arm_rollout_produces_a_scored_record(tau2, arm_key):
 
     arm = get_arm(arm_key)
     agent = ScriptedAgent("retail", "0")
-    rec = run_episode(arm, agent, "retail", "0", judges=False, sample=2,
-                      user_llm_args=CUSTOMER["user_llm_args"], user_llm=CUSTOMER["user_llm"])
+    rec = run_episode(
+        arm,
+        agent,
+        "retail",
+        "0",
+        judges=False,
+        sample=2,
+        user_llm_args=CUSTOMER["user_llm_args"],
+        user_llm=CUSTOMER["user_llm"],
+    )
     assert rec["arm"] == arm_key and rec["sample"] == 2 and rec["error"] is None
     assert rec["prompt_variant"] == arm.prompt_variant and rec["hints"] == "none"
     assert rec["termination"] == "agent_stop" and rec["outcome"]["passed"]
@@ -166,8 +178,7 @@ def test_the_agent_view_renders_as_cohere_actions(tau2):
     from reflexive.episode import CAREFUL_INSTRUCTION, Tau2Episode
     from reflexive.teacher import to_prompted
 
-    rec = run_episode(get_arm("C"), ScriptedAgent("retail", "0"), "retail", "0", judges=False,
-                      **CUSTOMER)
+    rec = run_episode(get_arm("C"), ScriptedAgent("retail", "0"), "retail", "0", judges=False, **CUSTOMER)
     ep = Tau2Episode("retail", "0", **CUSTOMER)
     ep.reset()
     text = to_prompted(rec["agent_view"], ep.tool_schemas, style="cohere")
@@ -204,14 +215,9 @@ def test_student_rpm_comes_from_the_config_not_teacher_rpm_and_can_be_shared(mon
 
 
 def _load_rollout_script():
-    import importlib.util
-    from pathlib import Path
+    from _scripts import load_script
 
-    path = Path(__file__).resolve().parents[1] / "scripts" / "rollout.py"
-    spec = importlib.util.spec_from_file_location("rollout_script", path)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
+    return load_script("arms/rollout")
 
 
 def test_rollout_reruns_crashed_conversations_and_counts_them_apart(tmp_path, monkeypatch, capsys):
@@ -219,11 +225,23 @@ def test_rollout_reruns_crashed_conversations_and_counts_them_apart(tmp_path, mo
     out = tmp_path / "A.jsonl"
 
     def rec(task_id, passed=False, error=None):
-        return {"task_id": task_id, "sample": 0, "termination": "agent_stop", "error": error,
-                "outcome": {"passed": passed}, "flags": {"context_overflow": False}, "wall_s": 1.0}
+        return {
+            "task_id": task_id,
+            "sample": 0,
+            "termination": "agent_stop",
+            "error": error,
+            "outcome": {"passed": passed},
+            "flags": {"context_overflow": False},
+            "wall_s": 1.0,
+        }
 
-    out.write_text("".join(json.dumps(r) + "\n" for r in [
-        rec("t1", passed=True), rec("t2", error="RateLimitError: trial key")]))
+    out.write_text(
+        "".join(
+            json.dumps(r) + "\n"
+            for r in [rec("t1", passed=True), rec("t2", error="RateLimitError: trial key")]
+        )
+        + '{"task_id": "t3", "sam'  # the last run stopped while writing t3's record
+    )
     calls = []
 
     def fake_run(arm, agent, domain, task_id, **kw):
@@ -251,13 +269,21 @@ def test_rollout_runs_the_frozen_dev_split(tmp_path, monkeypatch, capsys):
 
     def fake_run(arm, agent, domain, task_id, **kw):
         calls.append(task_id)
-        return {"task_id": task_id, "sample": 0, "termination": "agent_stop", "error": None,
-                "outcome": {"passed": False}, "flags": {"context_overflow": False}, "wall_s": 1.0}
+        return {
+            "task_id": task_id,
+            "sample": 0,
+            "termination": "agent_stop",
+            "error": None,
+            "outcome": {"passed": False},
+            "flags": {"context_overflow": False},
+            "wall_s": 1.0,
+        }
 
     monkeypatch.setattr(mod, "make_student", lambda student, **kw: object())
     monkeypatch.setattr(mod, "run_episode", fake_run)
-    monkeypatch.setattr("sys.argv", ["rollout.py", "A", "telecom", "--split", "dev", "--out",
-                                     str(out), "--workers", "1"])
+    monkeypatch.setattr(
+        "sys.argv", ["rollout.py", "A", "telecom", "--split", "dev", "--out", str(out), "--workers", "1"]
+    )
     assert mod.main() == 0
     dev = splits.task_ids("telecom", "dev")
     assert sorted(calls) == sorted(dev) and not set(dev) & set(splits.task_ids("telecom", "train"))

@@ -1,7 +1,7 @@
 """The frozen τ²-bench task splits (SEL-36): train / dev / test task IDs per domain.
 
 ``configs/splits.json`` is the single source of truth. It's made once by
-``scripts/make_splits.py`` from τ²-bench v2.0.0's own ``split_tasks.json``:
+``scripts/data/make_splits.py`` from τ²-bench v2.0.0's own ``split_tasks.json``:
 
 - **test** is τ²-bench's official test split, unchanged. It's only for the final evaluation.
   It's never used for healing, teacher fixes, DSPy or choosing anything.

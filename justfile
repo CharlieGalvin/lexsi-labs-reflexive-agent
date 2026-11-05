@@ -46,94 +46,113 @@ setup: setup-dev
 test:
     python -m pytest -q
 
-# Lint the code
+# The plain-English specifications (tests/features/*.feature), with each scenario's result
+features:
+    python -m pytest tests/test_features_*.py --gherkin-terminal-reporter -v -p no:cacheprovider
+
+# Lint the code and check its formatting
 lint:
     python -m ruff check src scripts tests
+    python -m ruff format --check src scripts tests
 
-# Lint + tests (what CI runs)
-check: lint test
+# Format the code (ruff format), then fix what lint can fix by itself
+fmt:
+    python -m ruff format src scripts tests
+    python -m ruff check --fix src scripts tests
+
+# Type checks with ty (Chiara's arms and classifier show as warnings; only errors fail)
+types:
+    python -m ty check --exit-zero-on-warning
+
+# Lint + types + tests (what CI runs)
+check: lint types test
+
+# Advisory, not blocking: types, dead code (vulture) and undeclared dependencies (deptry)
+quality: types
+    -uvx vulture@2.14 src scripts --min-confidence 80 --exclude scripts/archive
+    -uvx deptry@0.23.1 .
 
 # --- τ²-bench ----------------------------------------------------------------
 
 # Build golden trajectories v1 from the teacher's fix run (SEL-9; no API calls)
 golden *args:
-    python scripts/build_golden.py {{args}}
+    python scripts/data/build_golden.py {{args}}
 
 # Check data/golden/v1/, write the data card and upload it PRIVATE to the team HF org, tag v1 (SEL-48; --dry-run first)
 golden-publish *args:
-    python scripts/publish_golden.py {{args}}
+    python scripts/data/publish_golden.py {{args}}
 
 # Confirm configs/splits.json matches a rebuild from its seed (SEL-36)
 splits-check:
-    python scripts/make_splits.py --check
+    python scripts/data/make_splits.py --check
 
 # Spot-check the Tool/Arg/Loop classifier on saved rollouts (SEL-12; no API calls)
 hallucination-spot-check *files="results/episodes/arms/A-telecom-train.jsonl results/episodes/arms/C-telecom-train.jsonl":
-    python scripts/spot_check_hallucination.py {{files}} --labels docs/experiments/hallucination_labels.json
+    python scripts/arms/spot_check_hallucination.py {{files}} --labels docs/experiments/hallucination_labels.json
 
 # Re-save τ²-bench's tool schemas for the classifier (configs/tool_schemas.json; --check to verify)
 tool-schemas *args:
-    python scripts/dump_tool_schemas.py {{args}}
+    python scripts/tau2/dump_tool_schemas.py {{args}}
 
 # Splits, prompt sizes and context fit per domain (no API calls)
 tau2-inspect:
-    python scripts/tau2_inspect.py
+    python scripts/tau2/inspect_tasks.py
 
 # First live run: 2 train tasks + score and cost (domain: retail, airline or telecom)
 tau2-first-run domain="retail":
-    DOMAIN={{domain}} bash scripts/tau2_first_run.sh
+    DOMAIN={{domain}} bash scripts/tau2/first_run.sh
 
 # 5 fixed telecom tasks (3 state-check, 2 also check actions) with GPT-4.1, ~$0.70
 scorer_tasks := "[mobile_data_issue]airplane_mode_on|user_abroad_roaming_enabled_off[PERSONA:None] [mobile_data_issue]airplane_mode_on|data_mode_off[PERSONA:None] [mobile_data_issue]airplane_mode_on|bad_network_preference[PERSONA:Hard] [service_issue]lock_sim_card_pin|overdue_bill_suspension[PERSONA:Easy] [service_issue]contract_end_suspension|lock_sim_card_pin[PERSONA:Hard]"
 
 # SEL-39: run 5 telecom tasks (~$0.70), then check our scorer agrees with τ²-bench
 tau2-scorer-run:
-    DOMAIN=telecom TASK_IDS='{{scorer_tasks}}' OUT=tau2-scorer-check bash scripts/tau2_first_run.sh
-    python scripts/tau2_check_scorer.py run tau2-scorer-check
+    DOMAIN=telecom TASK_IDS='{{scorer_tasks}}' OUT=tau2-scorer-check bash scripts/tau2/first_run.sh
+    python scripts/tau2/check_scorer.py run tau2-scorer-check
 
 # Re-score a saved run with our scorer and compare with the official score (free)
 tau2-check-scorer name="tau2-scorer-check":
-    python scripts/tau2_check_scorer.py run {{name}}
+    python scripts/tau2/check_scorer.py run {{name}}
 
 # SEL-32: GPT-4.1 drives our conversation wrapper on the same 5 telecom tasks (~$0.70)
 tau2-episode-check:
-    python scripts/tau2_episode_check.py telecom --task-ids '{{scorer_tasks}}'
+    python scripts/tau2/episode_check.py telecom --task-ids '{{scorer_tasks}}'
 
 # Replay every task's correct actions through our scorer: all must pass (no API, ~10 min)
 tau2-check-gold *domains:
-    python scripts/tau2_check_scorer.py gold {{domains}}
+    python scripts/tau2/check_scorer.py gold {{domains}}
 
-# --- Teacher (Aya Expanse 32B via Cohere; needs COHERE_API_KEY) -----------------
+# --- Archived: Aya Expanse 32B as the teacher (3 Nov; Aya is now the student) ---
+# Kept for the record (docs/TEACHER_SETUP.md, history). Needs COHERE_API_KEY.
 
 # Does a Cohere model do native tool calling? 3 API calls (default: the teacher; or tiny-aya-global)
 teacher-probe model="c4ai-aya-expanse-32b":
-    python scripts/teacher_probe.py --model {{model}}
+    python scripts/archive/teacher_probe.py --model {{model}}
 
 # Teacher on 3 tasks (one per domain). style: cohere (Aya's own) | agenttune; hints: none | steps | steps_with_args
 teacher-check style="cohere" hints="none":
-    python scripts/teacher_check.py --style {{style}} --hints {{hints}}
+    python scripts/archive/teacher_check.py --style {{style}} --hints {{hints}}
 
-# Is Aya a usable teacher? Same 30 train tasks for Aya and a reference (default: Qwen3 32B). ~$5
+# Teacher bake-off, phase 1: models on 30 fixed train tasks (`--models bakeoff`: the slate, ~$26; `--list`: free)
 teacher-sample *models="aya qwen":
-    python scripts/teacher_sample.py --models {{models}}
+    python scripts/teacher/bakeoff.py --models {{models}}
 
-# Fix run: the teacher (default GLM-5.3-Flash) on the 148 train tasks phase 1 didn't use, 3 attempts,
-# judges on. ~$13. Try `just teacher-fixes --limit 2` first; `--report` summarises what's saved.
+# Fix run: GLM-5.3-Flash, up to 3 attempts per train task, judges on (`--tasks all`: 178, $11.20; `--report`: free)
 teacher-fixes *args:
-    python scripts/teacher_fixes.py {{args}}
+    python scripts/teacher/fixes.py {{args}}
 
 # Where does a model go wrong? Failure categories + a browsable log page (results/reports/)
 student-review path="results/fixes/aya.jsonl":
-    python scripts/student_review.py {{path}}
+    python scripts/student/review.py {{path}}
 
 # Bake-off statistics and projected cost from the saved runs in results/episodes (no API calls)
 bakeoff-report:
-    python scripts/bakeoff_report.py
+    python scripts/teacher/bakeoff_report.py
 
 # --- Experiment arms (configs/arms.yaml) ----------------------------------------
 
 # Run an arm on a domain's split, e.g. `just rollout A retail --limit 5` or `just rollout C telecom`
 rollout arm domain *args:
-    python scripts/rollout.py {{arm}} {{domain}} {{args}}
+    python scripts/arms/rollout.py {{arm}} {{domain}} {{args}}
 
 # Experiment commands (train, evaluate…) are added by the Architect and Trainer.

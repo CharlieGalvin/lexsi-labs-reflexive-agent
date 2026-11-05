@@ -16,7 +16,8 @@ dependencies = [
 [project.optional-dependencies]
 # AgentTune is installed from source by `just setup`; it pins torch + transformers.
 train = ["datasets", "peft", "wandb"]
-dev = ["pytest>=8", "ruff>=0.6", "huggingface_hub>=0.24"]   # huggingface_hub: just golden-publish
+dev = ["pytest>=8", "pytest-bdd>=7", "ruff>=0.6", "ty==0.0.97", "huggingface_hub>=0.24"]
+# pytest-bdd: tests/features; ty: type checks (beta, so pinned exactly); huggingface_hub: just golden-publish
 # τ²-bench itself is NOT installed from here: a pip install from git leaves out its data/ folder
 # (tasks, databases, language packs). `just setup-dev` clones v2.0.0 into third_party/ and
 # installs it editable instead. This extra only adds what τ²-bench needs on top.
@@ -24,6 +25,7 @@ dev = ["pytest>=8", "ruff>=0.6", "huggingface_hub>=0.24"]   # huggingface_hub: j
 bench = [
   "audioop-lts; python_version >= '3.13'",
 ]
+reports = ["matplotlib>=3.8"]   # the bake-off and phase 2 charts (scripts/teacher/)
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -37,4 +39,54 @@ line-length = 110
 target-version = "py312"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "B", "UP"]
+select = ["E", "F", "I", "B", "UP", "C90", "ANN"]   # C90: complexity; ANN: every function has type hints
+ignore = ["ANN401"]   # `Any` is sometimes the honest type (τ²-bench objects, JSON records)
+
+[tool.ruff.lint.mccabe]
+max-complexity = 15   # break a longer function into named steps
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["ANN"]   # tests are typed where it helps (ty checks them), not on every function
+# Chiara's arms and classifier: typing them is a follow-up for her
+"src/reflexive/arms.py" = ["ANN"]
+"src/reflexive/hallucination.py" = ["ANN"]
+"scripts/archive/**" = ["ANN"]
+
+# ty (Astral's type checker, beta: pinned in CI). `just quality` and CI run `ty check`.
+[tool.ty.src]
+include = ["src", "scripts", "tests"]
+exclude = ["scripts/archive"]
+
+[tool.ty.analysis]
+# Optional extras: CI installs only `.[dev]`, so these aren't there. Locally they're checked.
+allowed-unresolved-imports = ["tau2", "tau2.**", "litellm", "litellm.**", "loguru", "httpx",
+                              "matplotlib", "matplotlib.**"]
+
+# Chiara's classifier and arms: typing them is a follow-up for her (warnings, not failures).
+[[tool.ty.overrides]]
+include = ["src/reflexive/arms.py", "src/reflexive/hallucination.py",
+           "tests/test_arms.py", "tests/test_hallucination.py"]
+
+[tool.ty.overrides.rules]
+invalid-argument-type = "warn"
+invalid-parameter-default = "warn"
+unresolved-attribute = "warn"
+not-iterable = "warn"
+not-subscriptable = "warn"
+unsupported-operator = "warn"
+
+# deptry (`just quality`): imports with no declared dependency
+[tool.deptry]
+known_first_party = ["reflexive"]
+pep621_dev_dependency_groups = ["dev", "bench", "train"]   # tools and extras, not imports
+extend_exclude = ["scripts/archive", "third_party", "tests"]
+
+[tool.deptry.package_module_name_map]
+pyyaml = "yaml"
+
+[tool.deptry.per_rule_ignores]
+# τ²-bench is installed from third_party/ by `just tau2` (pip leaves out its data); litellm,
+# loguru and httpx come with it.
+DEP001 = ["tau2", "litellm", "loguru", "httpx"]
+DEP002 = ["auditkit"]   # used from SEL-46 (outcome oracles in AuditKIT)
+DEP004 = ["huggingface_hub"]   # only `just golden-publish` needs it: it comes with the dev tools

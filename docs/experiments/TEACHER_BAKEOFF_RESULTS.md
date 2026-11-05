@@ -12,7 +12,7 @@ model (Claude Sonnet 5.5). They cost $12–28 for the whole project against Sonn
 their licences let us train on, and publish, their outputs.
 
 Design: [`TEACHER_BAKEOFF.md`](TEACHER_BAKEOFF.md). Reproduce with
-`python scripts/bakeoff_report.py`, then `python scripts/bakeoff_plot.py <json> <png>`.
+`python scripts/teacher/bakeoff_report.py`, then `python scripts/teacher/bakeoff_plot.py <json> <png>`.
 
 ![Teacher bake-off: quality vs cost](img/bakeoff_cost_vs_pass.png)
 
@@ -24,7 +24,7 @@ Four levels, from free to a full re-run. You only need an `OPENROUTER_API_KEY` i
 | Level | What it shows | Command | Cost / time |
 |---|---|---|---|
 | 0 | The code and statistics are right | `just check` | free, ~2 min |
-| 1 | A finalist runs end to end | `python scripts/teacher_sample.py --models glm53f --limit 2` | ~$0.05, ~2 min |
+| 1 | A finalist runs end to end | `python scripts/teacher/bakeoff.py --models glm53f --limit 2` | ~$0.05, ~2 min |
 | 2 | Reproduce the finalists' rows | `just teacher-sample glm53f qwen38` | ~$2, ~20 min |
 | 3 | Recompute every number in this write-up | put Charlie's `results/episodes/` files in place, then `just bakeoff-report` | free, seconds |
 
