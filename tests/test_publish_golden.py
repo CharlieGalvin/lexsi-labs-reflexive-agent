@@ -251,8 +251,8 @@ def test_splits_order_keeps_file_order_across_train_and_dev():
 
 
 def hard_rows(golden_train):
-    """Every retail train task as `just hard-subset` writes them: the golden record's task is healable,
-    the second teacher-unsolved, and Aya solved the rest."""
+    """Every train task of every domain as `just hard-subset` writes them: the golden record's retail
+    task is healable, the second retail task teacher-unsolved, and Aya solved the rest."""
     view = [
         {"role": "system", "content": "x"},
         {"role": "assistant", "content": "Hi! How can I help you today?"},
@@ -260,10 +260,10 @@ def hard_rows(golden_train):
     g = golden_train[0]
     others = [t for t in splits.task_ids("retail", "train") if t != g["task_id"]]
 
-    def arm(task_id, passed):
+    def arm(task_id, passed, domain="retail"):
         out = {"passed": passed, "reward": float(passed), "checks": {}}
         return {
-            "domain": "retail",
+            "domain": domain,
             "task_id": task_id,
             "outcome": out,
             "termination": "user_stop",
@@ -275,6 +275,11 @@ def hard_rows(golden_train):
         hard.to_record(arm(g["task_id"], False), g["id"], src),
         hard.to_record(arm(others[0], False), None, src),
         *(hard.to_record(arm(t, True), None, src) for t in others[1:]),
+        *(
+            hard.to_record(arm(t, True, d), None, {"file": f"A-{d}-train.jsonl", "sha256_16": "0" * 16})
+            for d in ("airline", "telecom")
+            for t in splits.task_ids(d, "train")
+        ),
     ]
 
 
@@ -391,7 +396,6 @@ def test_a_tag_that_isnt_a_new_version_is_refused(tmp_path, monkeypatch, capsys,
         lambda r: r["total"]["labels"]["healable"].update(TOOL=12345),
         lambda r: r["total"].update(tasks=7),
         lambda r: r.update(thin=[]),
-        lambda r: r.update(dev_left_out={"retail": 3, "telecom": 15}),
     ],
 )
 def test_v1_1_refuses_a_build_report_whose_numbers_dont_match_the_records(
@@ -457,3 +461,69 @@ def test_the_v1_1_card_names_the_commit_and_label_code(tmp_path, monkeypatch):
     assert pg.main() == 0
     card = FakeApi.uploaded["README.md"].decode()
     assert "commit `0123456789ab`" in card and "`hallucination.py` `abababababababab`" in card
+
+
+# --- Review of #45 (Chiara, 6 Nov) -------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("tag", "retag", "why"),
+    [
+        ("v1", False, None),
+        ("v1.1", False, None),
+        ("v10", False, None),  # was refused: "v10".rstrip("0") is "v1"
+        ("v100", False, None),
+        ("v2.0", False, None),
+        ("v1.0", False, "same version as v1"),
+        ("v1.0.0", False, "same version as v1"),  # was let through
+        ("v1", True, "v1 is frozen"),
+        ("latest", False, "a version like"),
+    ],
+)
+def test_the_tag_rule_compares_version_numbers(tag, retag, why):
+    got = pg.tag_refusal(tag, retag=retag)
+    assert got is None if why is None else why in got
+
+
+def test_the_frozen_v1_rule_lives_in_one_place():
+    """refusal() only judges the Hub now; the tag rules are tag_refusal's, checked before any file."""
+    state = pg.HubState(exists=True, private=True, tagged=False)
+    assert pg.refusal(state, "org/ds", retag=True, tag="v1") is None
+
+
+def test_v1_1_refuses_a_hard_subset_missing_a_whole_domain(tmp_path, monkeypatch, capsys):
+    recs = [r for r in hard_rows(rows()["train"]) if r["domain"] != "telecom"]
+    _setup_hard(tmp_path, monkeypatch, existing={}, recs=recs)
+    assert pg.main() == 1 and FakeApi.calls == []
+    assert "telecom: 59 train tasks missing" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("dev", "why"),
+    [
+        ({"retail": 0, "airline": 0, "telecom": 99}, "dev_left_out telecom is 99, not 0 to 15"),
+        ({"retail": 0, "telecom": 15}, "doesn't list every domain"),
+        ({"retail": -1, "airline": 0, "telecom": 0}, "dev_left_out retail is -1"),
+    ],
+)
+def test_v1_1_checks_dev_left_out_against_the_frozen_dev_split(tmp_path, monkeypatch, capsys, dev, why):
+    """The records hold no dev task, so the count can't come from them; the split bounds it."""
+    hard_dir = _setup_hard(tmp_path, monkeypatch, existing={})
+    report = json.loads((hard_dir / pg.HARD_REPORT).read_text())
+    report["dev_left_out"] = dev
+    (hard_dir / pg.HARD_REPORT).write_text(json.dumps(report))
+    assert pg.main() == 1 and FakeApi.calls == [] and why in capsys.readouterr().out
+
+
+def test_v1_1_accepts_telecoms_15_dev_tasks_left_out(tmp_path, monkeypatch):
+    hard_dir = _setup_hard(tmp_path, monkeypatch, existing={})
+    report = json.loads((hard_dir / pg.HARD_REPORT).read_text())
+    report["dev_left_out"] = {"retail": 0, "airline": 0, "telecom": 15}
+    (hard_dir / pg.HARD_REPORT).write_text(json.dumps(report))
+    assert pg.main() == 0
+
+
+def test_kinds_and_checks_are_lists_of_pairs_so_every_record_has_the_same_shape():
+    """A dict whose keys vary per record loads as a different shape in each `datasets` version."""
+    recs = hard_rows(rows()["train"])
+    assert all(isinstance(r["kinds"], list) and isinstance(r["arm_a"]["checks"], list) for r in recs)

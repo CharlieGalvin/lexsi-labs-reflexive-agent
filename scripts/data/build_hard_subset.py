@@ -33,8 +33,17 @@ OUT = ROOT / "data" / "golden" / "hard"
 FILE = "hard_subset.jsonl"
 REPORT = "hard_report.json"
 GOLDEN_TRAIN = "golden_train.jsonl"
-# The files that decide each task's group and labels: a change to any of them can change the subset
-LABEL_CODE = ("src/reflexive/hallucination.py", "src/reflexive/hard.py", "configs/tool_schemas.json")
+# The files that decide which records are kept, each task's group and its labels: a change to
+# any of them can change the subset, so all must be committed before publishing
+LABEL_CODE = (
+    "src/reflexive/hallucination.py",  # the labels
+    "configs/tool_schemas.json",  # the tools the classifier knows
+    "src/reflexive/hard.py",  # the groups and the record format
+    "src/reflexive/metrics.py",  # is_broken: which runs are refused
+    "src/reflexive/splits.py",  # which tasks are train, dev or test
+    "configs/splits.json",
+    "scripts/data/build_hard_subset.py",  # this script: what's read and how
+)
 
 
 def _git(*args: str) -> str | None:
@@ -48,17 +57,20 @@ def _git(*args: str) -> str | None:
 
 def code_version(root: Path = ROOT) -> dict[str, Any]:
     """Which code labelled the subset: the commit, the label files' checksums, and any not committed."""
-    status = _git("status", "--porcelain", "--", *LABEL_CODE)
+    # Changed against HEAD (staged or not) or never added; plain paths, unlike `git status`'s
+    # "R  old -> new" and quoted names
+    changed = _git("diff", "--name-only", "HEAD", "--", *LABEL_CODE)
+    untracked = _git("ls-files", "--others", "--exclude-standard", "--", *LABEL_CODE)
+    unknown = changed is None or untracked is None  # not a git checkout: committed or not is unknown
     return {
         "commit": _git("rev-parse", "HEAD"),
         "files": {f: sha256(root / f)[:16] for f in LABEL_CODE},
-        # None: not a git checkout, so whether they're committed is unknown
-        "uncommitted": None if status is None else sorted(line[3:] for line in status.splitlines()),
+        "uncommitted": None if unknown else sorted({*changed.splitlines(), *untracked.splitlines()}),
     }
 
 
-def load_golden(folder: Path) -> list[dict[str, Any]]:
-    """Golden v1's train records, if they're the ones `just golden` checked."""
+def load_golden(folder: Path) -> tuple[list[dict[str, Any]], str]:
+    """Golden v1's train records and their file's SHA-256, if they're the ones `just golden` checked."""
     path = folder / GOLDEN_TRAIN
     if not path.exists():
         raise hard.HardSubsetError(f"{shown(path)} doesn't exist: run `just golden` first")
@@ -68,9 +80,10 @@ def load_golden(folder: Path) -> list[dict[str, Any]]:
         raise hard.HardSubsetError(
             f"can't read {shown(folder)}/build_report.json ({type(e).__name__})"
         ) from e
-    if built.get(GOLDEN_TRAIN) != sha256(path):
+    sha = sha256(path)
+    if built.get(GOLDEN_TRAIN) != sha:
         raise hard.HardSubsetError(f"{shown(path)} changed since `just golden` checked it: rebuild it")
-    return read_jsonl(path)
+    return read_jsonl(path), sha
 
 
 def load_arm(arms: Path) -> tuple[list[dict[str, Any]], dict[str, dict[str, str]]]:
@@ -118,7 +131,7 @@ def main() -> int:
         print(f"⛔ {shown(a.out / FILE)} exists: pass --force to rebuild it")
         return 1
     try:
-        golden = load_golden(a.golden)
+        golden, golden_sha = load_golden(a.golden)
         arm, sources = load_arm(a.arms)
         records, report = hard.build(arm, golden, sources)
     except BadJsonLine as e:
@@ -136,7 +149,7 @@ def main() -> int:
         "built": dt.date.today().isoformat(),
         "inputs": {
             "arm_a": sources,
-            "golden": {"file": shown(a.golden / GOLDEN_TRAIN), "sha256": sha256(a.golden / GOLDEN_TRAIN)},
+            "golden": {"file": shown(a.golden / GOLDEN_TRAIN), "sha256": golden_sha},
         },
         "code": code_version(),
         **report,

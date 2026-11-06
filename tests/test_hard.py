@@ -207,7 +207,7 @@ def test_the_command_reports_a_missing_golden_build_report(tmp_path, monkeypatch
 
 def test_the_report_records_the_code_that_labelled_the_subset(tmp_path, monkeypatch, capsys):
     _, _, out = _folders(tmp_path, monkeypatch)
-    answers = {"rev-parse": "c0ffee" * 6, "status": " M src/reflexive/hallucination.py"}
+    answers = {"rev-parse": "c0ffee" * 6, "diff": "src/reflexive/hallucination.py", "ls-files": ""}
     monkeypatch.setattr(bh, "_git", lambda *args: answers[args[0]])
     assert bh.main() == 0
     code = json.loads((out / bh.REPORT).read_text())["code"]
@@ -222,3 +222,58 @@ def test_outside_a_git_checkout_the_commit_and_status_are_unknown(tmp_path, monk
     assert bh.main() == 0
     code = json.loads((out / bh.REPORT).read_text())["code"]
     assert code["commit"] is None and code["uncommitted"] is None
+
+
+# --- Review of #45 (Chiara, 6 Nov) -------------------------------------------------------------
+
+
+def test_the_label_code_covers_what_decides_the_kept_records_and_their_groups():
+    for f in (
+        "src/reflexive/metrics.py",
+        "src/reflexive/splits.py",
+        "configs/splits.json",
+        "scripts/data/build_hard_subset.py",
+    ):
+        assert f in bh.LABEL_CODE and (bh.ROOT / f).exists()
+
+
+def test_a_renamed_or_untracked_label_file_is_named_by_its_real_path(tmp_path, monkeypatch):
+    """`git status`'s "R  old -> new" used to be recorded as one garbled path."""
+    _, _, out = _folders(tmp_path, monkeypatch)
+    answers = {"rev-parse": "c0ffee" * 6, "diff": "src/reflexive/hard.py", "ls-files": "configs/splits.json"}
+    monkeypatch.setattr(bh, "_git", lambda *args: answers[args[0]])
+    assert bh.main() == 0
+    code = json.loads((out / bh.REPORT).read_text())["code"]
+    assert code["uncommitted"] == ["configs/splits.json", "src/reflexive/hard.py"]
+
+
+def test_kinds_and_checks_are_lists_of_pairs():
+    looped = arm("retail", train("retail")[0], termination="max_steps")  # a LOOP/step_limit finding
+    out = hard.to_record(looped, None, SRC["retail"])
+    assert out["arm_a"]["checks"] == [{"check": "DB", "score": 0.0}]
+    assert out["kinds"] == [{"kind": "LOOP/step_limit", "count": 1}]
+
+
+@pytest.mark.parametrize("drop", ["domain", "task_id"])
+def test_an_arm_record_without_its_task_is_a_problem_not_a_traceback(drop):
+    r = arm("retail", train("retail")[0])
+    del r[drop]
+    with pytest.raises(hard.HardSubsetError) as e:
+        hard.train_records([r])
+    assert "Arm A record 1: no domain or task_id" in e.value.lines
+
+
+def test_a_golden_record_without_an_id_is_a_problem_not_a_traceback():
+    with pytest.raises(hard.HardSubsetError, match="no id, domain or task_id"):
+        hard.golden_ids([{"domain": "retail", "task_id": "1", "split": "train"}])
+
+
+def test_the_module_needs_no_pyyaml(monkeypatch):
+    """is_broken comes from reflexive.metrics; reflexive.runner would pull in PyYAML."""
+    import importlib
+    import sys
+
+    monkeypatch.setitem(sys.modules, "yaml", None)  # importing yaml now fails
+    for mod in ("reflexive.hard", "reflexive.runner", "reflexive.episode"):
+        monkeypatch.delitem(sys.modules, mod, raising=False)
+    importlib.import_module("reflexive.hard")

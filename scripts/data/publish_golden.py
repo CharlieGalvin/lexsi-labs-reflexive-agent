@@ -127,26 +127,45 @@ def validate_hard(recs: list[dict], report: dict, golden_train: list[dict]) -> l
             problems.append(f"hard subset record {n + 1}: malformed ({type(e).__name__}: {e})")
     problems += [f"{i}: duplicated {n} times" for i, n in ids.items() if n > 1]
     present = {(r.get("domain"), r.get("task_id")) for r in recs if isinstance(r, dict)}
-    domains = [d for d in splits.DOMAINS if any(k[0] == d for k in present)]
-    missing = [f"{d} task {t}" for d in domains for t in splits.task_ids(d, "train") if (d, t) not in present]
-    if missing:
-        problems.append(f"{len(missing)} train tasks missing from the hard subset, e.g. {missing[0]}")
+    # Every domain, not just those with records: a whole domain missing must stop the upload too
+    for d in splits.DOMAINS:
+        missing = [t for t in splits.task_ids(d, "train") if (d, t) not in present]
+        if missing:
+            problems.append(
+                f"{d}: {len(missing)} train tasks missing from the hard subset, e.g. task {missing[0]}"
+            )
     if problems:
         return problems
-    # The card is built from the report, so every number in it must be what the records give
+    return report_problems(recs, report)
+
+
+def report_problems(recs: list[dict], report: dict) -> list[str]:
+    """The hard subset's build report against its records: the card is written from the report."""
+    problems: list[str] = []
     dev = report.get("dev_left_out") if isinstance(report, dict) else None
     want = hard.counts(recs, collections.Counter(dev if isinstance(dev, dict) else {}))
-    for key in ("domains", "total", "thin", "dev_left_out", "min_examples"):
+    for key in ("domains", "total", "thin", "min_examples"):
         if report.get(key) != want[key]:
             problems.append(
                 f"the hard subset's build report: {key} doesn't match its records; "
                 "rebuild with `just hard-subset --force`"
             )
+    # The records hold no dev task, so dev_left_out can't be recounted from them: check it per
+    # domain against the frozen dev split instead (between 0 and the number of dev tasks)
+    if not isinstance(dev, dict) or set(dev) != set(splits.DOMAINS):
+        problems.append("the hard subset's build report: dev_left_out doesn't list every domain")
+    else:
+        for d in splits.DOMAINS:
+            n, most = dev[d], len(splits.task_ids(d, "dev"))
+            if not isinstance(n, int) or not 0 <= n <= most:
+                problems.append(f"the hard subset's build report: dev_left_out {d} is {n!r}, not 0 to {most}")
     return problems
 
 
-def check_hard_files(hard_dir: Path, hard_report: dict, golden_dir: Path) -> list[str]:
-    """The hard subset must be the file `just hard-subset` wrote, built from this golden v1."""
+def check_hard_files(hard_dir: Path, hard_report: dict, golden_sha: str) -> list[str]:
+    """The hard subset must be the file `just hard-subset` wrote, built from this golden v1.
+
+    ``golden_sha`` is golden_train.jsonl's checksum, already checked by ``check_files``."""
     problems = []
     if (hard_report.get("files") or {}).get(HARD_FILE) != sha256(hard_dir / HARD_FILE):
         problems.append(f"{HARD_FILE} changed since `just hard-subset` built it: rebuild")
@@ -164,7 +183,7 @@ def check_hard_files(hard_dir: Path, hard_report: dict, golden_dir: Path) -> lis
         what = ", ".join(code.get("uncommitted") or []) or "the label code (not checked)"
         problems.append(f"{HARD_FILE} was labelled by uncommitted code ({what}): commit it and rebuild")
     built_from = ((hard_report.get("inputs") or {}).get("golden") or {}).get("sha256")
-    if built_from != sha256(golden_dir / FILES["train"]):
+    if built_from != golden_sha:
         problems.append(
             f"{HARD_FILE} was built from another {FILES['train']}: rebuild with `just hard-subset --force`"
         )
@@ -268,8 +287,8 @@ failures usually follow from it.
 | `format` | `{hard.FORMAT}` |
 | `domain`, `task_id`, `split` | The τ²-bench task; `split` is always `train` |
 | `group`, `golden_id` | As above; `golden_id` is the fix's `id` in `{FILES["train"]}`, or null |
-| `labels`, `primary`, `first`, `kinds`, `customer_tool` | The classifier's findings: all types, the earliest, its detail, counts per kind |
-| `arm_a` | `passed` (0 or 1), `reward`, `checks`, `termination`, `student`, `samples` (1), and the source run file |
+| `labels`, `primary`, `first`, `kinds`, `customer_tool` | The classifier's findings: all types, the earliest, its detail, and `kinds` as a list of `{{kind, count}}` (e.g. `TOOL/unknown_tool`) |
+| `arm_a` | `passed` (0 or 1), `reward`, `checks` (a list of `{{check, score}}`), `termination`, `student`, `samples` (1), and the source run file |
 | `messages` | Arm A's conversation **as it saw it**, in OpenAI format: context for the failure, **never a learning target** |
 
 {dev_md}{aya_md}{thin_md}- **One conversation per task.** Arm A and the customer both run at temperature 0, so another
@@ -504,12 +523,32 @@ def hub_state(api: Any, repo: str, tag: str = TAG) -> HubState:
     return HubState(exists=True, private=bool(info.private), tagged=any(t.name == tag for t in tags))
 
 
+def version(tag: str) -> tuple[int, ...] | None:
+    """A tag's version numbers, trailing zeros dropped (v1.0.0 → (1,), v10 → (10,)); None if not a version."""
+    if not re.fullmatch(r"v\d+(\.\d+)*", tag):
+        return None
+    nums = [int(x) for x in tag[1:].split(".")]
+    while len(nums) > 1 and nums[-1] == 0:
+        nums.pop()
+    return tuple(nums)
+
+
+def tag_refusal(tag: str, *, retag: bool) -> str | None:
+    """Why this tag can't be published, before any file is read; None if it can. The one place
+    the "v1 is frozen" rule lives."""
+    if version(tag) is None:
+        return f"--tag {tag!r}: a version like v1.1 or v2"
+    if retag and tag == TAG:
+        return f"{TAG} is frozen: the Trainer has trained on it, so --retag can't move it. Publish a new tag."
+    if tag != TAG and version(tag) == version(TAG):
+        return f"--tag {tag} is the same version as {TAG}, which is frozen: publish v1.1 or later"
+    return None
+
+
 def refusal(state: HubState, repo: str, *, retag: bool, tag: str = TAG) -> str | None:
     """Why the upload must not go ahead, or None."""
     if state.exists and not state.private:
         return f"{repo} exists and is PUBLIC; not uploading. Make it private first."
-    if retag and tag == TAG:
-        return f"{TAG} is frozen: the Trainer has trained on it, so --retag can't move it. Publish a new tag."
     if state.tagged and not retag:
         return (
             f"{repo} already has tag {tag}; not uploading. Anyone who trained on {tag} expects it "
@@ -544,7 +583,7 @@ def load_checked(folder: Path) -> tuple[dict[str, list[dict[str, Any]]], dict] |
 
 
 def load_checked_hard(
-    hard_dir: Path, golden_dir: Path, golden_train: list[dict]
+    hard_dir: Path, golden_sha: str, golden_train: list[dict]
 ) -> tuple[list[dict], dict] | None:
     """The hard subset and its build report, if every check passes; else print the problems, return None."""
     if not (hard_dir / HARD_FILE).exists():
@@ -567,7 +606,7 @@ def load_checked_hard(
             f"⛔ {shown(hard_dir / HARD_REPORT)} isn't a build report: rebuild with `just hard-subset --force`"
         )
         return None
-    problems = validate_hard(recs, report, golden_train) + check_hard_files(hard_dir, report, golden_dir)
+    problems = validate_hard(recs, report, golden_train) + check_hard_files(hard_dir, report, golden_sha)
     if problems:
         _problems(problems)
         return None
@@ -598,16 +637,8 @@ def main() -> int:
     )
     a = p.parse_args()
     tag = a.tag
-    if not re.fullmatch(r"v\d+(\.\d+)*", tag):
-        print(f"⛔ --tag {tag!r}: a version like v1.1 or v2")
-        return 1
-    if a.retag and tag == TAG:
-        print(
-            f"⛔ {TAG} is frozen: the Trainer has trained on it, so --retag can't move it. Publish a new tag."
-        )
-        return 1
-    if tag != TAG and tag.rstrip("0").rstrip(".") == TAG:
-        print(f"⛔ --tag {tag} is the same version as {TAG}, which is frozen: publish v1.1 or later")
+    if why := tag_refusal(tag, retag=a.retag):
+        print(f"⛔ {why}")
         return 1
 
     checked = load_checked(a.dir)
@@ -619,7 +650,7 @@ def main() -> int:
     paths = {n: a.dir / n for n in names}
     hard_part = None
     if tag != TAG:
-        hard_part = load_checked_hard(a.hard, a.dir, rows["train"])
+        hard_part = load_checked_hard(a.hard, shas[FILES["train"]], rows["train"])
         if hard_part is None:
             return 1
         shas[HARD_FILE] = hard_part[1]["files"][HARD_FILE]

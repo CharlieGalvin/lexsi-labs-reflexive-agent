@@ -25,9 +25,11 @@ from typing import Any
 
 from reflexive import splits
 from reflexive.hallucination import FailureType, agent_view_of, classify_record
-from reflexive.runner import is_broken
+from reflexive.metrics import is_broken  # not reflexive.runner: that pulls in PyYAML and τ²-bench's wrapper
 
 FORMAT = "reagent.hard/v1"
+# `kinds` and `arm_a.checks` are lists of pairs, not dicts: their keys vary by record, which
+# Hugging Face's JSON loader turns into a different shape per `datasets` version
 GROUPS = ("healable", "teacher_unsolved", "solved_by_aya")
 LABELS = ("TOOL", "ARG", "LOOP", "NONE")
 MIN_EXAMPLES = 5  # fewer healable tasks than this with a label: too thin to train that type on
@@ -50,7 +52,7 @@ def labels_of(rec: Record) -> tuple[list[str], dict[str, Any]]:
     detail = {
         "primary": d.failure.value,
         "first": d.first.to_dict() if d.first else None,
-        "kinds": dict(d.kinds),
+        "kinds": [{"kind": k, "count": n} for k, n in sorted(d.kinds.items())],
         "customer_tool": any(f.kind == "customer_tool" for f in d.findings),
     }
     return types or ["NONE"], detail
@@ -64,7 +66,10 @@ def train_records(arm: list[Record]) -> tuple[dict[tuple[str, str], Record], col
     kept: dict[tuple[str, str], Record] = {}
     dev_tasks: set[tuple[str, str]] = set()
     problems = []
-    for r in arm:
+    for n, r in enumerate(arm, start=1):
+        if not isinstance(r, dict) or not r.get("domain") or r.get("task_id") is None:
+            problems.append(f"Arm A record {n}: no domain or task_id")
+            continue
         key = (r["domain"], str(r["task_id"]))
         try:
             split = splits.split_of(*key)
@@ -93,7 +98,11 @@ def train_records(arm: list[Record]) -> tuple[dict[tuple[str, str], Record], col
 def golden_ids(golden: list[Record]) -> dict[tuple[str, str], str]:
     """The golden fix's record ID per (domain, task). Stops on a non-train record or two fixes for a task."""
     ids: dict[tuple[str, str], str] = {}
-    for g in golden:
+    for n, g in enumerate(golden, start=1):
+        if not isinstance(g, dict) or not all(
+            g.get(k) not in (None, "") for k in ("id", "domain", "task_id")
+        ):
+            raise HardSubsetError(f"golden record {n}: no id, domain or task_id")
         key = (g["domain"], str(g["task_id"]))
         try:
             split = splits.split_of(*key)
@@ -132,7 +141,7 @@ def to_record(rec: Record, golden_id: str | None, source: dict[str, str]) -> Rec
             "samples": 1,
             "passed": int(passed),
             "reward": out.get("reward"),
-            "checks": out.get("checks"),
+            "checks": [{"check": k, "score": v} for k, v in sorted((out.get("checks") or {}).items())],
             "termination": rec.get("termination"),
             "student": rec.get("student"),
             "source": source,
