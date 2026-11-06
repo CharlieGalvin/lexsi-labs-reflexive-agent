@@ -62,7 +62,7 @@ def train_records(arm: list[Record]) -> tuple[dict[tuple[str, str], Record], col
     Stops on a test task, a task in no split, a broken run or more than one sample of a task.
     """
     kept: dict[tuple[str, str], Record] = {}
-    dev: collections.Counter = collections.Counter()
+    dev_tasks: set[tuple[str, str]] = set()
     problems = []
     for r in arm:
         key = (r["domain"], str(r["task_id"]))
@@ -74,20 +74,20 @@ def train_records(arm: list[Record]) -> tuple[dict[tuple[str, str], Record], col
         if split == "test":
             problems.append(f"{key[0]} task {key[1]!r} is a TEST task: it must never be in the hard subset")
         elif split == "dev":
-            dev[key[0]] += 1
+            dev_tasks.add(key)
         elif key in kept:
             problems.append(
                 f"{key[0]} task {key[1]}: more than one sample; the hard subset uses one sample per task"
             )
         elif is_broken(r):
             problems.append(f"{key[0]} task {key[1]}: the run broke; re-run it (`just rollout A {key[0]}`)")
-        elif r.get("outcome") is None:
+        elif not isinstance(r.get("outcome"), dict) or "passed" not in r["outcome"]:
             problems.append(f"{key[0]} task {key[1]}: no saved outcome")
         else:
             kept[key] = r
     if problems:
         raise HardSubsetError(*problems, f"{len(problems)} problems in Arm A's records; nothing written")
-    return kept, dev
+    return kept, collections.Counter(d for d, _ in dev_tasks)
 
 
 def golden_ids(golden: list[Record]) -> dict[tuple[str, str], str]:
@@ -95,7 +95,11 @@ def golden_ids(golden: list[Record]) -> dict[tuple[str, str], str]:
     ids: dict[tuple[str, str], str] = {}
     for g in golden:
         key = (g["domain"], str(g["task_id"]))
-        if g.get("split") != "train" or splits.split_of(*key) != "train":
+        try:
+            split = splits.split_of(*key)
+        except KeyError:
+            split = "no split"
+        if g.get("split") != "train" or split != "train":
             raise HardSubsetError(f"golden record {g['id']} isn't a train task")
         if key in ids:
             raise HardSubsetError(f"two golden fixes for {key[0]} task {key[1]}: {ids[key]}, {g['id']}")
@@ -159,7 +163,8 @@ def build(
         raise HardSubsetError(
             *missing[:20],
             *(f"{d}: records but no source file" for d in extra),
-            f"{len(missing)} train tasks without an Arm A record; nothing written",
+            f"{len(missing)} train tasks without an Arm A record, {len(extra)} domains without a source; "
+            "nothing written",
         )
     records = [
         to_record(kept[(d, t)], fixes.get((d, t)), sources[d])

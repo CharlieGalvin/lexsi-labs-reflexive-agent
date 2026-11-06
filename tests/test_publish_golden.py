@@ -182,11 +182,10 @@ def test_refuses_to_reupload_over_existing_tag(tmp_path, monkeypatch):
     assert pg.main() == 1 and FakeApi.calls == []
 
 
-def test_retag_moves_existing_tag(tmp_path, monkeypatch):
+def test_retag_never_moves_v1(tmp_path, monkeypatch, capsys):
     _setup(tmp_path, monkeypatch, existing={"org/ds": True}, tags=["v1"], args=["--retag"])
-    assert pg.main() == 0
-    assert [c[0] for c in FakeApi.calls] == ["upload", "untag", "tag"]
-    assert FakeApi.tags == ["v1"] and FakeApi.tagged_at["v1"] == "commit-1"  # one v1, on the new data
+    assert pg.main() == 1 and FakeApi.calls == []
+    assert "v1 is frozen" in capsys.readouterr().out
 
 
 def test_the_tag_points_at_the_commit_just_uploaded(tmp_path, monkeypatch):
@@ -252,13 +251,14 @@ def test_splits_order_keeps_file_order_across_train_and_dev():
 
 
 def hard_rows(golden_train):
-    """A healable task (the golden record's) and a task Aya solved, as `just hard-subset` writes them."""
+    """Every retail train task as `just hard-subset` writes them: the golden record's task is healable,
+    the second teacher-unsolved, and Aya solved the rest."""
     view = [
         {"role": "system", "content": "x"},
         {"role": "assistant", "content": "Hi! How can I help you today?"},
     ]
     g = golden_train[0]
-    solved = splits.task_ids("retail", "train")[5]
+    others = [t for t in splits.task_ids("retail", "train") if t != g["task_id"]]
 
     def arm(task_id, passed):
         out = {"passed": passed, "reward": float(passed), "checks": {}}
@@ -273,7 +273,8 @@ def hard_rows(golden_train):
     src = {"file": "A-retail-train.jsonl", "sha256_16": "0" * 16}
     return [
         hard.to_record(arm(g["task_id"], False), g["id"], src),
-        hard.to_record(arm(solved, True), None, src),
+        hard.to_record(arm(others[0], False), None, src),
+        *(hard.to_record(arm(t, True), None, src) for t in others[1:]),
     ]
 
 
@@ -347,7 +348,6 @@ def test_hard_checks_catch_a_wrong_group_a_test_task_a_stale_fix_and_bad_counts(
     assert any("make it healable" in p for p in probs)
     assert any("belongs to test" in p for p in probs)
     assert any("duplicated" in p for p in probs)
-    assert any("build report says" in p for p in probs)
     stale = hard_rows(golden_train)
     stale[0]["golden_id"] = "glm53f/retail/old/1"
     assert any("golden v1 has" in p for p in pg.validate_hard(stale, report, golden_train))
@@ -360,3 +360,61 @@ def test_a_hard_record_missing_any_key_is_a_problem_not_a_crash(key):
     del recs[0][key]
     report = hard.counts(hard_rows(golden_train), collections.Counter())
     assert any("hard subset record 1: malformed" in p for p in pg.validate_hard(recs, report, golden_train))
+
+
+def test_retag_moves_a_newer_tag(tmp_path, monkeypatch):
+    _setup_hard(tmp_path, monkeypatch, existing={"org/ds": True}, tags=["v1", "v1.1"], args=["--retag"])
+    assert pg.main() == 0
+    assert [c[0] for c in FakeApi.calls] == ["upload", "untag", "tag"]
+    assert FakeApi.tags == ["v1", "v1.1"] and FakeApi.tagged_at["v1.1"] == "commit-1"
+
+
+@pytest.mark.parametrize(("tag", "why"), [("1.1", "a version like"), ("v1.0", "same version as v1")])
+def test_a_tag_that_isnt_a_new_version_is_refused(tmp_path, monkeypatch, capsys, tag, why):
+    _setup(tmp_path, monkeypatch, existing={}, args=["--tag", tag])
+    assert pg.main() == 1 and FakeApi.calls == []
+    assert why in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    "edit",
+    [
+        lambda r: r["domains"]["retail"]["groups"].update(healable=999),
+        lambda r: r["total"]["labels"]["healable"].update(TOOL=12345),
+        lambda r: r["total"].update(tasks=7),
+        lambda r: r.update(thin=[]),
+        lambda r: r.update(dev_left_out={"retail": 3, "telecom": 15}),
+    ],
+)
+def test_v1_1_refuses_a_build_report_whose_numbers_dont_match_the_records(
+    tmp_path, monkeypatch, capsys, edit
+):
+    """The card is written from the report: a number in it the records don't give must stop the upload."""
+    hard_dir = _setup_hard(tmp_path, monkeypatch, existing={})
+    report = json.loads((hard_dir / pg.HARD_REPORT).read_text())
+    edit(report)
+    (hard_dir / pg.HARD_REPORT).write_text(json.dumps(report))
+    assert pg.main() == 1 and FakeApi.calls == []
+    assert "doesn't match its records" in capsys.readouterr().out
+
+
+def test_hard_checks_report_a_missing_train_task():
+    golden_train = rows()["train"]
+    recs = hard_rows(golden_train)
+    report = hard.counts(recs, collections.Counter())
+    assert pg.validate_hard(recs, report, golden_train) == []
+    probs = pg.validate_hard(recs[:-1], report, golden_train)
+    assert any("1 train tasks missing" in p for p in probs)
+
+
+@pytest.mark.parametrize("content", [None, "not json", "[]", '{"inputs": null, "files": null}'])
+def test_v1_1_reports_a_missing_or_broken_build_report_instead_of_crashing(
+    tmp_path, monkeypatch, capsys, content
+):
+    hard_dir = _setup_hard(tmp_path, monkeypatch, existing={})
+    if content is None:
+        (hard_dir / pg.HARD_REPORT).unlink()
+    else:
+        (hard_dir / pg.HARD_REPORT).write_text(content)
+    assert pg.main() == 1 and FakeApi.calls == []
+    assert "⛔" in capsys.readouterr().out

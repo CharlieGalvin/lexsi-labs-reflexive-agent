@@ -37,7 +37,12 @@ def load_golden(folder: Path) -> list[dict[str, Any]]:
     path = folder / GOLDEN_TRAIN
     if not path.exists():
         raise hard.HardSubsetError(f"{shown(path)} doesn't exist: run `just golden` first")
-    built = json.loads((folder / "build_report.json").read_text()).get("files", {})
+    try:
+        built = json.loads((folder / "build_report.json").read_text()).get("files") or {}
+    except (OSError, ValueError, AttributeError) as e:
+        raise hard.HardSubsetError(
+            f"can't read {shown(folder)}/build_report.json ({type(e).__name__})"
+        ) from e
     if built.get(GOLDEN_TRAIN) != sha256(path):
         raise hard.HardSubsetError(f"{shown(path)} changed since `just golden` checked it: rebuild it")
     return read_jsonl(path)

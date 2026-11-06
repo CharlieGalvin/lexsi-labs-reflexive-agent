@@ -99,6 +99,8 @@ def test_dev_tasks_are_left_out_and_counted():
         [*(arm("retail", t) for t in ids), arm("retail", dev)], [gold("retail", ids[0])], SRC
     )
     assert dev not in {r["task_id"] for r in recs} and report["dev_left_out"] == {"retail": 1}
+    _, again = hard.build([*(arm("retail", t) for t in ids), arm("retail", dev), arm("retail", dev)], [], SRC)
+    assert again["dev_left_out"] == {"retail": 1}  # tasks, not records
 
 
 @pytest.mark.parametrize(
@@ -109,6 +111,7 @@ def test_dev_tasks_are_left_out_and_counted():
         (lambda: arm("retail", train("retail")[0], termination="infrastructure_error"), "run broke"),
         (lambda: arm("retail", train("retail")[0], error="RateLimitError"), "run broke"),
         (lambda: arm("retail", train("retail")[0], outcome=None), "no saved outcome"),
+        (lambda: arm("retail", train("retail")[0], outcome={"reward": 0.0}), "no saved outcome"),
         (lambda: arm("retail", train("retail")[1]), "more than one sample"),
     ],
 )
@@ -122,7 +125,7 @@ def test_a_bad_arm_a_record_stops_the_build(bad, message):
 
 def test_a_train_task_without_an_arm_a_record_stops_the_build():
     recs = [arm("retail", t) for t in train("retail")[1:]]
-    with pytest.raises(hard.HardSubsetError, match="1 train tasks without an Arm A record"):
+    with pytest.raises(hard.HardSubsetError, match="1 train tasks without an Arm A record, 0 domains"):
         hard.build(recs, [], SRC)
 
 
@@ -131,6 +134,8 @@ def test_a_golden_record_that_isnt_train_or_is_doubled_stops_the_build():
     recs = [arm("retail", t) for t in ids]
     with pytest.raises(hard.HardSubsetError, match="isn't a train task"):
         hard.build(recs, [gold("retail", splits.task_ids("retail", "dev")[0])], SRC)
+    with pytest.raises(hard.HardSubsetError, match="isn't a train task"):
+        hard.build(recs, [gold("retail", "no-such-task")], SRC)
     with pytest.raises(hard.HardSubsetError, match="two golden fixes"):
         hard.build(recs, [gold("retail", ids[0]), {**gold("retail", ids[0]), "id": "other"}], SRC)
 
@@ -192,3 +197,9 @@ def test_the_command_refuses_a_file_of_another_arm(tmp_path, monkeypatch, capsys
     path = arms / "A-airline-train.jsonl"
     path.write_text(path.read_text().replace('"arm": "A"', '"arm": "C"', 1))
     assert bh.main() == 1 and "other arms or domains" in capsys.readouterr().out
+
+
+def test_the_command_reports_a_missing_golden_build_report(tmp_path, monkeypatch, capsys):
+    _, golden, _ = _folders(tmp_path, monkeypatch)
+    (golden / "build_report.json").unlink()
+    assert bh.main() == 1 and "can't read" in capsys.readouterr().out
