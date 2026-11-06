@@ -11,7 +11,7 @@ from typing import Any
 
 import pytest
 from pytest_bdd import given, parsers, scenarios, then, when
-from test_publish_golden import FakeApi, _setup, pg, report, rows
+from test_publish_golden import FakeApi, _setup, _setup_hard, pg, report, rows
 
 from reflexive import splits
 
@@ -27,6 +27,7 @@ class Upload:
     existing: dict[str, bool] = field(default_factory=dict)  # repo → private?
     tags: list[str] = field(default_factory=list)
     edit_after_build: bool = False
+    with_hard: bool = False
     exit_code: int | None = None
     records: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     problems: list[str] = field(default_factory=list)
@@ -89,6 +90,29 @@ def tagged(up: Upload, tag: str) -> None:
 @then("nothing is uploaded")
 def nothing(up: Upload) -> None:
     assert up.exit_code == 1 and FakeApi.calls == []
+
+
+@given("a hard subset built from these golden trajectories")
+def with_hard_subset(up: Upload) -> None:
+    up.with_hard = True
+
+
+@when(parsers.parse('it is published as "{tag}"'))
+def publish_tag(up: Upload, tag: str) -> None:
+    assert up.with_hard and tag == "v1.1"  # _setup_hard publishes with --tag v1.1
+    _setup_hard(up.folder, up.monkeypatch, existing=up.existing, tags=up.tags)
+    up.exit_code = pg.main()
+
+
+@then("the hard subset is uploaded with the rest, in one commit")
+def hard_uploaded(up: Upload) -> None:
+    uploads = [c for c in FakeApi.calls if c[0] == "upload"]
+    assert uploads == [("upload", sorted(["README.md", *pg.FILES.values(), "splits.json", pg.HARD_FILE]))]
+
+
+@then(parsers.parse('the tag "{tag}" is left where it was'))
+def tag_untouched(up: Upload, tag: str) -> None:
+    assert tag in FakeApi.tags and ("untag", tag) not in FakeApi.calls
 
 
 # --- The record checks ----------------------------------------------------------------------------

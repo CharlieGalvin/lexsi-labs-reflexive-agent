@@ -78,9 +78,13 @@ quality: types
 golden *args:
     python scripts/data/build_golden.py {{args}}
 
-# Check data/golden/v1/, write the data card and upload it PRIVATE to the team HF org, tag v1 (SEL-48; --dry-run first)
+# Check data/golden/v1/ (+ the hard subset unless --tag v1), write the card, upload PRIVATE to the team HF org and tag it (SEL-48, SEL-60; --dry-run first)
 golden-publish *args:
     python scripts/data/publish_golden.py {{args}}
+
+# Build the hard subset from Arm A's train runs and golden v1 → data/golden/hard/ (SEL-7; no API calls)
+hard-subset *args:
+    python scripts/data/build_hard_subset.py {{args}}
 
 # Confirm configs/splits.json matches a rebuild from its seed (SEL-36)
 splits-check:
