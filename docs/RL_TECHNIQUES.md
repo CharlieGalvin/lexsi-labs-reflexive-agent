@@ -73,6 +73,8 @@ GRPO is the only option that optimises the outcomes we are trying to improve (su
 2. **It learns from the student's own failures.** Hallucination drift happens in the student's own distribution of tool calls and arguments. Online rollouts expose it to exactly those states; DPO and BCO only see whatever the dataset happened to contain.
 3. **It is built for multi-turn tool calling.** AgentTune describes GRPO as the default for agentic training, and all its trainers run tool-calling rollouts rather than plain-text generation.
 4. **It avoids PPO's overhead.** No critic and no reward model means less memory and fewer moving parts, which matters for a small student (Tiny Aya) with LoRA on limited GPU time.
+
+   > **Superseded (3 Nov re-plan):** the student is now Aya Expanse 32B (128K context), not Tiny Aya. The memory and GPU-time argument needs redoing for that model.
 5. **It fits the self-healing loop.** The loop retrains the student on its own failures and promotes the healed model only if it beats the baseline. GRPO trains on the same verified outcome signal that the AuditKIT gate measures, so what we optimise and what we verify are the same thing.
 
 ## How much data each method needs
@@ -99,10 +101,13 @@ The scales below are rough rules of thumb for a narrow task, not figures from th
 
 If telecom is dropped under the context-window rule, training falls to 83 tasks and the test set to 60.
 
+> **Superseded (3 Nov re-plan):** the context-window drop rule was retired, so telecom stays in and the counts above stand.
+
 - **GRPO: only mixed-outcome tasks teach it anything.** A task the student always fails or always passes gives a flat group and no signal. After the Arm A runs, count the tasks that pass in some trials and fail in others; that count is the real GRPO dataset and may be a fraction of 142.
 - **GRPO: cost is rollouts, not prompts.** Total conversations are roughly steps × prompts per step × generations per prompt. For example, 100 steps × 8 prompts × 4 generations is 3,200 conversations, each with a simulated customer. Multiply by the measured user cost per task to budget.
 - **GRPO: airline is thin.** At 24 training tasks it is the likeliest domain to overfit.
 - **GRPO: telecom's extra pool may be unusable.** It has a 2,285-task generated pool, but its prompt alone fills about 91% of Tiny Aya's 8,192-token window, so the pool only helps if that fit problem is solved.
+  > **Superseded (3 Nov re-plan):** with Aya Expanse 32B's 128K context the fit problem is gone (the longest golden trajectory is about 13K tokens), so the pool is usable.
 - **DPO and BCO: capped by verified teacher fixes.** The dataset is the set of train failures that the teacher fixes and the sandbox verifies, probably tens to roughly 100 examples. Sampling several fixes per task enlarges it but risks memorising a few tasks, which is why they suit a warm start better than the whole method.
 - **Trainer note.** AgentTune's own loop has no simulated customer, so GRPO on τ²-bench needs a `rollout_func` that drives `Tau2Episode`.
 
