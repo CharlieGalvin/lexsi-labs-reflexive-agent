@@ -39,13 +39,15 @@ def main() -> int:
     ap.add_argument("--limit", type=int, help="only the first N questions")
     ap.add_argument("--max-tool-steps", type=int, help="default: the config's max_steps_per_turn, else 3")
     ap.add_argument("--max-new-tokens", type=int, default=256)
+    ap.add_argument("--temperature", type=float, default=0.0,
+                    help="0 = greedy (default, what --record uses); e.g. 0.8 to sample like training")
     ap.add_argument("--out", type=pathlib.Path)
     ap.add_argument("--record", metavar="RUN", help="also record results/RUN.metrics.json + a log row")
     ap.add_argument("--arm", help="with --record: the experiment arm, e.g. A")
     a = ap.parse_args()
 
-    if a.record and a.split != "eval":
-        ap.error("--record only records the eval split")
+    if a.record and (a.split != "eval" or a.temperature):
+        ap.error("--record only records the eval split with greedy decoding")
     if a.record and (pathlib.Path("results") / f"{a.record}.metrics.json").exists():
         ap.error(f"results/{a.record}.metrics.json exists; pick a new run name")
 
@@ -77,9 +79,10 @@ def main() -> int:
                                 tools=mod.TOOLS, max_steps=max_tool_steps,
                                 **mod.HARNESS)  # the same tool wording as training
 
+    sampling = {"do_sample": True, "temperature": a.temperature} if a.temperature else {"do_sample": False}
     records, t0 = [], time.time()
     for i, row in enumerate(rows, 1):
-        out = rollout([mod.prompt(row)], do_sample=False, max_new_tokens=a.max_new_tokens)
+        out = rollout([mod.prompt(row)], max_new_tokens=a.max_new_tokens, **sampling)
         conv, text = out["conversations"][0], out["responses"][0] or ""
         s = mod.score(conv, text, row["answer"], row["field"], row["customer_id"])
         records.append({**row, **s, "final_text": text[:300],
@@ -89,7 +92,8 @@ def main() -> int:
             print(f"{i}/{len(rows)}  correct so far {done.correct.mean():.0%}  ({time.time() - t0:.0f}s)")
 
     df = pd.DataFrame(records)
-    dest = a.out or (a.adapter or pathlib.Path("runs/base-messy")) / f"eval_{a.split}.csv"
+    suffix = f"_t{a.temperature:g}" if a.temperature else ""
+    dest = a.out or (a.adapter or pathlib.Path("runs/base-messy")) / f"eval_{a.split}{suffix}.csv"
     dest.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(dest, index=False)
 
