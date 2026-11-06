@@ -158,7 +158,7 @@ after run="messy-grpo" *args:
 evaluate run="messy-grpo" *args:
     python scripts/eval_lookup.py --adapter runs/{{run}} --record {{run}} {{args}}
 
-# Markdown table of two recorded runs, to post on the ticket
+# Markdown table of two recorded runs, to post on the ticket (saved to results/<a>-vs-<b>.compare.md)
 compare a="base" b="messy-grpo":
     python scripts/experiment_log.py compare {{a}} {{b}}
 

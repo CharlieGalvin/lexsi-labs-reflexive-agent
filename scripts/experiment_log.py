@@ -4,7 +4,8 @@ compare two recorded runs (docs/experiments/MESSY_LOOKUP.md).
     python scripts/experiment_log.py record runs/base-messy/eval_eval.csv base --arm A
     python scripts/experiment_log.py record runs/messy-grpo/eval_eval.csv messy-grpo \\
         --adapter runs/messy-grpo
-    python scripts/experiment_log.py compare base messy-grpo     # a markdown table to post
+    python scripts/experiment_log.py compare base messy-grpo     # table to post; also saved to
+                                                                 # results/base-vs-messy-grpo.compare.md
 
 ``just baseline`` and ``just evaluate`` call ``record`` for you, straight after the eval.
 
@@ -214,7 +215,14 @@ def compare(a: argparse.Namespace) -> int:
             print(f"no {path.relative_to(ROOT)}: record that run first", file=sys.stderr)
             return 1
         runs.append(json.loads(path.read_text()))
-    print(compare_table(*runs))
+    table = compare_table(*runs)
+    out = RESULTS / f"{a.run_a}-vs-{a.run_b}.compare.md"
+    header = (f"# {a.run_a} vs {a.run_b}\n\nStarter task (Messy-ID Lookup), eval split, greedy. "
+              f"Made by `just compare {a.run_a} {a.run_b}` from "
+              f"[{a.run_a}]({a.run_a}.metrics.json) and [{a.run_b}]({a.run_b}.metrics.json).\n\n")
+    out.write_text(header + table + "\n")
+    print(table)
+    print(f"\nsaved to {out.relative_to(ROOT)}")
     return 0
 
 

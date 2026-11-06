@@ -49,13 +49,22 @@ def test_metrics():
     assert m["by_type"]["clean"] == {"passed": 2, "n": 2, "tool_ok": 1.0, "hallucination_rate": 0.0}
 
 
-def test_row_fills_the_base_placeholder_in_the_real_log():
-    text = (ROOT / "docs" / "EXPERIMENTS.md").read_text()
+LOG_WITH_PLACEHOLDER = """# Experiment log
+
+| Date | Run | Owner | Config | Change | task_success | calls/success | halluc. rate | Notes |
+|---|---|---|---|---|---:|---:|---:|---|
+| 2026-11-0? | base | | | untuned baseline (Arm A) | | | | |
+| 2026-11-04 | arm-A | Chiara | x | y | 5/74 | 242 | 98.6% | z |
+"""
+
+
+def test_row_fills_an_empty_placeholder_row():
     row = el.log_row(_metrics(), "untuned baseline (Arm A)")
-    new = el.add_to_log(text, "base", row)
-    assert row in new
-    assert len(new.splitlines()) == len(text.splitlines())  # filled, not added
-    assert "| 2026-11-0? | base |" not in new
+    new = el.add_to_log(LOG_WITH_PLACEHOLDER, "base", row)
+    lines = new.splitlines()
+    assert len(lines) == len(LOG_WITH_PLACEHOLDER.splitlines())  # filled, not added
+    assert lines[4] == row and "| 2026-11-0? | base |" not in new
+    assert lines[5].startswith("| 2026-11-04 | arm-A |")  # other rows untouched
 
 
 def test_row_is_appended_when_there_is_no_placeholder():
@@ -111,3 +120,14 @@ def test_record_writes_metrics_and_refuses_to_overwrite(tmp_path, monkeypatch):
 def test_add_to_log_needs_a_table(bad):
     with pytest.raises(ValueError):
         el.add_to_log("no table here", "base", bad)
+
+
+def test_compare_saves_the_table(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(el, "RESULTS", tmp_path)
+    monkeypatch.setattr(el, "ROOT", tmp_path)
+    for name in ("base", "after"):
+        (tmp_path / f"{name}.metrics.json").write_text(json.dumps(_metrics(name)))
+    assert el.compare(argparse.Namespace(run_a="base", run_b="after")) == 0
+    saved = (tmp_path / "base-vs-after.compare.md").read_text()
+    assert "| task_success | 50.0% | 50.0% | +0.0 pts |" in saved
+    assert "| task_success |" in capsys.readouterr().out
