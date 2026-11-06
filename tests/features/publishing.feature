@@ -34,3 +34,12 @@ Feature: Publishing the golden trajectories
     Given one of the training records is from the test split
     When the records are checked
     Then the check reports a problem mentioning "test"
+
+  Scenario: A new version adds the hard subset and leaves v1 alone
+    Given the dataset already exists on Hugging Face, privately, with the tag "v1"
+    And a hard subset built from these golden trajectories
+    When it is published as "v1.1"
+    Then the upload succeeds
+    And the hard subset is uploaded with the rest, in one commit
+    And the upload is tagged "v1.1"
+    And the tag "v1" is left where it was

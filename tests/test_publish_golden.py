@@ -1,13 +1,16 @@
 """SEL-48: the checks that must pass before golden trajectories are uploaded, and the data card."""
 
+import collections
 import copy
+import json
 import sys
+from pathlib import Path
 
 import pytest
 from _scripts import load_script
 from test_golden import SP, TOOLS, record
 
-from reflexive import golden, splits
+from reflexive import golden, hard, splits
 
 pg = load_script("data/publish_golden")
 
@@ -105,6 +108,7 @@ class FakeApi:
     tags: list = []
     tagged_at: dict = {}  # tag → the commit it points to
     commits: int = 0
+    uploaded: dict = {}  # path in the repo → the bytes of the last upload
     offline: bool = False  # True: every call fails, as with no token or no network
 
     def repo_info(self, repo_id, repo_type):
@@ -121,8 +125,9 @@ class FakeApi:
         self.calls.append(("create", repo_id, private))
         type(self).existing = {**self.existing, repo_id: private}
 
-    def upload_folder(self, **kw):
-        self.calls.append(("upload", sorted(kw["allow_patterns"])))
+    def create_commit(self, repo_id, repo_type, operations, commit_message):
+        self.calls.append(("upload", sorted(op.path_in_repo for op in operations)))
+        type(self).uploaded = {op.path_in_repo: Path(op.path_or_fileobj).read_bytes() for op in operations}
         type(self).commits += 1
         return type("CommitInfo", (), {"oid": f"commit-{self.commits}"})()
 
@@ -241,3 +246,117 @@ def test_splits_order_keeps_file_order_across_train_and_dev():
     tr, dv = splits.task_ids("telecom", "train"), splits.task_ids("telecom", "dev")
     mixed = [dv[0], tr[3], tr[0], dv[3]]
     assert pg.splits_order("telecom", mixed) == [tr[0], tr[3], dv[0], dv[3]]
+
+
+# --- v1.1: the hard subset (SEL-60) ---------------------------------------------------------------
+
+
+def hard_rows(golden_train):
+    """A healable task (the golden record's) and a task Aya solved, as `just hard-subset` writes them."""
+    view = [
+        {"role": "system", "content": "x"},
+        {"role": "assistant", "content": "Hi! How can I help you today?"},
+    ]
+    g = golden_train[0]
+    solved = splits.task_ids("retail", "train")[5]
+
+    def arm(task_id, passed):
+        out = {"passed": passed, "reward": float(passed), "checks": {}}
+        return {
+            "domain": "retail",
+            "task_id": task_id,
+            "outcome": out,
+            "termination": "user_stop",
+            "agent_view": view,
+        }
+
+    src = {"file": "A-retail-train.jsonl", "sha256_16": "0" * 16}
+    return [
+        hard.to_record(arm(g["task_id"], False), g["id"], src),
+        hard.to_record(arm(solved, True), None, src),
+    ]
+
+
+def _setup_hard(tmp_path, monkeypatch, existing, tags=(), args=(), recs=None):
+    """The golden folder plus a hard subset built from it; publishes with --tag v1.1."""
+    hard_dir = tmp_path / "hard"
+    hard_dir.mkdir()
+    _setup(tmp_path, monkeypatch, existing, tags, ["--tag", "v1.1", "--hard", str(hard_dir), *args])
+    recs = recs if recs is not None else hard_rows(rows()["train"])
+    (hard_dir / pg.HARD_FILE).write_text("".join(json.dumps(r) + "\n" for r in recs))
+    report = {
+        **hard.counts(hard_rows(rows()["train"]), collections.Counter()),
+        "inputs": {"golden": {"sha256": pg.sha256(tmp_path / pg.FILES["train"])}},
+        "files": {pg.HARD_FILE: pg.sha256(hard_dir / pg.HARD_FILE)},
+    }
+    (hard_dir / pg.HARD_REPORT).write_text(json.dumps(report))
+    return hard_dir
+
+
+def test_v1_1_uploads_the_hard_subset_with_the_rest_in_one_commit_and_tags_it(tmp_path, monkeypatch):
+    _setup_hard(tmp_path, monkeypatch, existing={"org/ds": True}, tags=["v1"])
+    assert pg.main() == 0
+    names = sorted(["README.md", *pg.FILES.values(), "splits.json", pg.HARD_FILE])
+    assert FakeApi.calls == [("upload", names), ("tag", "v1.1")]
+    assert FakeApi.tags == ["v1", "v1.1"] and FakeApi.tagged_at["v1.1"] == "commit-1"  # v1 is left alone
+    card = FakeApi.uploaded["README.md"].decode()
+    assert "config_name: hard_subset" in card and "## Hard subset" in card and 'revision="v1.1"' in card
+    assert (
+        "pretty_name: ReAgent golden trajectories (τ²-bench) v1.1\n" in card
+        and "*Version v1.1, built" in card
+    )
+
+
+def test_v1_1_refuses_an_existing_v1_1_tag(tmp_path, monkeypatch):
+    _setup_hard(tmp_path, monkeypatch, existing={"org/ds": True}, tags=["v1", "v1.1"])
+    assert pg.main() == 1 and FakeApi.calls == []
+
+
+def test_v1_1_refuses_without_a_hard_subset(tmp_path, monkeypatch, capsys):
+    _setup(tmp_path, monkeypatch, existing={}, args=["--tag", "v1.1", "--hard", str(tmp_path / "none")])
+    assert pg.main() == 1 and FakeApi.calls == []
+    assert "run `just hard-subset` first" in capsys.readouterr().out
+
+
+def test_v1_1_refuses_a_hard_subset_built_from_other_golden_files(tmp_path, monkeypatch, capsys):
+    hard_dir = _setup_hard(tmp_path, monkeypatch, existing={})
+    report = json.loads((hard_dir / pg.HARD_REPORT).read_text())
+    report["inputs"]["golden"]["sha256"] = "an older golden build"
+    (hard_dir / pg.HARD_REPORT).write_text(json.dumps(report))
+    assert pg.main() == 1 and FakeApi.calls == []
+    assert "built from another golden_train.jsonl" in capsys.readouterr().out
+
+
+def test_v1_1_refuses_a_hard_subset_edited_after_its_build(tmp_path, monkeypatch, capsys):
+    hard_dir = _setup_hard(tmp_path, monkeypatch, existing={})
+    with (hard_dir / pg.HARD_FILE).open("a") as f:
+        f.write("\n")
+    assert pg.main() == 1 and FakeApi.calls == []
+    assert "changed since `just hard-subset`" in capsys.readouterr().out
+
+
+def test_hard_checks_catch_a_wrong_group_a_test_task_a_stale_fix_and_bad_counts():
+    golden_train = rows()["train"]
+    report = hard.counts(hard_rows(golden_train), collections.Counter())
+    assert pg.validate_hard(hard_rows(golden_train), report, golden_train) == []
+    bad = hard_rows(golden_train)
+    bad[0]["group"] = "teacher_unsolved"  # it has a fix and Arm A failed: healable
+    bad[1]["task_id"] = splits.task_ids("retail", "test")[0]
+    bad[1]["id"] = bad[0]["id"]
+    probs = pg.validate_hard(bad, report, golden_train)
+    assert any("make it healable" in p for p in probs)
+    assert any("belongs to test" in p for p in probs)
+    assert any("duplicated" in p for p in probs)
+    assert any("build report says" in p for p in probs)
+    stale = hard_rows(golden_train)
+    stale[0]["golden_id"] = "glm53f/retail/old/1"
+    assert any("golden v1 has" in p for p in pg.validate_hard(stale, report, golden_train))
+
+
+@pytest.mark.parametrize("key", ["id", "group", "arm_a", "labels", "messages", "domain"])
+def test_a_hard_record_missing_any_key_is_a_problem_not_a_crash(key):
+    golden_train = rows()["train"]
+    recs = hard_rows(golden_train)
+    del recs[0][key]
+    report = hard.counts(hard_rows(golden_train), collections.Counter())
+    assert any("hard subset record 1: malformed" in p for p in pg.validate_hard(recs, report, golden_train))
