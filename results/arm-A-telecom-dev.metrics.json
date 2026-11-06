@@ -1,0 +1,68 @@
+{
+  "run": "arm-A-telecom-dev",
+  "date": "2026-11-06",
+  "owner": "Chiara",
+  "commit": "09031af",
+  "config": "configs/arms.yaml",
+  "arm": "A",
+  "prompt_variant": "default",
+  "prompt_version": "tau2/default",
+  "student": "c4ai-aya-expanse-32b (Cohere API, prompted, cohere Action: format)",
+  "customer": "openrouter/openai/gpt-4.1",
+  "domain": "telecom",
+  "split": "dev (frozen splits, configs/splits.json)",
+  "samples_per_task": 1,
+  "judges": false,
+  "note_judges": "telecom has no LLM judges: scores are complete",
+  "records": "results/episodes/arms/A-telecom-train.jsonl (not committed), the dev tasks only",
+  "conversations": 15,
+  "crashed": 0,
+  "passed": 0,
+  "task_success": 0.0,
+  "task_success_wilson95": [
+    0.0,
+    0.2039
+  ],
+  "by_issue": {
+    "mms_issue": {
+      "passed": 0,
+      "n": 8
+    },
+    "mobile_data_issue": {
+      "passed": 0,
+      "n": 3
+    },
+    "service_issue": {
+      "passed": 0,
+      "n": 4
+    }
+  },
+  "termination": {
+    "user_stop": 9,
+    "too_many_errors": 5,
+    "max_steps": 1
+  },
+  "context_overflow": 0,
+  "conversations_flagged": {
+    "tool_unknown_tool": 15,
+    "arg_unseen_id_like_argument": 3,
+    "loop_repeated_failed_call": 10,
+    "tool_or_arg": 15
+  },
+  "flag_method": "heuristic diagnostics (reflexive.teacher.unseen_arguments / tool_errors), not the SEL-12 classifier",
+  "hallucination_rate_tool_or_arg": 1.0,
+  "transferred_to_human": 1,
+  "judged": 0,
+  "skipped_checks": 0,
+  "student_calls": 215,
+  "student_calls_per_success": null,
+  "student_replies_cut_off": 0,
+  "tool_calls_per_conversation": 8.7,
+  "student_tokens_per_conversation_median": 45572,
+  "cost_usd": {
+    "customer": 0.79,
+    "student_est": 1.1,
+    "total": 1.89
+  },
+  "history": "Chiara's 4 Nov run (74 tau2-bench train tasks); its 15 frozen-dev tasks summarised by Charlie, 6 Nov"
+}

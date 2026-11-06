@@ -1,0 +1,51 @@
+{
+ "about": "SEL-12 spot check: is each sampled finding a real failure of that type? Labelled by reading the conversation (scripts/arms/spot_check_hallucination.py prints the sample). First pass by Claude; to be confirmed by a person.",
+ "files": [
+  "results/episodes/arms/A-telecom-train.jsonl",
+  "results/episodes/arms/C-telecom-train.jsonl"
+ ],
+ "labels": {
+  "TOOL-01": true,
+  "TOOL-02": true,
+  "TOOL-03": true,
+  "TOOL-04": true,
+  "TOOL-05": true,
+  "TOOL-06": true,
+  "TOOL-07": true,
+  "TOOL-08": true,
+  "TOOL-09": true,
+  "TOOL-10": true,
+  "ARG-01": true,
+  "ARG-02": true,
+  "ARG-03": true,
+  "ARG-04": true,
+  "ARG-05": true,
+  "ARG-06": true,
+  "ARG-07": true,
+  "ARG-08": true,
+  "ARG-09": true,
+  "ARG-10": true,
+  "LOOP-01": true,
+  "LOOP-02": true,
+  "LOOP-03": true,
+  "LOOP-04": true,
+  "LOOP-05": true,
+  "LOOP-06": true,
+  "LOOP-07": true,
+  "LOOP-08": true,
+  "LOOP-09": true,
+  "LOOP-10": true
+ },
+ "notes": {
+  "TOOL-02": "get_network_status: not an agent tool, not a customer tool",
+  "TOOL-04": "toggle_vpn: invented tool name",
+  "ARG-01": "Action: JSON with a // comment inside, so it can't be parsed",
+  "ARG-03": "C00123456789: no ID had been given or looked up",
+  "ARG-06": "L0012345 / C0012345 invented",
+  "ARG-08": "customer said 'March 14th'; the agent added the year 1990",
+  "LOOP-03": "says a human agent is coming 3 times; never called transfer_to_human_agents",
+  "LOOP-07": "same, and the conversation ran to the step limit",
+  "LOOP-04": "199 messages, the agent repeating 'take your time' to the customer",
+  "LOOP-08": "179 messages of mutual thanks; no hand-off"
+ }
+}

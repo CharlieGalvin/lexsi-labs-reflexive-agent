@@ -1,0 +1,54 @@
+{
+  "run": "arm-A-retail-train",
+  "date": "2026-11-05",
+  "owner": "Charlie",
+  "commit": "e8155a0",
+  "config": "configs/arms.yaml",
+  "arm": "A",
+  "prompt_variant": "default",
+  "prompt_version": "tau2/default",
+  "student": "c4ai-aya-expanse-32b (Cohere API, prompted, cohere Action: format)",
+  "customer": "gpt-4.1-2025-04-14",
+  "domain": "retail",
+  "split": "train (frozen splits, configs/splits.json)",
+  "samples_per_task": 1,
+  "judges": true,
+  "note_judges": "τ²-bench's LLM judges ran (OPENAI_API_KEY set)",
+  "records": "results/episodes/arms/A-retail-train.jsonl (not committed)",
+  "conversations": 59,
+  "crashed": 0,
+  "passed": 8,
+  "task_success": 0.1356,
+  "task_success_wilson95": [
+    0.0703,
+    0.2454
+  ],
+  "by_issue": null,
+  "termination": {
+    "user_stop": 53,
+    "too_many_errors": 6
+  },
+  "context_overflow": 0,
+  "conversations_flagged": {
+    "tool_unknown_tool": 0,
+    "arg_unseen_id_like_argument": 33,
+    "loop_repeated_failed_call": 24,
+    "tool_or_arg": 33
+  },
+  "flag_method": "heuristic diagnostics (reflexive.teacher.unseen_arguments / tool_errors), not the SEL-12 classifier",
+  "hallucination_rate_tool_or_arg": 0.5593,
+  "transferred_to_human": 19,
+  "judged": 53,
+  "skipped_checks": 0,
+  "student_calls": 619,
+  "student_calls_per_success": 77.4,
+  "student_replies_cut_off": 0,
+  "tool_calls_per_conversation": 8.0,
+  "student_tokens_per_conversation_median": 56971,
+  "cost_usd": {
+    "customer": 0.88,
+    "student_est": 1.95,
+    "total": 2.83
+  },
+  "history": "task 54 crashed once (Cohere 400: 'message must be at least 1 token long') and ran cleanly on the re-run"
+}

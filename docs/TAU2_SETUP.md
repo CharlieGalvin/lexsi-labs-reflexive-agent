@@ -1,11 +1,16 @@
 # τ²-bench setup and decisions (SEL-31)
 
-**Decision: pin τ²-bench v2.0.0 and keep all three domains (retail, airline, telecom) for now.**
-Telecom is **at risk**: its prompt alone fills ~91% of Tiny Aya's 8,192-token context window.
-Rather than drop it on a measurement alone, we let the first baseline runs decide, using the
-drop rule below. Everything here is reproducible with `python scripts/tau2_inspect.py` (no API calls).
+**Decision: pin τ²-bench v2.0.0 and keep all three domains (retail, airline, telecom).**
 
-**Telecom drop rule (checked after SEL-20 / SEL-55, by Thu 5 – Sat 7):** drop telecom if, in
+> **Update 3–4 Nov:** the student is now **Aya Expanse 32B (128K context)**, not Tiny Aya
+> (8K), so **telecom is fully back in scope** and the drop rule below no longer applies. The
+> longest golden trajectory is ~13K tokens. The Tiny Aya context-fit sections are kept as the
+> record of why telecom was at risk.
+
+Originally, telecom was **at risk**: its prompt alone fills ~91% of Tiny Aya's 8,192-token
+context window. Everything here is reproducible with `python scripts/tau2/inspect_tasks.py` (no API calls).
+
+**Telecom drop rule (retired 3 Nov with the move to Aya Expanse 32B):** drop telecom if, in
 Arm A rollouts on its train tasks, **more than 25% hit the context limit**, or its pass rate is
 near zero with context overflow as the main cause. The overflow rate becomes the evidence in
 the write-up. If dropped, we fall back to retail + airline (104 train / 60 test).
@@ -44,8 +49,8 @@ The agent and simulated customer can run through either OpenAI or OpenRouter. Wi
 | --- | ---: | ---: | --- |
 | retail | 74 | 40 | 16 agent tools |
 | airline | 30 | 20 | 14 agent tools |
-| telecom | 74 | 40 | At risk (context); also a 2,285-task generated pool for extra training |
-| **Total** | **178** | **100** | all three; 104 / 60 if telecom is dropped |
+| telecom | 74 | 40 | In scope; also a 2,285-task generated pool for extra training |
+| **Total** | **178** | **100** | all three domains |
 
 **Frozen 4 Nov (SEL-36) in [`configs/splits.json`](../configs/splits.json).** A dev set is carved
 from train **by task**, at random with a fixed seed (`reagent-dev-v1`):
@@ -58,13 +63,13 @@ from train **by task**, at random with a fixed seed (`reagent-dev-v1`):
 | **Total** | **142** | **36** | **100** |
 
 Dev is for DSPy, gate checks and heal-cycle checks; a dev task's trajectory is never trained on.
-`python scripts/make_splits.py --check` confirms the file matches a fresh rebuild from the seed.
+`python scripts/data/make_splits.py --check` confirms the file matches a fresh rebuild from the seed.
 
 Healing (hard subset, teacher fixes, GRPO) and the DSPy prompt (Arm D) use **train only** (and dev). All
-reported numbers come from the test tasks (100, or 60 without telecom), run with 3–4 trials
+reported numbers come from the 100 test tasks, run with 3–4 trials
 each (τ²-bench's pass^k) so the confidence intervals stay usable on a small test set.
 
-## Context fit for Tiny Aya (8,192 tokens)
+## Context fit for Tiny Aya (8,192 tokens): historical, the student is now Aya Expanse 32B (128K)
 
 | Domain | Policy | Tool schemas | Fixed prompt | Gold-path tool I/O (median / p90) | Tasks over 8K on the gold path |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -93,8 +98,8 @@ so real rollouts (extra lookups, retries, chat) will be longer: treat these as l
   the simulated customer is identical across the experiment.
 - Optional for cheap development runs only: `gpt-4.1-mini`. Never mix simulators between arms.
 - **Cost per task:** τ²-bench records `agent_cost` and `user_cost` for every run.
-  `bash scripts/tau2_first_run.sh` runs 2 retail train tasks and prints both, plus token counts
-  (`scripts/tau2_report.py`). LiteLLM may not price OpenRouter model IDs, so the reported cost
+  `bash scripts/tau2/first_run.sh` runs 2 retail train tasks and prints both, plus token counts
+  (`scripts/tau2/run_report.py`). LiteLLM may not price OpenRouter model IDs, so the reported cost
   can be empty; the script then estimates it from tokens at GPT-4.1 list prices. Your
   OpenRouter activity page shows the actual spend. Post the numbers
   in SEL-31 / SEL-37 and multiply: (178 train + 100 test × 3 trials × 4 arms) × user cost per task.

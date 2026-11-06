@@ -24,10 +24,15 @@ failure is detected (a ToolNotFound error, a loop, or a hallucinated argument), 
 
 1. **Detect & Classify** — categorise the failure as **Tool**, **Arg** or **Loop** using a
    groundedness check.
-2. **Synthesise** — use a teacher model (**Aya Expanse 32B**) to generate a corrected
-   trajectory.
+2. **Synthesise** — use a teacher model (**GLM-5.3-Flash**, chosen in a bake-off) to
+   generate a corrected trajectory.
 3. **Retrain & Gate** — pass corrected trajectories into the AgentTune RL factory
-   (**GRPO**, **BCO**) to update the student (**Tiny Aya**).
+   (**GRPO**, **BCO**) to update the student (**Aya Expanse 32B**).
+
+*Model choices changed on 3 Nov:* the original proposal had Aya Expanse 32B as the teacher and
+Tiny Aya as the student. Unaided Aya Expanse 32B solved 1 of 30 train tasks, so it became the
+student (its 128K context also fits telecom), and GLM-5.3-Flash won the teacher bake-off. See
+[`docs/experiments/`](docs/experiments/README.md).
 4. **Verify** — use **AuditKIT** as a deployment gate, comparing the healed model's success
    rate against the baseline; the healed adapter is promoted only if it wins.
 
@@ -37,18 +42,18 @@ towards verified correctness through automated, gated weight updates.
 
 ```
              ┌──────────────────────── production / eval rollouts ───────────────────────┐
- task ──► Student agent (Tiny Aya + LoRA) ──► EventLog ──► DETECT & CLASSIFY (Tool/Arg/Loop)
+ task ──► Student (Aya Expanse 32B + LoRA) ─► EventLog ──► DETECT & CLASSIFY (Tool/Arg/Loop)
                  ▲                                                   │ failures
                  │ promote if gate passes                            ▼
         VERIFY: AuditKIT gate ◄── RETRAIN: AgentTune GRPO/BCO ◄── SYNTHESISE: teacher
-        (healed vs. baseline)        (student weights)            (Aya Expanse 32B) →
+        (healed vs. baseline)        (student weights)            (GLM-5.3-Flash) →
                                                                   verified golden trajectories
 ```
 
 ## 2. Experiment design — "the proof"
 
 **Task suites** (decision 2 Nov: public benchmarks instead of a synthetic suite, so our numbers are
-comparable with published results; see the [dataset options doc](https://claude.ai/artifact/F3PaRT61su9kdYb6LcWtxe)):
+comparable with published results; setup, splits and costs: [`docs/TAU2_SETUP.md`](docs/TAU2_SETUP.md)):
 
 - **[τ²-bench](https://github.com/sierra-research/tau2-bench)** (MIT): retail, airline and telecom
   customer-service tasks with database write tools and an LLM-simulated user, scored by final database
@@ -95,10 +100,12 @@ successful rollouts), to isolate the teacher's contribution.
 
 ### Role 1 — Data & Synthesis ("the Curator")
 **Tooling:** CuratorKIT, AuditKIT
-- Build the task suite and the **"hard hallucination" dataset** (tasks that reliably trigger
-  Tool / Arg / Loop failures in the baseline).
-- Run the teacher (**Aya Expanse 32B**) to generate **golden trajectories** for failed tasks;
-  verify each one by executing it against the sandbox before it is used for training.
+- Freeze the τ²-bench train / dev / test splits, and build the **"hard hallucination"
+  subset** (tasks that reliably trigger Tool / Arg / Loop failures in the baseline).
+- Run the teacher (**GLM-5.3-Flash**) to generate **golden trajectories** on train tasks,
+  verified by τ²-bench's own evaluator, then convert them to the student's format and publish
+  them for the Trainer (**published 5 Nov: [v1](https://huggingface.co/datasets/reagent-lexsi/tau2-golden-trajectories), private, 127 train + 31 dev reference
+  records**; the hard subset follows as v1.1, SEL-60).
 - Run the AuditKIT verification suite; produce the final ROI and success-per-token charts.
 
 ### Role 2 — Systems & Logic ("the Architect")
@@ -109,7 +116,7 @@ successful rollouts), to isolate the teacher's contribution.
   (live UI or interactive notebook).
 
 ### Role 3 — Model & Training ("the Trainer")
-**Tooling:** Tiny Aya, AgentTune RL factory
+**Tooling:** Aya Expanse 32B (student), AgentTune RL factory
 - Set up the GRPO / BCO training loop; manage student weights and the adapter lifecycle.
 - Execute the HEAL training steps (retrain the student on the Curator's dataset).
 
@@ -138,8 +145,8 @@ work is mainly wiring plus our own classifier, rewards and evaluation. Who build
 | [AgentTune](https://github.com/Lexsi-Labs/AgentTune) | Rollouts, GRPO/BCO, DECIDE, closed-loop components |
 | [AuditKIT](https://github.com/Lexsi-Labs/AuditKIT) | Gate + independent scorers: `redundant_tool_calls`, `agent_loop_detection`, `tool_call_validity`, `tool_selection` |
 | [CuratorKIT](https://github.com/Lexsi-Labs/CuratorKIT) | Hard-hallucination dataset, quality-gated golden trajectories |
-| `CohereLabs/tiny-aya-global` | Student (gated: accept the licence on the Hub) |
-| Aya Expanse 32B (Cohere Labs) | Teacher |
+| Aya Expanse 32B (Cohere Labs, CC-BY-NC) | Student |
+| GLM-5.3-Flash (`z-ai/glm-5.3-flash`, MIT, via OpenRouter) | Teacher |
 | Hugging Face Hub ([reagent-lexsi](https://huggingface.co/reagent-lexsi)) | Adapters, datasets, logs |
 | W&B or Trackio | Training curves |
 
@@ -153,11 +160,15 @@ Homebrew, use `uv tool install rust-just`. Check with `which just`: it should no
 ```bash
 git clone https://github.com/CharlieGalvin/lexsi-labs-reflexive-agent && cd lexsi-labs-reflexive-agent
 just setup-dev                  # .venv (Python 3.12) + τ²-bench with its data + test tools; creates .env
-#   → open .env and add OPENAI_API_KEY (needed to score retail/airline) and/or OPENROUTER_API_KEY
-#     (+ COHERE_API_KEY for the teacher: docs/TEACHER_SETUP.md)
-just check                      # lint + tests
+#   → open .env and add OPENAI_API_KEY (the retail/airline judges), OPENROUTER_API_KEY (teacher +
+#     simulated customer), COHERE_API_KEY (the student, Aya Expanse 32B, for `just rollout`) and
+#     HF_TOKEN (your own, for the team HF org): docs/TEACHER_SETUP.md
+just check                      # lint + format check + type checks (ty) + tests: what CI runs
+just fmt                        # format the code (CI refuses unformatted code)
+just features                   # the plain-English specifications (tests/features/), scenario by scenario
+just quality                    # advisory: types, dead code (vulture), undeclared dependencies (deptry)
 just tau2-first-run telecom     # 2 τ²-bench tasks: official score + cost (a few cents; retail/airline need OPENAI_API_KEY)
-source .venv/bin/activate && hf auth login   # then accept the Tiny Aya licence on its model page
+source .venv/bin/activate && hf auth login   # then accept the Aya Expanse licence on its model page
 
 # GPU box
 just setup                      # also installs the training libraries and AgentTune
@@ -171,18 +182,30 @@ Run `just` on its own to list every command. Python must be **3.12 or 3.13** (τ
 ```
 configs/                 one YAML per experiment / arm (copy, don't edit in place)
   splits.json            frozen τ²-bench train / dev / test task IDs (SEL-36; never regenerate)
+  arms.yaml              the experiment arms: shared student and customer, one prompt per arm (SEL-41)
+  prompts.yaml           the arms' versioned prompt texts (e.g. careful/v1); never edit a version in place
 src/reflexive/           Python package: each role adds its modules here
   outcome.py             pass/fail for any τ²-bench trajectory via τ²-bench's own scoring (Curator)
   episode.py             one τ²-bench conversation our code drives: tools, customer, context guard (Curator)
   arms.py                the experiment arms (configs/arms.yaml) and one rollout of an arm (Architect)
   llm.py                 API model names and OpenRouter prices
-scripts/rollout.py       run an arm on a domain's tasks: `just rollout A retail` (Arm A), `just rollout C ...`
-scripts/tau2_*           τ²-bench: first run, cost report, context-fit check, OpenRouter pricing
+  splits.py              load the frozen splits; split_of(), assert_not_test()
+  teacher.py             Cohere `Action:` prompt format (to_prompted) and tool-call parsing; Cohere client
+  golden.py              golden trajectories v1: agent's view, clean-pass pick, Cohere conversion, checks
+scripts/                 command-line tools, one folder per job (scripts/README.md lists each one)
+  tau2/                  τ²-bench: first run, cost report, scorer checks, tool schemas
+  teacher/               the teacher bake-off and the fix run that made the golden trajectories
+  student/               Aya's failure review
+  arms/                  experiment arms: rollouts (`just rollout A retail`), classifier spot check
+  data/                  frozen splits, golden trajectories v1, the Hugging Face upload
+  archive/               early probes, kept for the record
 third_party/             τ²-bench v2.0.0 (with data) and AgentTune, cloned by `just setup-dev` / `just setup`
 tests/                   offline tests (no GPU) — run in CI on every PR
+docs/DATA_CONTRACT.md    what the Curator hands over: the five rules, the files and the record format
 docs/TAU2_SETUP.md       τ²-bench setup decisions (splits, judges, context fit, costs)
-docs/TEACHER_SETUP.md    teacher (Aya Expanse 32B) via the Cohere API: limits, tool calling, budget
-docs/WORKPLAN.md         milestones + tasks per role → GitHub issues
+docs/TEACHER_SETUP.md    teacher (GLM-5.3-Flash via OpenRouter) and the Cohere prompt format Aya uses
+docs/experiments/        the teacher bake-off and golden trajectories, in order (start at its README)
+docs/WORKPLAN.md         the original 2 Nov plan (live tracking is in Linear)
 docs/EXPERIMENTS.md      one row per run
 results/*.metrics.json   committed evidence for the demo
 ```
@@ -200,5 +223,5 @@ results/*.metrics.json   committed evidence for the demo
 ## Licences
 
 AgentTune (LSAL v1.1) and AuditKIT (LSAL v1.2) are source-available for research and
-non-commercial use, not OSI open source. Check the Tiny Aya and Aya Expanse licences before
-publishing weights or teacher outputs. Code in this repo: pick a licence before going public.
+non-commercial use, not OSI open source. Check the Aya Expanse licence (CC-BY-NC) before
+publishing weights, and the customer model's terms (GPT-4.1) before publishing trajectories. Code in this repo: pick a licence before going public.

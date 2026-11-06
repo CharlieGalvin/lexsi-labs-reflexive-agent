@@ -1,4 +1,26 @@
-# Teacher setup: Aya Expanse 32B via the Cohere API (SEL-37)
+# Teacher setup (SEL-37, SEL-8)
+
+**Current setup (decided 3 Nov): the teacher is GLM-5.3-Flash** (`z-ai/glm-5.3-flash`, MIT
+licence) via OpenRouter, with native tool calling. The student is **Aya Expanse 32B**.
+
+| What | How |
+|---|---|
+| Teacher | `openrouter/z-ai/glm-5.3-flash`, native tool calls, temperature 0 (then 0.7 for retries) |
+| Simulated customer | `openrouter/openai/gpt-4.1`, replies capped at 2,048 tokens |
+| Judges | τ²-bench's own: retail `gpt-5.4-mini`, airline `gpt-5.5`, via OpenAI |
+| Keys (`.env`) | `OPENROUTER_API_KEY` (teacher + customer), `OPENAI_API_KEY` (judges) |
+| Run | `just teacher-fixes` (see `--help`); `--report` summarises what's saved, for free |
+| Cost | ~$11 for all 178 train tasks, mostly the telecom customer |
+| Why GLM | [`experiments/TEACHER_PHASE2_RESULTS.md`](experiments/TEACHER_PHASE2_RESULTS.md) |
+
+**The rest of this page is the 3 Nov record of Aya Expanse 32B as the teacher**, before it
+became the student. It's still the reference for **how Aya is prompted**: Cohere's `Action:`
+tool-call format (`teacher.to_prompted`, `style="cohere"`) is the format the student is
+evaluated and trained in (data contract, 4 Nov).
+
+---
+
+# History: Aya Expanse 32B via the Cohere API
 
 The teacher model (Role 1, Curator) takes the agent seat in τ²-bench conversations on tasks the
 student failed. Its verified wins become golden-fix training data (SEL-8, SEL-45, SEL-9).
@@ -59,7 +81,7 @@ These are Cohere's documented facts as of 3 Nov 2026, plus what they mean for ou
 **Tested 3 Nov (`just teacher-probe`).** A request with `tools=` is rejected by Cohere:
 `invalid request: tool use is not supported by the provided model: c4ai-aya-expanse-32b`.
 The prompted format worked first time: the teacher replied with a valid JSON tool call that
-parsed. So the teacher runs in **prompted mode** (`TeacherClient("prompted")`, the default):
+parsed. So the teacher runs in **prompted mode** (`CohereClient("prompted")`, the default):
 
 - **Use Aya's own tool format (`style="cohere"`, the default).** Aya Expanse comes from
   Cohere's Command R family and was trained on its tool-use prompt. Its model template, which
@@ -130,7 +152,7 @@ measures it properly. ~600 attempts at ~70 s is ~11 h one after another, so run 
 
 **Backup teacher:** Cohere's Command models support native tool calling, including parallel
 calls, multi-step calls and `tool_choice` ([tool-use usage patterns](https://docs.cohere.com/v2/docs/tool-use-usage-patterns),
-examples with `command-a-plus-05-2026`). `TeacherClient("native", model=...)` already
+examples with `command-a-plus-05-2026`). `CohereClient("native", model=...)` already
 supports this. Switching would depart from the proposal's teacher (Aya Expanse 32B), so it's a
 team decision if Aya's pass rate turns out too low.
 
@@ -184,7 +206,7 @@ A fixed test to settle it, agreed 3 Nov:
   too small". Add `gpt` for GPT-4.1, to show the tasks are solvable.
 - **Also counted** per conversation: invented IDs, calls to tools the agent doesn't have, and
   identical retries of a failed call. Broken runs (API failures) are reported separately; redo
-  them with `python scripts/teacher_sample.py --retry-broken`.
+  them with `python scripts/teacher/bakeoff.py --retry-broken`.
 - **95% ranges for 30 tasks:** 0 wins → 0–11%; 3 → 3–26%; 6 → 10–37%; 9 → 17–48%.
 - **Decision rule:**
   - **Aya ≤ 3/30 while the reference ≥ ~15/30:** unaided Aya is a poor teacher. Test hints
@@ -207,8 +229,8 @@ Same 30 train tasks, database checks only (a best case):
 - **The decision rule is met.** Aya ≤ 3/30 while the same-size reference solved about half. So
   it's Aya, not 32B being too small.
 - **The fix pool is 1 task** (airline 42): unaided, the teacher can't supply ~200 verified
-  fixes. Next is the hinted test (`just teacher-sample aya-steps tiny`). If hints don't rescue
-  it, teacher-free healing (B′, SEL-24) becomes the main path.
+  fixes. The next step was a hinted test (an `aya-steps` model, since removed): the re-plan
+  below made it unnecessary.
 - **Caveats:**
   - 21 runs broke on bugs since fixed: a bundle of tool results the converter didn't handle,
     Qwen's empty replies, an 8K overflow by 35 tokens, and a `None` response. They were counted
@@ -225,13 +247,11 @@ Same 30 train tasks, database checks only (a best case):
   by changing the teacher. Which teacher, open or closed, is the **teacher bake-off** (SEL-58,
   `docs/experiments/TEACHER_BAKEOFF.md`, `just teacher-sample aya bakeoff`).
 - **Aya Expanse 8B is no longer on Cohere's API** (`c4ai-aya-expanse-8b` removed 4 Apr 2026;
-  [deprecations](https://docs.cohere.com/docs/deprecations)). To test it, serve the open weights
-  (`CohereLabs/aya-expanse-8b` on Hugging Face, CC-BY-NC) on any OpenAI-compatible server and
-  point the script at it:
-  `AYA8_API_BASE=http://localhost:11434/v1 AYA8_MODEL=aya-expanse:8b just teacher-sample aya8`
-  (Ollama shown; vLLM on a GPU is much faster). Without those settings the script stops at once
-  instead of logging 30 broken runs. Any removed or misnamed model now stops after the first
-  failure too.
+  [deprecations](https://docs.cohere.com/docs/deprecations)). Its open weights
+  (`CohereLabs/aya-expanse-8b` on Hugging Face, CC-BY-NC) can be served on any OpenAI-compatible
+  server, but the script's `aya8` entry was removed on 5 Nov, so `just teacher-sample aya8` now
+  stops with "unknown model". A removed or misnamed model stops after the first failure instead
+  of logging 30 broken runs.
 - **Tiny Aya's probe:** no native tool calling (it answered in prose). Prompted, it wrote
   `Action: get_order_details({...})` in function-call style, which the parser now also reads.
 
@@ -255,4 +275,4 @@ Same 30 train tasks, database checks only (a best case):
 | `just teacher-check [cohere\|agenttune] [none\|steps\|steps_with_args]` | Teacher on one train task per domain, in that prompt style (default `cohere`) and with those hints (default `none`). Reports cost, latency, score, the tool calls that actually ran and any invented IDs, then the budget. Saves to `results/episodes/teacher-check-<style>[-<hints>].jsonl`. | ~30–60 |
 
 - **Rate:** we use a **production key** (decided 3 Nov), so the driver doesn't throttle by default. If calls start failing with rate-limit errors (HTTP 429), they're retried; to space them out, set `TEACHER_RPM` in `.env` (e.g. `20` for a trial key).
-- **Code:** `reflexive.teacher.TeacherClient`, used as the agent in `reflexive.episode.Tau2Episode`.
+- **Code:** `reflexive.teacher.CohereClient`, used as the agent in `reflexive.episode.Tau2Episode`.

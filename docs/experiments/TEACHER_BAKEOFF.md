@@ -1,5 +1,12 @@
 # Teacher bake-off: which model should write the fixes? (SEL-58)
 
+> **Status: the design, written before running (3 Nov). Kept as the pre-registered plan.**
+> Phase 1 ran as designed: [results](TEACHER_BAKEOFF_RESULTS.md). Phase 2 ran differently
+> from the plan below, by decision during the project: 2 finalists (GLM-5.3-Flash and
+> Qwen3.8 27B with thinking off) instead of 3–4, **all** train tasks instead of 70, 1 attempt
+> instead of 3, and providers not pinned. See [phase 2 results](TEACHER_PHASE2_RESULTS.md).
+> Phase 3 hasn't run. **Outcome: GLM-5.3-Flash is the teacher.**
+
 **Question.** The student will be Aya Expanse 32B. Which API model makes the best *teacher*,
 meaning the most verified, clean fixes per dollar on tasks Aya fails, under a licence that lets
 us train on its outputs? And does an open-weight teacher cost us anything in quality?
@@ -93,10 +100,10 @@ is the real question, but it's only worth doing if phase 2 leaves two close cand
 ## How to run
 
 ```bash
-python scripts/teacher_sample.py --models haiku --limit 2               # smoke test one model
+python scripts/teacher/bakeoff.py --models haiku --limit 2               # smoke test one model
 just teacher-sample aya bakeoff                                         # phase 1, resumes
-python scripts/teacher_sample.py --models aya bakeoff --json results/bakeoff.json
-python scripts/teacher_sample.py --models or:moonshotai/kimi-k2.6       # any other OpenRouter model
+python scripts/teacher/bakeoff.py --models aya bakeoff --json results/bakeoff.json
+python scripts/teacher/bakeoff.py --models or:moonshotai/kimi-k2.6       # any other OpenRouter model
 ```
 
 **Phase 1 results:** [`TEACHER_BAKEOFF_RESULTS.md`](TEACHER_BAKEOFF_RESULTS.md) (3 Nov).

@@ -18,16 +18,11 @@ trackio/
 third_party/
 data/*
 !data/.gitkeep
-results/*.jsonl
-results/*.auditkit.json
+# results/: everything is local evidence (share via HF, not git), EXCEPT the small
+# results/*.metrics.json files, which ARE committed: they're the evidence for the demo
+results/*
 !results/.gitkeep
-# results/*.metrics.json is small and IS committed: it's the evidence for the demo
+!results/*.metrics.json
 *.safetensors
 *.bin
 *.db
-
-# Episode records from the check scripts (local evidence; share via HF, not git)
-results/episodes/
-results/fixes/
-results/reports/
-results/openrouter_models.json

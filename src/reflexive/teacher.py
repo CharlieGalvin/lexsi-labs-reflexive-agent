@@ -1,16 +1,19 @@
-"""The teacher model, Aya Expanse 32B via Cohere's API, as an agent for `Tau2Episode` (SEL-37).
+"""Aya Expanse 32B via Cohere's API as an agent for `Tau2Episode`: our student (SEL-37).
 
-    teacher = TeacherClient(mode="prompted")        # or "native"; reads COHERE_API_KEY
+    aya = CohereClient(mode="prompted")             # or "native"; reads COHERE_API_KEY
     ep = Tau2Episode("retail", task_id, max_context=128_000)
     ep.reset()
     while not ep.done:
-        ep.step(teacher.turn(ep.prompt(), ep.tool_schemas))
-    teacher.usage                                   # calls, tokens, seconds, est. cost
+        ep.step(aya.turn(ep.prompt(), ep.tool_schemas))
+    aya.usage                                       # calls, tokens, seconds, est. cost
+
+(The module is called ``teacher`` because Aya was first tried as the teacher; GLM-5.3-Flash
+won the bake-off, and Aya is now the student. ``TeacherClient`` is kept as an alias.)
 
 Calls go through Cohere's OpenAI-compatible endpoint (https://api.cohere.ai/compatibility/v1)
 with LiteLLM. See docs/TEACHER_SETUP.md for limits and prices.
 
-**Two ways to make tool calls** (`scripts/teacher_probe.py` shows which one works):
+**Two ways to make tool calls** (`scripts/archive/teacher_probe.py` shows which one works):
 
 - ``native``: pass the tool schemas as ``tools=`` and read structured ``tool_calls`` back.
   **Aya Expanse doesn't support this:** Cohere rejects it with "tool use is not supported by
@@ -46,7 +49,7 @@ import os
 import re
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -102,8 +105,15 @@ COHERE_RESULT = "<results>\nDocument: {i}\ntool_name: {name}\nresult: {content}\
 # Stop the reply where Aya would start writing tool results itself (seen 3 Nov).
 STOP_SEQUENCES = ["<results>", "Tool result", "Document: 0"]
 DIRECTLY_ANSWER = {"directly-answer", "directly_answer"}
-_PY_TYPES = {"string": "str", "integer": "int", "number": "float", "boolean": "bool",
-             "object": "dict", "array": "list", "null": "None"}
+_PY_TYPES = {
+    "string": "str",
+    "integer": "int",
+    "number": "float",
+    "boolean": "bool",
+    "object": "dict",
+    "array": "list",
+    "null": "None",
+}
 
 
 def _py_type(schema: dict) -> str:
@@ -122,8 +132,7 @@ def tool_stub(schema: dict) -> str:
     fn = schema.get("function", schema)
     params = fn.get("parameters") or {}
     props, required = params.get("properties") or {}, set(params.get("required") or [])
-    sig = ", ".join(f"{k}: {_py_type(v)}" + ("" if k in required else " = None")
-                    for k, v in props.items())
+    sig = ", ".join(f"{k}: {_py_type(v)}" + ("" if k in required else " = None") for k, v in props.items())
     desc = "\n    ".join(line.strip() for line in (fn.get("description") or "").strip().splitlines())
     lines = [f"def {fn['name']}({sig}) -> list[dict]:", '    """' + desc]
     if props:
@@ -138,8 +147,7 @@ def tool_stub(schema: dict) -> str:
 # --- Prompted tool-call format -----------------------------------------------------------------
 
 
-def to_prompted(messages: list[dict], tool_schemas: list[dict], style: str = "agenttune"
-                ) -> list[dict]:
+def to_prompted(messages: list[dict], tool_schemas: list[dict], style: str = "agenttune") -> list[dict]:
     """Rewrite an OpenAI-style conversation for a model without native tool calling.
 
     The tools go into the system prompt (after τ²-bench's instructions and policy, unchanged);
@@ -183,8 +191,9 @@ def to_prompted(messages: list[dict], tool_schemas: list[dict], style: str = "ag
         if role == "tool":
             name = names.get(m.get("tool_call_id", ""), "tool")
             if style == "cohere":
-                out.append({"role": "user", "content": COHERE_RESULT.format(
-                    i=n_results, name=name, content=content)})
+                out.append(
+                    {"role": "user", "content": COHERE_RESULT.format(i=n_results, name=name, content=content)}
+                )
                 n_results += 1
             else:
                 out.append({"role": "user", "content": TOOL_RESULT.format(name=name, content=content)})
@@ -219,12 +228,17 @@ def _calls_from(value: Any, id_prefix: str, strict: bool) -> list[dict] | None:
         args = item.get("parameters", item.get("arguments", {}))
         if not isinstance(name, str) or not isinstance(args, dict):
             return None
-        calls.append({"id": f"{id_prefix}_{i}", "type": "function",
-                      "function": {"name": name, "arguments": json.dumps(args)}})
+        calls.append(
+            {
+                "id": f"{id_prefix}_{i}",
+                "type": "function",
+                "function": {"name": name, "arguments": json.dumps(args)},
+            }
+        )
     return calls
 
 
-def _json_values(text: str):
+def _json_values(text: str) -> Iterator[Any]:
     """Every JSON list or object that starts somewhere in ``text``, in order."""
     decoder = json.JSONDecoder()
     i = 0
@@ -316,8 +330,12 @@ def parse_prompted(text: str, id_prefix: str = "call") -> list[dict] | None:
 class RateLimiter:
     """Spaces calls at least 60/rpm seconds apart (thread-safe)."""
 
-    def __init__(self, rpm: float, clock: Callable[[], float] = time.monotonic,
-                 sleep: Callable[[float], None] = time.sleep):
+    def __init__(
+        self,
+        rpm: float,
+        clock: Callable[[], float] = time.monotonic,
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> None:
         self.interval = 60.0 / rpm if rpm > 0 else 0.0
         self._clock, self._sleep = clock, sleep
         self._next = 0.0
@@ -343,6 +361,7 @@ class Usage:
     embedded: int = 0  # prompted tool calls written inside prose (the prose was dropped)
     directly_answer: int = 0  # "directly-answer" pseudo-calls turned into a message
     empty: int = 0  # empty replies (re-asked once without stop sequences)
+    cut_off: int = 0  # replies the API stopped at max_tokens (finish_reason "length")
     per_call: list[dict] = field(default_factory=list)
     prices: tuple[float, float] = (PRICE_IN, PRICE_OUT)  # USD per input / output token
 
@@ -352,15 +371,30 @@ class Usage:
         return self.prompt_tokens * self.prices[0] + self.completion_tokens * self.prices[1]
 
     def as_dict(self) -> dict:
-        return {"calls": self.calls, "prompt_tokens": self.prompt_tokens,
-                "completion_tokens": self.completion_tokens, "seconds": round(self.seconds, 2),
-                "errors": self.errors, "unparsed": self.unparsed, "embedded": self.embedded,
-                "directly_answer": self.directly_answer, "empty": self.empty,
-                "est_cost": round(self.cost, 4)}
+        return {
+            "calls": self.calls,
+            "prompt_tokens": self.prompt_tokens,
+            "completion_tokens": self.completion_tokens,
+            "seconds": round(self.seconds, 2),
+            "errors": self.errors,
+            "unparsed": self.unparsed,
+            "embedded": self.embedded,
+            "directly_answer": self.directly_answer,
+            "empty": self.empty,
+            "cut_off": self.cut_off,
+            "est_cost": round(self.cost, 4),
+        }
 
 
-_RETRYABLE = ("RateLimitError", "InternalServerError", "ServiceUnavailableError",
-              "APIConnectionError", "Timeout", "APIError", "_NoResponse")
+_RETRYABLE = (
+    "RateLimitError",
+    "InternalServerError",
+    "ServiceUnavailableError",
+    "APIConnectionError",
+    "Timeout",
+    "APIError",
+    "_NoResponse",
+)
 
 
 class _NoResponse(RuntimeError):
@@ -381,15 +415,25 @@ class ContextTooLong(RuntimeError):
     """The model's API refused the prompt as longer than its context window."""
 
 
-class TeacherClient:
+class CohereClient:
     """Aya Expanse 32B (by default) as the agent: one call per agent turn."""
 
-    def __init__(self, mode: str = "prompted", *, style: str = "cohere", model: str = TEACHER_MODEL,
-                 api_base: str = COHERE_COMPAT_BASE, api_key: str | None = None,
-                 rpm: float | None = None, temperature: float = 0.0, max_tokens: int = 1024,
-                 seed: int | None = None, num_retries: int = 3,
-                 prices: tuple[float, float] | None = None,
-                 completion: Callable[..., Any] | None = None):
+    def __init__(
+        self,
+        mode: str = "prompted",
+        *,
+        style: str = "cohere",
+        model: str = TEACHER_MODEL,
+        api_base: str = COHERE_COMPAT_BASE,
+        api_key: str | None = None,
+        rpm: float | None = None,
+        temperature: float = 0.0,
+        max_tokens: int = 1024,
+        seed: int | None = None,
+        num_retries: int = 3,
+        prices: tuple[float, float] | None = None,
+        completion: Callable[..., Any] | None = None,
+    ) -> None:
         if mode not in ("native", "prompted"):
             raise ValueError("mode must be 'native' or 'prompted'")
         if style not in ("agenttune", "cohere"):
@@ -407,16 +451,19 @@ class TeacherClient:
         # Prompted mode: each raw reply and how it was read, for reviewing the model's mistakes
         self.raw_turns: list[dict] = []
 
-    def _call(self, messages: list[dict], tools: list[dict] | None,
-              stop: list[str] | None = None) -> Any:
+    def _call(self, messages: list[dict], tools: list[dict] | None, stop: list[str] | None = None) -> Any:
         if self._completion is None:
             import litellm
 
-            litellm.suppress_debug_info = True  # no "Give Feedback / Get Help" banner per error
+            litellm.suppress_debug_info = True  # ty: ignore[invalid-assignment]  # no "Get Help" banner per error
             self._completion = litellm.completion
         kwargs: dict[str, Any] = dict(
-            model=f"openai/{self.model}", api_base=self.api_base, api_key=self.api_key,
-            messages=messages, temperature=self.temperature, max_tokens=self.max_tokens,
+            model=f"openai/{self.model}",
+            api_base=self.api_base,
+            api_key=self.api_key,
+            messages=messages,
+            temperature=self.temperature,
+            max_tokens=self.max_tokens,
             num_retries=0,  # we retry ourselves, and only errors that can succeed later
         )
         if tools:
@@ -439,7 +486,7 @@ class TeacherClient:
                         raise ContextTooLong(str(e)) from e
                     if attempt == self.num_retries or not _retryable(e):
                         raise
-                    time.sleep(min(2 ** attempt, 30))  # 1 s, 2 s, 4 s ...
+                    time.sleep(min(2**attempt, 30))  # 1 s, 2 s, 4 s ...
         except Exception:
             self.usage.errors += 1
             raise
@@ -451,17 +498,24 @@ class TeacherClient:
         ct = getattr(u, "completion_tokens", 0) or 0
         self.usage.prompt_tokens += pt
         self.usage.completion_tokens += ct
-        self.usage.per_call.append({"prompt_tokens": pt, "completion_tokens": ct})
+        finish = getattr(resp.choices[0], "finish_reason", None)
+        if finish == "length":  # stopped at max_tokens: the reply may be missing its end
+            self.usage.cut_off += 1
+        self.usage.per_call.append({"prompt_tokens": pt, "completion_tokens": ct, "finish_reason": finish})
         return resp
 
     def turn(self, messages: list[dict], tool_schemas: list[dict]) -> dict:
         """One agent turn for ``messages`` (from `Tau2Episode.prompt()`), as an assistant dict."""
         if self.mode == "native":
             msg = self._call(messages, tool_schemas).choices[0].message
-            calls = [{"id": tc.id, "type": "function",
-                      "function": {"name": tc.function.name,
-                                   "arguments": tc.function.arguments or "{}"}}
-                     for tc in (getattr(msg, "tool_calls", None) or [])]
+            calls = [
+                {
+                    "id": tc.id,
+                    "type": "function",
+                    "function": {"name": tc.function.name, "arguments": tc.function.arguments or "{}"},
+                }
+                for tc in (getattr(msg, "tool_calls", None) or [])
+            ]
             if calls:  # τ²-bench's rule: a tool call or a message, not both
                 return {"role": "assistant", "content": None, "tool_calls": calls}
             return {"role": "assistant", "content": msg.content or ""}
@@ -472,8 +526,13 @@ class TeacherClient:
             # Usually a stop sequence at the very start (Aya began by echoing <results>). Ask
             # once more without stop sequences; anything results-like is dropped by the parser.
             self.usage.empty += 1
-            nudge = [*prompt, {"role": "user", "content":
-                               "(Write your next turn now: an Action, or a message to the customer.)"}]
+            nudge = [
+                *prompt,
+                {
+                    "role": "user",
+                    "content": "(Write your next turn now: an Action, or a message to the customer.)",
+                },
+            ]
             text = self._call(nudge, None).choices[0].message.content or ""
             if not text.strip():
                 raise EmptyTeacherReply("The teacher returned an empty reply twice")
@@ -509,11 +568,16 @@ class TeacherClient:
         prose = _strip_actions(text)
         if prose:
             return {"role": "assistant", "content": prose}
-        follow = [*prompt, {"role": "assistant", "content": text.strip()},
-                  {"role": "user", "content": "(Now write your reply to the customer, as plain text.)"}]
+        follow = [
+            *prompt,
+            {"role": "assistant", "content": text.strip()},
+            {"role": "user", "content": "(Now write your reply to the customer, as plain text.)"},
+        ]
         reply = self._call(follow, None, stop=STOP_SEQUENCES).choices[0].message.content or ""
         return {"role": "assistant", "content": _strip_actions(reply) or reply}
 
+
+TeacherClient = CohereClient  # the old name, still used by reflexive.arms
 
 _ID_LIKE = re.compile(r"^(?=.*\d)[\w#@.\-]{4,}$")
 # Dates and times are worked out from the conversation ("next Friday"), not looked up, so they
@@ -542,9 +606,15 @@ def unseen_arguments(messages: list[dict]) -> list[str]:
                 values = []
                 for v in args.values():
                     values += v if isinstance(v, list) else [v]
-                unseen += [v for v in values if isinstance(v, str) and _ID_LIKE.match(v)
-                           and not _DATE_LIKE.match(v)
-                           and v.lstrip("#") not in seen and v not in unseen]
+                unseen += [
+                    v
+                    for v in values
+                    if isinstance(v, str)
+                    and _ID_LIKE.match(v)
+                    and not _DATE_LIKE.match(v)
+                    and v.lstrip("#") not in seen
+                    and v not in unseen
+                ]
         seen += " " + (m.get("content") or "")
     return unseen
 

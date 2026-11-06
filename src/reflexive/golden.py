@@ -14,7 +14,7 @@ Every record is checked by `check_record` before it's written: the Cohere text i
 and must give exactly the original agent turns (same text, same tool calls and arguments,
 same tool results), the roles must alternate and ``train_on`` must be every assistant turn.
 
-Pure functions; τ²-bench is only needed to make the system prompt (`scripts/build_golden.py`).
+Pure functions; τ²-bench is only needed to make the system prompt (`scripts/data/build_golden.py`).
 """
 
 from __future__ import annotations
@@ -34,6 +34,7 @@ _RESULT = re.compile(r"<results>\nDocument: (\d+)\ntool_name: (.*?)\nresult: (.*
 
 # --- 2. The agent's view ----------------------------------------------------------------------
 
+
 def agent_view(messages: list[dict], system_prompt: str) -> list[dict]:
     """The saved full conversation reduced to what the agent saw, system prompt first.
 
@@ -41,8 +42,7 @@ def agent_view(messages: list[dict], system_prompt: str) -> list[dict]:
     those calls; compacts JSON tool results the way `Tau2Episode` showed them. Checked to give
     exactly `Tau2Episode.messages()` on the 30 Aya conversations that saved both.
     """
-    customer_calls = {tc["id"] for m in messages if m["role"] == "user"
-                      for tc in m.get("tool_calls") or []}
+    customer_calls = {tc["id"] for m in messages if m["role"] == "user" for tc in m.get("tool_calls") or []}
     view = [{"role": "system", "content": system_prompt}]
     for m in messages:
         if m["role"] == "user" and m.get("tool_calls"):
@@ -56,6 +56,7 @@ def agent_view(messages: list[dict], system_prompt: str) -> list[dict]:
 
 
 # --- 4. What goes in --------------------------------------------------------------------------
+
 
 def tool_problems(view: list[dict]) -> dict:
     """Retried failed calls and calls to tools the agent doesn't have, recounted on the view."""
@@ -92,8 +93,10 @@ def pick(records: list[dict]) -> dict[tuple[str, str], dict]:
 
 # --- 1 + 3. Cohere format and learning targets -----------------------------------------------
 
-def to_record(rec: dict, system_prompt: str, tools: list[dict], split: str,
-              source: dict | None = None) -> dict:
+
+def to_record(
+    rec: dict, system_prompt: str, tools: list[dict], split: str, source: dict | None = None
+) -> dict:
     """One training record (see the contract's field table)."""
     if split not in ("train", "dev"):
         raise ValueError(f"golden records are train or dev, never {split!r}")
@@ -105,14 +108,19 @@ def to_record(rec: dict, system_prompt: str, tools: list[dict], split: str,
     return {
         "id": f"{teacher}/{rec['domain']}/{rec['task_id']}/{attempt}",
         "format": FORMAT,
-        "domain": rec["domain"], "task_id": str(rec["task_id"]), "split": split,
+        "domain": rec["domain"],
+        "task_id": str(rec["task_id"]),
+        "split": split,
         "messages": msgs,
         "train_on": [i for i, m in enumerate(msgs) if m["role"] == "assistant"],
         "tools": tools,
         "outcome": {"reward": rec["outcome"]["reward"], "checks": rec["outcome"]["checks"]},
-        "teacher": {"model": TEACHER_MODELS.get(teacher, rec.get("agent_llm")),
-                    "provider": max(providers, key=providers.get) if providers else None,
-                    "temperature": rec.get("temperature"), "attempt": attempt},
+        "teacher": {
+            "model": TEACHER_MODELS.get(teacher, rec.get("agent_llm")),
+            "provider": max(providers, key=lambda p: providers[p]) if providers else None,
+            "temperature": rec.get("temperature"),
+            "attempt": attempt,
+        },
         "customer": rec.get("user_llm"),
         "tau2_version": TAU2_VERSION,
         "source": source or {},
@@ -131,12 +139,17 @@ def from_cohere(msgs: list[dict]) -> list[dict]:
         text = m["content"]
         if m["role"] == "assistant" and text.startswith("Action: ```json"):
             calls = parse_prompted(text) or []
-            out.append({"role": "assistant", "calls": [
-                (c["function"]["name"], json.loads(c["function"]["arguments"])) for c in calls]})
+            out.append(
+                {
+                    "role": "assistant",
+                    "calls": [(c["function"]["name"], json.loads(c["function"]["arguments"])) for c in calls],
+                }
+            )
         elif m["role"] == "user" and text.startswith("<results>"):
             found = _RESULT.findall(text)
-            rebuilt = "\n\n".join(f"<results>\nDocument: {i}\ntool_name: {n}\nresult: {r}\n</results>"
-                                  for i, n, r in found)
+            rebuilt = "\n\n".join(
+                f"<results>\nDocument: {i}\ntool_name: {n}\nresult: {r}\n</results>" for i, n, r in found
+            )
             if rebuilt != text:  # something besides results was merged into this turn
                 out.append({"role": "user", "content": text})
             else:
@@ -173,8 +186,11 @@ def _expected(view: list[dict]) -> list[dict]:
 def check_record(golden: dict, view: list[dict]) -> list[str]:
     """Everything wrong with a training record, compared with the agent's view it came from."""
     msgs, problems = golden["messages"], []
-    if not msgs or msgs[0]["role"] != "system" or msgs[0]["content"] != (
-            to_prompted(view[:1], golden["tools"], "cohere")[0]["content"]):
+    if (
+        not msgs
+        or msgs[0]["role"] != "system"
+        or msgs[0]["content"] != (to_prompted(view[:1], golden["tools"], "cohere")[0]["content"])
+    ):
         problems.append("system prompt isn't the baseline prompt")
     roles = [m["role"] for m in msgs[1:]]
     if any(a == b for a, b in zip(roles, roles[1:], strict=False)) or set(roles) - {"user", "assistant"}:
