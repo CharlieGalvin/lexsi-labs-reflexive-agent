@@ -54,6 +54,28 @@ def says_five(completions, **kwargs) -> list[float]:
     return [1.0 if "5" in str(c) else 0.0 for c in completions]
 
 
+def stop_token_ids(model_id: str) -> list[int] | None:
+    """Every token that ends the model's turn: its generation_config's eos ids + the tokenizer's.
+
+    AgentTune's training rollouts generate with TRL's generation config, which only stops at
+    the tokenizer's eos token. A chat model that ends its turn with another token (Tiny Aya)
+    then runs on to max_new_tokens on every turn: junk text, and ~300 s/step instead of tens
+    (trial run, 6 Nov). The eval stops correctly because it uses the model's own config.
+    """
+    from transformers import AutoTokenizer, GenerationConfig
+
+    ids: list[int] = []
+    try:
+        eos = GenerationConfig.from_pretrained(model_id).eos_token_id
+        ids += eos if isinstance(eos, list) else [eos] if eos is not None else []
+    except OSError:
+        pass
+    tok_eos = AutoTokenizer.from_pretrained(model_id).eos_token_id
+    if tok_eos is not None:
+        ids.append(tok_eos)
+    return sorted(set(ids)) or None
+
+
 def _wandb_url() -> str | None:
     try:
         import wandb
@@ -115,6 +137,11 @@ def main() -> int:
     if cfg["task"] == "messy_lookup":
         for key, value in messy_lookup.HARNESS.items():  # the same tool wording as eval_lookup.py
             trainer_kw.setdefault(key, value)
+    stops = stop_token_ids(cfg["model"])
+    gen_kw = trainer_kw.setdefault("generation_kwargs", {})
+    if stops and "eos_token_id" not in gen_kw:
+        gen_kw["eos_token_id"] = stops
+    print(f"stop tokens for generation: {gen_kw.get('eos_token_id')}")
     print(f"task={cfg['task']} model={cfg['model']} train_rows={len(ds)} output={out}")
     print(f"GPU: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'NONE (CPU!)'}")
 
