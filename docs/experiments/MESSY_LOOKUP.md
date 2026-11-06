@@ -4,15 +4,19 @@
 training metrics and learning curves look like, and to show training measurably reduces
 wrong tool arguments.
 
-**Why this task:** the Customer Lookup warm-up ([GRPO_WARMUP.md](GRPO_WARMUP.md)) showed Tiny
-Aya makes one tool call well (~79%) but never chains two: given a name, it invented an ID
-every time. So here every question needs **one** call to `get_customer`. What varies is how
-hard it is to get the **argument** right, the toy version of τ²-bench's Arg hallucination.
+**Why this format:** in a first test, Tiny Aya made a single tool call well (~79% correct) but
+struggled with multiple tool calls: it never chained a name lookup into a record lookup, and
+invented a customer ID instead. So we chose a one-tool-call format to trial the training
+pipeline and GRPO on a task the model can partly do. Every question needs **one** call to
+`get_customer`; what varies is how hard it is to get the **argument** right, the toy version
+of τ²-bench's Arg hallucination.
 
 ## The task
 
-`src/reflexive/messy_lookup.py`, on the same 200-customer database as the warm-up. The tool
-only accepts IDs in the standard form (`C` + 4 digits), so the model must normalise them.
+`src/reflexive/messy_lookup.py`: 200 fake customers (fixed seed) behind one tool. Each
+question asks for one field (balance, data left, plan); the values are random, so the model
+can't guess them. The tool only accepts IDs in the standard form (`C` + 4 digits), so the
+model must normalise them. After an error it may retry once with a corrected ID.
 
 | Question type (`level`) | Example | What the model must do |
 |---|---|---|
@@ -24,7 +28,12 @@ only accepts IDs in the standard form (`C` + 4 digits), so the model must normal
 | `distractor` | "Hi, I'm customer C1031. What is … for my partner, customer C1004?" | Pick the right one of two real IDs |
 
 Train: 480 questions (160 customers × 3). Eval: 120 questions on 40 customers never seen in
-training. The reward is the same as the warm-up: `correct` 1.0 + `tool_ok` 0.5 + `format` 0.2.
+training.
+
+**Reward** (weights in the config): `correct` 1.0 (the starred answer matches) + `tool_ok`
+0.5 (it fetched the asked-about customer's record, and no call errored or used the wrong
+customer) + `format` 0.2 (exactly one `*answer*`). Maximum 1.7. A rollout that gets the ID
+wrong, then retries and answers correctly, scores `correct` but not `tool_ok`.
 
 **Before running, write down your predictions** (which types does the base model fail? which
 will training fix?). Comparing them with the results is the fastest way to build intuition.

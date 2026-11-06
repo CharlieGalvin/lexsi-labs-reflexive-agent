@@ -1,19 +1,17 @@
-"""Evaluate a model on a lookup task: Customer Lookup or Messy-ID Lookup.
+"""Evaluate a model on Messy-ID Lookup (docs/experiments/MESSY_LOOKUP.md).
 
-    python scripts/eval_lookup.py --config configs/train/messy_grpo.yaml            # base model
-    python scripts/eval_lookup.py --config configs/train/messy_grpo.yaml \
-        --adapter runs/messy-grpo                                                   # trained
-    python scripts/eval_lookup.py                     # Customer Lookup (GRPO_WARMUP.md)
-    python scripts/eval_lookup.py --split train --limit 40 --l2-share 0.3   # tune the task mix
+    python scripts/eval_lookup.py                                   # base model
+    python scripts/eval_lookup.py --adapter runs/messy-grpo         # trained adapter
+    python scripts/eval_lookup.py --split train --limit 40          # a quick look
 
-``--config`` takes the task, its question mix and max_steps_per_turn from a training config,
-so the eval matches training.
+The question mix, model and max_steps_per_turn come from the training config (``--config``,
+default configs/train/messy_grpo.yaml), so the eval matches training.
 
 Greedy decoding, the same rollout code and tool prompt as training (AgentTune's
-``create_rollout_fn``), and the same scoring as the reward (``reflexive.toy_lookup.score``).
+``create_rollout_fn``), and the same scoring as the reward (``reflexive.messy_lookup.score``).
 The eval split's 40 customers never appear in training.
 
-Writes one CSV row per question (``--out``, default ``<adapter or runs/base-<task>>/eval_<split>.csv``)
+Writes one CSV row per question (``--out``, default ``<adapter or runs/base-messy>/eval_<split>.csv``)
 and prints success rates by level (question type).
 """
 
@@ -26,18 +24,16 @@ import time
 
 import yaml
 
-from reflexive import messy_lookup, toy_lookup
-
-TASKS = {"customer_lookup": toy_lookup, "messy_lookup": messy_lookup}
+from reflexive import messy_lookup
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--config", type=pathlib.Path, help="training config: task, question mix, model")
+    ap.add_argument("--config", type=pathlib.Path, default=pathlib.Path("configs/train/messy_grpo.yaml"),
+                    help="training config: question mix, model, max_steps_per_turn")
     ap.add_argument("--model", help="default: the config's model, else CohereLabs/tiny-aya-global")
     ap.add_argument("--adapter", type=pathlib.Path, help="LoRA adapter folder from train_grpo.py")
     ap.add_argument("--split", default="eval", choices=["eval", "train"])
-    ap.add_argument("--l2-share", type=float, default=0.5, help="must match the training config")
     ap.add_argument("--limit", type=int, help="only the first N questions")
     ap.add_argument("--max-tool-steps", type=int, help="default: the config's max_steps_per_turn, else 3")
     ap.add_argument("--max-new-tokens", type=int, default=256)
@@ -49,19 +45,16 @@ def main() -> int:
     from agenttune.agentic.rollout_engines.rollout_factory import create_rollout_fn
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
-    cfg = yaml.safe_load(a.config.read_text()) if a.config else {}
+    cfg = yaml.safe_load(a.config.read_text())
     if "base" in cfg:
         raise SystemExit("--config: pass the config the 'base:' line points to")
-    task = cfg.get("task", "customer_lookup")
-    mod = TASKS[task]
-    opts = cfg.get("task_options", {})
+    task = cfg.get("task")
+    if task != "messy_lookup":
+        raise SystemExit(f"--config: task is {task!r}, expected messy_lookup")
+    mod = messy_lookup
     a.model = a.model or cfg.get("model", "CohereLabs/tiny-aya-global")
     max_tool_steps = a.max_tool_steps or cfg.get("trainer", {}).get("max_steps_per_turn", 3)
-    if task == "customer_lookup":
-        rows = mod.questions(a.split, l2_share=opts.get("l2_share", a.l2_share))
-    else:
-        rows = mod.questions(a.split, styles=opts.get("styles"))
-    rows = rows[: a.limit]
+    rows = mod.questions(a.split, styles=cfg.get("task_options", {}).get("styles"))[: a.limit]
     print(f"task={task} model={a.model} adapter={a.adapter} questions={len(rows)}")
     tok = AutoTokenizer.from_pretrained(a.model)
     model = AutoModelForCausalLM.from_pretrained(a.model, dtype=torch.bfloat16, device_map="cuda")
@@ -86,8 +79,7 @@ def main() -> int:
             print(f"{i}/{len(rows)}  correct so far {done.correct.mean():.0%}  ({time.time() - t0:.0f}s)")
 
     df = pd.DataFrame(records)
-    base_dir = pathlib.Path("runs/base" if task == "customer_lookup" else f"runs/base-{task}")
-    dest = a.out or (a.adapter or base_dir) / f"eval_{a.split}.csv"
+    dest = a.out or (a.adapter or pathlib.Path("runs/base-messy")) / f"eval_{a.split}.csv"
     dest.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(dest, index=False)
 

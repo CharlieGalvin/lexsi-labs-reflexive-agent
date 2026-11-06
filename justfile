@@ -130,16 +130,16 @@ rollout arm domain *args:
 
 # Experiment commands (train, evaluate…) are added by the Architect and Trainer.
 
-# --- Training (Trainer, GPU box; docs/experiments/GRPO_WARMUP.md) ---------------
+# --- Training (Trainer, GPU box; docs/experiments/MESSY_LOOKUP.md) --------------
 
 # Run 1 (SEL-34): 10-step Tiny Aya GRPO smoke run with one tool, ~10 min
 train-smoke *args:
     python scripts/train_grpo.py configs/train/smoke_add.yaml {{args}}
 
-# GRPO from a config, e.g. `just train configs/train/lookup_grpo.yaml --max-steps 5`
+# GRPO from a config, e.g. `just train configs/train/messy_grpo.yaml --max-steps 3`
 train config *args:
     python scripts/train_grpo.py {{config}} {{args}}
 
-# Customer Lookup eval (base model; add `--adapter runs/lookup-grpo` for the trained one)
+# Messy-ID Lookup eval (base model; add `--adapter runs/messy-grpo` for the trained one)
 eval-lookup *args:
     python scripts/eval_lookup.py {{args}}

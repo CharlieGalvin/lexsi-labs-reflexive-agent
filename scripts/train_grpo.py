@@ -6,7 +6,7 @@
     python scripts/train_grpo.py configs/train/messy_grpo.yaml \\
         --push reagent-lexsi/tiny-aya-messy-grpo-v0
 
-A config has ``task`` (``add_smoke``, ``customer_lookup`` or ``messy_lookup``), ``model``,
+A config has ``task`` (``add_smoke`` or ``messy_lookup``), ``model``,
 ``output_dir`` and a ``trainer:`` block passed unchanged to ``create_agentic_trainer(algorithm="grpo", ...)``
 (AgentTune routes each key to TRL's GRPOConfig or GRPOTrainer). ``base: other.yaml`` starts
 from another config and overrides it key by key.
@@ -27,9 +27,7 @@ import time
 
 import yaml
 
-from reflexive import messy_lookup, toy_lookup
-
-LOOKUP_TASKS = {"customer_lookup": toy_lookup, "messy_lookup": messy_lookup}
+from reflexive import messy_lookup
 
 
 def load_config(path: pathlib.Path) -> dict:
@@ -64,13 +62,9 @@ def build_task(cfg: dict, out: pathlib.Path):
     if task == "add_smoke":
         rows = [{"prompt": [{"role": "user", "content": "What is 2+3?"}]}] * 8
         return Dataset.from_list(rows), [add], [says_five]
-    if task in LOOKUP_TASKS:
-        mod = LOOKUP_TASKS[task]
-        opts = cfg.get("task_options", {})
-        if task == "customer_lookup":
-            rows = mod.questions("train", l2_share=opts.get("l2_share", 0.5))
-        else:
-            rows = mod.questions("train", styles=opts.get("styles"))
+    if task == "messy_lookup":
+        mod = messy_lookup
+        rows = mod.questions("train", styles=cfg.get("task_options", {}).get("styles"))
         ds = Dataset.from_list([
             {"prompt": mod.prompt(r), "answer": r["answer"], "field": r["field"],
              "customer_id": r["customer_id"], "qid": r["qid"], "level": r["level"]}
@@ -78,7 +72,7 @@ def build_task(cfg: dict, out: pathlib.Path):
         ])
         reward = mod.make_reward_fn(cfg.get("reward_weights"), log_path=out / "rewards.jsonl")
         return ds, mod.TOOLS, [reward]
-    raise ValueError(f"unknown task {task!r}: expected add_smoke or one of {sorted(LOOKUP_TASKS)}")
+    raise ValueError(f"unknown task {task!r}: expected add_smoke or messy_lookup")
 
 
 def main() -> int:
@@ -110,8 +104,8 @@ def main() -> int:
     from agenttune.core.backend_factory import create_agentic_trainer
 
     ds, tools, rewards = build_task(cfg, out)
-    if cfg["task"] in LOOKUP_TASKS:
-        for key, value in toy_lookup.HARNESS.items():  # the same tool wording as eval_lookup.py
+    if cfg["task"] == "messy_lookup":
+        for key, value in messy_lookup.HARNESS.items():  # the same tool wording as eval_lookup.py
             trainer_kw.setdefault(key, value)
     print(f"task={cfg['task']} model={cfg['model']} train_rows={len(ds)} output={out}")
     print(f"GPU: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'NONE (CPU!)'}")
