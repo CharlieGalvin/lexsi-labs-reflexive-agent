@@ -197,3 +197,70 @@ def test_several_samples_per_task_get_a_note_on_the_range(tmp_path: Path, monkey
     _, out = _run(tmp_path, monkeypatch, recs)
     m = json.loads(out.read_text())
     assert m["samples_per_task"] == 2 and "too narrow" in m["note_samples"]
+
+
+# --- Review of #42 (Chiara, 6 Nov) --------------------------------------------------------------
+
+
+def test_a_broken_ending_without_an_error_is_a_crash_like_is_broken_says() -> None:
+    """bakeoff and fixes call these broken; scoring them would count an outage as a model failure."""
+    recs = [rec("1", True), rec("2", False, termination="infrastructure_error")]
+    m = arm_metrics(recs)
+    assert (m["conversations"], m["crashed"], m["task_success"]) == (1, 1, 1.0)
+
+
+def test_only_doesnt_skip_the_all_crashed_refusal(tmp_path: Path, monkeypatch, capsys) -> None:
+    recs = [rec(TRAIN[0], True), rec(DEV[0], False, error="RateLimitError: 429")]
+    code, out = _run(tmp_path, monkeypatch, recs, "--only", "dev")
+    assert code == 1 and not out.exists() and "every conversation in the dev tasks" in capsys.readouterr().out
+
+
+def test_a_record_without_a_domain_or_an_unknown_domain_is_a_message(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    no_domain = rec(TRAIN[0], False)
+    del no_domain["domain"]
+    assert _run(tmp_path, monkeypatch, [no_domain])[0] == 1
+    assert "has no domain or task_id" in capsys.readouterr().out
+    code, _ = _run(tmp_path, monkeypatch, [rec("1", False, domain="mock")], name="run")
+    assert code == 1 and "unknown domain 'mock'" in capsys.readouterr().out
+
+
+def test_the_name_must_agree_on_arm_and_domain_too(tmp_path: Path, monkeypatch, capsys) -> None:
+    airline = [rec(splits.task_ids("airline", "train")[0], False, domain="airline")]
+    assert _run(tmp_path, monkeypatch, airline, name="A-retail-train")[0] == 1
+    assert "named domain retail, but its records are domain airline" in capsys.readouterr().out
+    assert _run(tmp_path, monkeypatch, [rec(TRAIN[0], False)], name="C-retail-train")[0] == 1
+    assert "named arm C" in capsys.readouterr().out
+
+
+def test_the_judges_note_says_how_many_were_judged_and_whether_any_were_skipped(
+    tmp_path: Path, monkeypatch
+) -> None:
+    recs = [rec(TRAIN[0], True), rec(TRAIN[1], False, outcome={"judged": False})]
+    m = json.loads(_run(tmp_path, monkeypatch, recs)[1].read_text())
+    assert "1 of 2" in m["note_judges"] and "complete" in m["note_judges"]
+    recs = [rec(TRAIN[0], True), rec(TRAIN[1], False, outcome={"judged": False, "skipped": ["nl"]})]
+    m = json.loads(_run(tmp_path, monkeypatch, recs, "--force")[1].read_text())
+    assert "skipped in 1 of 2" in m["note_judges"]
+
+
+def test_the_student_comes_from_the_record_not_a_constant() -> None:
+    vllm = rec("1", False, agent_api_base="http://gpu:8000/v1", agent_mode="native")
+    assert am.student(vllm) == "c4ai-aya-expanse-32b (http://gpu:8000/v1, native)"
+    assert "assumed" in am.student(rec("1", False))  # older records don't save the endpoint
+    cohere = rec("1", False, agent_api_base=am.COHERE_API)
+    assert am.student(cohere) == "c4ai-aya-expanse-32b (Cohere API, prompted, cohere Action: format)"
+
+
+def test_a_half_written_last_line_from_a_stopped_rollout_is_skipped(tmp_path: Path, monkeypatch) -> None:
+    src = tmp_path / "A-retail-train.jsonl"
+    src.write_text(json.dumps(rec(TRAIN[0], True)) + "\n" + '{"domain": "ret')
+    out = tmp_path / "out.metrics.json"
+    monkeypatch.setattr(sys, "argv", ["metrics.py", str(src), "--out", str(out), "--owner", "T"])
+    assert am.main() == 0 and json.loads(out.read_text())["conversations"] == 1
+
+
+def test_the_cost_says_it_leaves_out_retried_first_attempts(tmp_path: Path, monkeypatch) -> None:
+    m = json.loads(_run(tmp_path, monkeypatch, [rec(TRAIN[0], True)])[1].read_text())
+    assert "lower bound" in m["note_cost"]

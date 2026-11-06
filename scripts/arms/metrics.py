@@ -11,10 +11,12 @@ Writes ``results/arm-<arm>-<domain>-<split>.metrics.json`` (committed: `results/
 **The split comes from the records**, never the file name: each task is looked up in the
 frozen splits (``configs/splits.json``). A file holding both train and dev tasks (τ²-bench's own
 train split, which an older run used) needs ``--only train`` or ``--only dev``. The script
-refuses, before writing anything: a test-split task anywhere in the file (whatever ``--only``
-says), a task in no split, several domains or arms in one file, a file name that disagrees
-with its tasks, a file in which every conversation crashed, and replacing an existing
-summary unless ``--force`` is given.
+refuses, before writing anything: a record without a domain or task ID, an unknown domain, a
+test-split task anywhere in the file (whatever ``--only`` says), a task in no split, several
+domains or arms in one file, a file name (``<arm>-<domain>-<split>``) whose arm, domain or split
+disagrees with its records, a selection (after ``--only``) in which every conversation
+crashed, and replacing an existing summary unless ``--force`` is given. A half-written last
+line (a stopped rollout) is skipped, as ``rollout.py`` does when it resumes.
 """
 
 from __future__ import annotations
@@ -22,6 +24,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -29,9 +32,28 @@ from typing import Any
 
 from reflexive import splits
 from reflexive.files import ROOT, BadJsonLine, read_jsonl, shown
-from reflexive.metrics import arm_metrics
+from reflexive.metrics import COST_NOTE, arm_metrics, is_broken
 
-STUDENT = "c4ai-aya-expanse-32b (Cohere API, prompted, cohere Action: format)"
+COHERE_API = "https://api.cohere.ai/compatibility/v1"
+_NAME = re.compile(r"^([A-Za-z0-9]+)-([a-z]+)-")  # A-retail-train(.retry) → arm A, domain retail
+
+
+def student(rec: dict[str, Any]) -> str | None:
+    """The student as the record describes it: model, endpoint, mode and prompt style.
+
+    Records from before 6 Nov don't save the endpoint. They all ran on Cohere's API
+    (configs/arms.yaml at the time), which the description then says it assumes."""
+    model = rec.get("agent_llm")
+    if not model:
+        return None
+    base = rec.get("agent_api_base")
+    where = "Cohere API" if base == COHERE_API else base or "Cohere API, assumed: the records don't say"
+    mode, style = rec.get("agent_mode", "prompted"), rec.get("agent_style", "cohere")
+    return (
+        f"{model} ({where}, {mode}, {style} Action: format)"
+        if mode == "prompted"
+        else f"{model} ({where}, {mode})"
+    )
 
 
 def _git(*args: str) -> str:
@@ -47,21 +69,42 @@ class Refused(Exception):
     """The file can't be summarised as asked; the message says why and what to do."""
 
 
-def select(recs: list[dict[str, Any]], path: Path, only: str | None) -> tuple[list[dict[str, Any]], str]:
-    """The records to summarise and their split, or ``Refused``. Checks run before ``--only``."""
+def _one_run(recs: list[dict[str, Any]], path: Path) -> str:
+    """The run's domain, if the file is one arm on one known domain and its name agrees."""
+    for i, r in enumerate(recs, start=1):
+        if not r.get("domain") or r.get("task_id") is None:
+            raise Refused(f"{shown(path)}, record {i} has no domain or task_id: is it a rollout file?")
     for key in ("domain", "arm"):
         found = {r.get(key) for r in recs}
         if len(found) > 1:
             raise Refused(
                 f"{shown(path)} mixes several {key}s ({', '.join(sorted(map(str, found)))}): one run per file"
             )
+    domain, arm = recs[0]["domain"], recs[0].get("arm")
+    known = splits.load()["domains"]
+    if domain not in known:
+        raise Refused(f"unknown domain {domain!r}: configs/splits.json has {', '.join(sorted(known))}")
+    named = _NAME.match(path.stem)
+    if named and named.group(2) in known:  # a name like ours, not some custom one
+        for what, in_name, in_recs in (("arm", named.group(1), arm), ("domain", named.group(2), domain)):
+            if in_name != str(in_recs):
+                raise Refused(
+                    f"{shown(path)} is named {what} {in_name}, but its records are {what} {in_recs}"
+                )
+    return domain
+
+
+def select(recs: list[dict[str, Any]], path: Path, only: str | None) -> tuple[list[dict[str, Any]], str]:
+    """The records to summarise and their split, or ``Refused``. Checks run before ``--only``,
+    except the all-crashed one, which looks at what ``--only`` kept."""
+    domain = _one_run(recs, path)
     split_of: dict[int, str] = {}
     for i, r in enumerate(recs):
         try:
-            split_of[i] = splits.split_of(r["domain"], str(r["task_id"]))
+            split_of[i] = splits.split_of(domain, str(r["task_id"]))
         except KeyError:
             raise Refused(
-                f"{r['domain']} task {r['task_id']!r} is in no frozen split (configs/splits.json)"
+                f"{domain} task {r['task_id']!r} is in no frozen split (configs/splits.json)"
             ) from None
     test = [str(recs[i]["task_id"]) for i, sp in split_of.items() if sp == "test"]
     if test:
@@ -72,16 +115,19 @@ def select(recs: list[dict[str, Any]], path: Path, only: str | None) -> tuple[li
         recs = [r for i, r in enumerate(recs) if split_of[i] == only]
         if not recs:
             raise Refused(f"no {only} tasks in {shown(path)}")
-        return recs, only
-    found = sorted(set(split_of.values()))
-    if len(found) > 1:
-        raise Refused(f"{shown(path)} holds {' and '.join(found)} tasks: pass --only train or --only dev")
-    named = path.stem.rsplit("-", 1)[-1]  # A-retail-train → train
-    if named in splits.SPLITS and named != found[0]:
-        raise Refused(f"{shown(path)} is named {named}, but its tasks are {found[0]} tasks")
-    if all(r.get("error") for r in recs):
-        raise Refused(f"every conversation in {shown(path)} crashed: re-run the arm, then summarise it")
-    return recs, found[0]
+        split = only
+    else:
+        found = sorted(set(split_of.values()))
+        if len(found) > 1:
+            raise Refused(f"{shown(path)} holds {' and '.join(found)} tasks: pass --only train or --only dev")
+        split = found[0]
+        in_name = path.stem.rsplit("-", 1)[-1]  # A-retail-train → train
+        if in_name in splits.SPLITS and in_name != split:
+            raise Refused(f"{shown(path)} is named {in_name}, but its tasks are {split} tasks")
+    if all(is_broken(r) for r in recs):
+        kept = f"the {only} tasks of {shown(path)}" if only else shown(path)
+        raise Refused(f"every conversation in {kept} crashed: re-run the arm, then summarise it")
+    return recs, split
 
 
 def header(
@@ -90,7 +136,9 @@ def header(
     """Who ran what, where: the fields before the numbers."""
     first = recs[0]
     arm, domain = first.get("arm", "?"), first["domain"]
-    judged = any(r["outcome"].get("judged") for r in recs)
+    scored = [r for r in recs if not is_broken(r)]
+    judged = sum(bool(r["outcome"].get("judged")) for r in scored)
+    skipped = sum(bool(r["outcome"].get("skipped")) for r in scored)
     samples = max(r.get("sample", 0) for r in recs) + 1
     return {
         "run": f"arm-{arm}-{domain}-{split}",
@@ -101,19 +149,22 @@ def header(
         "arm": arm,
         "prompt_variant": first.get("prompt_variant"),
         "prompt_version": first.get("prompt_version"),
-        "student": STUDENT if first.get("agent_llm") == "c4ai-aya-expanse-32b" else first.get("agent_llm"),
+        "student": student(first),
         "customer": first.get("user_llm"),
         "domain": domain,
         "split": f"{split} (frozen splits, configs/splits.json)",
         "samples_per_task": samples,
-        "judges": judged,
+        "judges": bool(judged),
         "note_judges": (
             "telecom has no LLM judges: scores are complete"
             if domain == "telecom"
-            else "τ²-bench's LLM judges ran (OPENAI_API_KEY set)"
-            if judged
-            else "deterministic checks only: the LLM-judged checks were skipped"
+            else f"LLM-judged checks skipped in {skipped} of {len(scored)} conversations: "
+            "those scores use the deterministic checks only"
+            if skipped
+            else f"τ²-bench's LLM judges ran where a score needed one ({judged} of {len(scored)} "
+            "conversations; the others ended early or have no judged check): scores are complete"
         ),
+        "note_cost": COST_NOTE,
         "records": f"{shown(path)} (not committed)" + (f", the {only} tasks only" if only else ""),
         **(
             {"note_samples": "the 95% range counts every conversation as independent: too narrow"}
@@ -136,7 +187,7 @@ def main() -> int:
     a = p.parse_args()
 
     try:
-        recs = read_jsonl(a.records)
+        recs = read_jsonl(a.records, partial_last_ok=True)
     except (BadJsonLine, FileNotFoundError) as e:
         print(f"⛔ {e}")
         return 1

@@ -4,16 +4,20 @@
 (4 Nov), computed from the rollout records instead of by hand. Pure: no API calls, no τ²-bench.
 
 Definitions:
-- A **crashed** record (``error`` set: a rate limit, a server error) isn't scored, and counts in
-  neither ``passed`` nor the success rate. A re-run of the arm retries it.
+- A **crashed** record (``is_broken``: ``error`` set, such as a rate limit or a server error, or
+  a broken ending such as ``infrastructure_error``) isn't scored, and counts in neither
+  ``passed`` nor the success rate. A re-run of the arm retries it. ``bakeoff`` and ``fixes``
+  use the same rule.
 - **task_success** is passed ÷ scored conversations, with a 95% Wilson range.
 - **conversations_flagged** uses the heuristic diagnostics every record carries
   (``reflexive.teacher``: unknown tools, ID-like arguments never seen before, a failed call
   repeated unchanged), not the Tool / Arg / Loop classifier (``reflexive.hallucination``).
 - **transferred_to_human**: conversations where the agent called ``transfer_to_human_agents``.
 - **What counts crashed records:** only the money and the calls (``student_calls``,
-  ``student_replies_cut_off``, ``cost_usd``), which were spent either way. Every rate,
-  count and per-conversation figure uses the scored conversations only.
+  ``student_replies_cut_off``, ``cost_usd``) of the crashed records *still in the file*. Every
+  rate, count and per-conversation figure uses the scored conversations only.
+- **Cost is a lower bound after a resume:** ``scripts/arms/rollout.py`` drops crashed records
+  before retrying them, so the spend of those first attempts isn't in the file (``COST_NOTE``).
 """
 
 from __future__ import annotations
@@ -31,7 +35,17 @@ Record = dict[str, Any]
 FLAG_METHOD = (
     "heuristic diagnostics (reflexive.teacher.unseen_arguments / tool_errors), not the SEL-12 classifier"
 )
+COST_NOTE = (
+    "the saved records' spend: a resumed rollout drops crashed conversations before retrying them, "
+    "so their first attempts aren't counted (a lower bound)"
+)
+BROKEN_ENDINGS = {"unexpected_error", "infrastructure_error", "agent_error", "user_error"}
 _ISSUE = re.compile(r"^\[(\w+?)\]")  # telecom task IDs start with the issue: "[mms_issue]…"
+
+
+def is_broken(rec: Record) -> bool:
+    """The run broke (an API failure, a crash), so it says nothing about the model's ability."""
+    return bool(rec.get("error")) or rec.get("termination") in BROKEN_ENDINGS
 
 
 def _transferred(rec: Record) -> bool:
@@ -69,7 +83,7 @@ def by_issue(recs: Iterable[Record]) -> dict[str, dict[str, int]] | None:
 
 def arm_metrics(records: list[Record]) -> dict[str, Any]:
     """Success, endings, hallucination flags, calls, tokens and cost for one run's records."""
-    scored = [r for r in records if not r.get("error")]
+    scored = [r for r in records if not is_broken(r)]
     n, k = len(scored), sum(bool(r["outcome"]["passed"]) for r in scored)
     usage = [r.get("agent_usage") or {} for r in records]
     calls = sum(u.get("calls", 0) for u in usage)
