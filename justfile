@@ -154,6 +154,9 @@ bakeoff-report:
 # Re-score saved rollouts with the AuditKIT oracle: verified success rate (judges on; `--only dev`, `--judges off`)
 oracle-score *files:
     python scripts/arms/oracle_score.py {{files}}
+# Summarise a rollout file as results/arm-<arm>-<domain>-<split>.metrics.json (no API calls; `--only dev`)
+arm-metrics file *args:
+    python scripts/arms/metrics.py {{file}} {{args}}
 
 # Run an arm on a domain's split, e.g. `just rollout A retail --limit 5` or `just rollout C telecom`
 rollout arm domain *args:
