@@ -57,6 +57,15 @@ class Outcome:
     note: str | None = None  # e.g. why a premature stop scored 0
     reward_info: Any = None  # τ²-bench's full RewardInfo, for per-assertion detail
 
+    @property
+    def verified(self) -> bool:
+        """The verdict holds whatever the skipped judged checks would say: nothing was skipped,
+        or it's a failure (a check that ran failed, or an early ending, which scores 0).
+
+        A pass with judged checks skipped is a best case, never a verified pass. That covers a
+        task whose basis is judged checks only: τ²-bench then runs nothing and returns 1.0."""
+        return not self.skipped or not self.passed
+
 
 # --- Trajectory format -----------------------------------------------------------------------
 
