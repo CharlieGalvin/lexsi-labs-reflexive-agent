@@ -1,7 +1,7 @@
 {
   "run": "base",
   "date": "2026-11-06",
-  "owner": "",
+  "owner": "katiemarieek",
   "commit": "56bee64",
   "config": "configs/train/messy_grpo.yaml",
   "arm": "A",
