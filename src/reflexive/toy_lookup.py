@@ -313,9 +313,29 @@ def make_reward_fn(weights: dict | None = None, log_path: str | Path | None = No
             with lock, open(log_path, "a", encoding="utf-8") as f:
                 for row in rows:
                     f.write(json.dumps(row) + "\n")
+        _log_parts_to_wandb(rows)
         return rewards
 
     return lookup_reward
+
+
+_PARTS = ("correct", "tool_ok", "format", "n_tool_calls", "hallucinated_ids", "wrong_customer")
+
+
+def _log_parts_to_wandb(rows: list[dict]) -> None:
+    """Batch means of each reward part as ``reward_parts/<name>`` charts, when a W&B run is on.
+
+    AgentTune folds every reward function into one, so TRL only logs the total. commit=False
+    attaches these to the trainer's next log line, i.e. the same training step.
+    """
+    try:
+        import wandb
+    except ImportError:
+        return
+    if wandb.run is None or not rows:
+        return
+    wandb.log({f"reward_parts/{k}": sum(float(r[k]) for r in rows) / len(rows) for k in _PARTS},
+              commit=False)
 
 
 def _write_debug(path: Path, completions, conversations, kwargs) -> None:

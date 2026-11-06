@@ -1,13 +1,13 @@
 """GRPO training with AgentTune from a YAML config in configs/train/ (SEL-34). Needs the GPU box.
 
-    python scripts/train_grpo.py configs/train/smoke_add.yaml                  # run 1: smoke
-    python scripts/train_grpo.py configs/train/lookup_grpo.yaml                # run 3
-    python scripts/train_grpo.py configs/train/lookup_grpo.yaml --max-steps 5  # quick try
-    python scripts/train_grpo.py configs/train/lookup_grpo.yaml --report-to wandb \\
-        --push reagent-lexsi/tiny-aya-lookup-grpo-v0
+    python scripts/train_grpo.py configs/train/smoke_add.yaml                  # smoke run
+    python scripts/train_grpo.py configs/train/messy_grpo.yaml                 # experiment A
+    python scripts/train_grpo.py configs/train/messy_grpo.yaml --max-steps 3 --report-to none
+    python scripts/train_grpo.py configs/train/messy_grpo.yaml \\
+        --push reagent-lexsi/tiny-aya-messy-grpo-v0
 
-A config has ``task`` (``add_smoke`` or ``customer_lookup``), ``model``, ``output_dir`` and a
-``trainer:`` block passed unchanged to ``create_agentic_trainer(algorithm="grpo", ...)``
+A config has ``task`` (``add_smoke``, ``customer_lookup`` or ``messy_lookup``), ``model``,
+``output_dir`` and a ``trainer:`` block passed unchanged to ``create_agentic_trainer(algorithm="grpo", ...)``
 (AgentTune routes each key to TRL's GRPOConfig or GRPOTrainer). ``base: other.yaml`` starts
 from another config and overrides it key by key.
 
@@ -21,12 +21,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import pathlib
 import time
 
 import yaml
 
-from reflexive import toy_lookup
+from reflexive import messy_lookup, toy_lookup
+
+LOOKUP_TASKS = {"customer_lookup": toy_lookup, "messy_lookup": messy_lookup}
 
 
 def load_config(path: pathlib.Path) -> dict:
@@ -61,17 +64,21 @@ def build_task(cfg: dict, out: pathlib.Path):
     if task == "add_smoke":
         rows = [{"prompt": [{"role": "user", "content": "What is 2+3?"}]}] * 8
         return Dataset.from_list(rows), [add], [says_five]
-    if task == "customer_lookup":
+    if task in LOOKUP_TASKS:
+        mod = LOOKUP_TASKS[task]
         opts = cfg.get("task_options", {})
-        rows = toy_lookup.questions("train", l2_share=opts.get("l2_share", 0.5))
+        if task == "customer_lookup":
+            rows = mod.questions("train", l2_share=opts.get("l2_share", 0.5))
+        else:
+            rows = mod.questions("train", styles=opts.get("styles"))
         ds = Dataset.from_list([
-            {"prompt": toy_lookup.prompt(r), "answer": r["answer"], "field": r["field"],
+            {"prompt": mod.prompt(r), "answer": r["answer"], "field": r["field"],
              "customer_id": r["customer_id"], "qid": r["qid"], "level": r["level"]}
             for r in rows
         ])
-        reward = toy_lookup.make_reward_fn(cfg.get("reward_weights"), log_path=out / "rewards.jsonl")
-        return ds, toy_lookup.TOOLS, [reward]
-    raise ValueError(f"unknown task {task!r}: expected add_smoke or customer_lookup")
+        reward = mod.make_reward_fn(cfg.get("reward_weights"), log_path=out / "rewards.jsonl")
+        return ds, mod.TOOLS, [reward]
+    raise ValueError(f"unknown task {task!r}: expected add_smoke or one of {sorted(LOOKUP_TASKS)}")
 
 
 def main() -> int:
@@ -95,11 +102,15 @@ def main() -> int:
     if a.report_to:
         trainer_kw["report_to"] = a.report_to
 
+    if trainer_kw.get("report_to") == "wandb":
+        os.environ.setdefault("WANDB_PROJECT", "reagent-trainer")  # all our runs in one W&B project
+        trainer_kw.setdefault("run_name", out.name)
+
     import torch
     from agenttune.core.backend_factory import create_agentic_trainer
 
     ds, tools, rewards = build_task(cfg, out)
-    if cfg["task"] == "customer_lookup":
+    if cfg["task"] in LOOKUP_TASKS:
         for key, value in toy_lookup.HARNESS.items():  # the same tool wording as eval_lookup.py
             trainer_kw.setdefault(key, value)
     print(f"task={cfg['task']} model={cfg['model']} train_rows={len(ds)} output={out}")
