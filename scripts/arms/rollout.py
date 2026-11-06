@@ -7,8 +7,8 @@ One JSON line per conversation in ``results/episodes/arms/<arm>-<domain>-<split>
 `Tau2Episode.record()` format plus ``arm``, ``sample`` and diagnostics. An interrupted run
 resumes: (task, sample) pairs already in the file are skipped. ``--fresh`` starts again.
 
-**Crashes** (rate limits, server errors: records with ``error``) aren't model failures. The
-summary counts them apart, and a re-run retries them (their records are replaced).
+**Crashes** (rate limits, server errors, broken endings: ``reflexive.metrics.is_broken``) aren't
+model failures. The summary counts them apart, and a re-run retries them (their records are replaced).
 **Rate limits**: ``--rpm`` (or ``rpm`` in the config) caps the student's calls per minute across
 all workers. A Cohere Trial key allows 20/min and 1,000 calls a month.
 
@@ -33,6 +33,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from reflexive import splits
 from reflexive.arms import get_arm, make_student, run_episode
 from reflexive.files import resume_jsonl
+from reflexive.metrics import is_broken
 from reflexive.teacher import RateLimiter
 
 
@@ -72,7 +73,7 @@ def main() -> int:
     kept: list[str] = []  # clean records from earlier runs; crashed ones are dropped and re-run
     if out.exists() and not a.fresh:
         kept = [  # resume_jsonl survives a half-written last line from a stopped run
-            json.dumps(r, ensure_ascii=False) for r in resume_jsonl(out) if not r.get("error")
+            json.dumps(r, ensure_ascii=False) for r in resume_jsonl(out) if not is_broken(r)
         ]
     done = {(r["task_id"], r.get("sample", 0)) for r in map(json.loads, kept)}
     todo = [(t, s) for t in tasks for s in range(a.samples) if (t, s) not in done]
@@ -108,14 +109,15 @@ def main() -> int:
             with lock:
                 f.write(json.dumps(rec, ensure_ascii=False) + "\n")
                 f.flush()
-            errors += bool(rec.get("error"))
-            passed += rec["outcome"]["passed"] and not rec.get("error")
+            broken = is_broken(rec)
+            errors += broken
+            passed += rec["outcome"]["passed"] and not broken
             overflows += rec["flags"].get("context_overflow", False)
             t, s = futures[fut]
             mark = "PASS" if rec["outcome"]["passed"] else "fail"
             print(
                 f"[{i}/{len(todo)}] {mark} {t} #{s} ({rec['termination']}, {rec['wall_s']}s)"
-                + (f" ERROR {rec['error']}" if rec.get("error") else "")
+                + (f" BROKEN {rec.get('error') or rec['termination']}" if broken else "")
             )
 
     print(
