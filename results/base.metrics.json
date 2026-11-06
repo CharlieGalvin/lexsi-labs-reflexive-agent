@@ -1,0 +1,66 @@
+{
+  "run": "base",
+  "date": "2026-11-06",
+  "owner": "",
+  "commit": "56bee64",
+  "config": "configs/train/messy_grpo.yaml",
+  "arm": "A",
+  "task": "messy_lookup (starter task, docs/experiments/MESSY_LOOKUP.md)",
+  "student": "CohereLabs/tiny-aya-global (untuned)",
+  "split": "eval: 40 held-out customers x 3 questions",
+  "decoding": "greedy",
+  "questions": 120,
+  "passed": 64,
+  "task_success": 0.5333,
+  "task_success_wilson95": [
+    0.4444,
+    0.6202
+  ],
+  "tool_ok": 0.6083,
+  "format": 1.0,
+  "hallucination_rate": 0.3917,
+  "hallucinated": 47,
+  "hallucination_method": "Arg error: a get_customer ID that doesn't exist, or a real ID of the wrong customer (reflexive.messy_lookup.score)",
+  "tool_calls_per_question": 1.0,
+  "calls_per_success": 1.88,
+  "by_type": {
+    "clean": {
+      "passed": 19,
+      "n": 22,
+      "tool_ok": 1.0,
+      "hallucination_rate": 0.0
+    },
+    "lower_dash": {
+      "passed": 0,
+      "n": 21,
+      "tool_ok": 0.0,
+      "hallucination_rate": 1.0
+    },
+    "spaced": {
+      "passed": 18,
+      "n": 21,
+      "tool_ok": 1.0,
+      "hallucination_rate": 0.0
+    },
+    "number_only": {
+      "passed": 0,
+      "n": 22,
+      "tool_ok": 0.0,
+      "hallucination_rate": 1.0
+    },
+    "spelled": {
+      "passed": 10,
+      "n": 15,
+      "tool_ok": 0.7333,
+      "hallucination_rate": 0.2667
+    },
+    "distractor": {
+      "passed": 17,
+      "n": 19,
+      "tool_ok": 1.0,
+      "hallucination_rate": 0.0
+    }
+  },
+  "training": null,
+  "records": "runs/base-messy/eval_eval.csv (not committed)"
+}
