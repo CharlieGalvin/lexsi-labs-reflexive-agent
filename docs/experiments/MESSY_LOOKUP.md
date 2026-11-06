@@ -154,8 +154,8 @@ Both on the same 120 held-out eval questions with greedy decoding. Files:
 | `lower_dash` | 0/21 | 2/21 | +2 |
 | `number_only` | 0/22 | 0/22 | 0 |
 
-**Training run:** ~59 s/step and 8.5 GB peak GPU memory (3-step trial on the same config; the
-full run's `runs/messy-grpo/run_summary.json` has its exact figures), so 100 steps ≈ 1 h 40.
+**Training run:** 100 steps in 54 min (32.2 s/step), 10.1 GB peak GPU memory.
+[W&B run](https://forge.coreweave.com/wandb/reagent_wandb/lexsi-track3/runs/chkqk6eg).
 
 **During training** (sampled at temperature 0.8, training customers; `rewards.jsonl`), the
 share answered correctly rose clearly, most of all on `lower_dash`:
