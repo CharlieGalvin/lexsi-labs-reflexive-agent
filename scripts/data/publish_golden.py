@@ -150,6 +150,18 @@ def check_hard_files(hard_dir: Path, hard_report: dict, golden_dir: Path) -> lis
     problems = []
     if (hard_report.get("files") or {}).get(HARD_FILE) != sha256(hard_dir / HARD_FILE):
         problems.append(f"{HARD_FILE} changed since `just hard-subset` built it: rebuild")
+    code = hard_report.get("code") if isinstance(hard_report.get("code"), dict) else {}
+    if not code.get("commit"):
+        problems.append(
+            f"{HARD_REPORT} doesn't say which commit labelled the subset: rebuild with `just hard-subset --force`"
+        )
+    elif not isinstance(code.get("files"), dict) or not code["files"]:
+        problems.append(
+            f"{HARD_REPORT} doesn't list the label code's checksums: rebuild with `just hard-subset --force`"
+        )
+    elif code.get("uncommitted") is None or code["uncommitted"]:
+        what = ", ".join(code.get("uncommitted") or []) or "the label code (not checked)"
+        problems.append(f"{HARD_FILE} was labelled by uncommitted code ({what}): commit it and rebuild")
     built_from = ((hard_report.get("inputs") or {}).get("golden") or {}).get("sha256")
     if built_from != sha256(golden_dir / FILES["train"]):
         problems.append(
@@ -217,6 +229,7 @@ def hard_section(recs: list[dict], report: dict, repo: str, tag: str) -> str:
         if report["thin"]
         else ""
     )
+    code_md = ", ".join(f"`{Path(f).name}` `{s}`" for f, s in report["code"]["files"].items())
     return f"""
 ## Hard subset (added in v1.1)
 
@@ -263,6 +276,8 @@ failures usually follow from it.
 - **Labels are structural.** The classifier is deterministic and checks tool names, arguments
   against the schemas and the conversation, and repetition. Code: `src/reflexive/hard.py`,
   `src/reflexive/hallucination.py`, `scripts/data/build_hard_subset.py`.
+- **Labelled by** ReAgent commit `{report["code"]["commit"][:12]}`: {code_md}. A rebuild with
+  the same files gives the same subset.
 """
 
 

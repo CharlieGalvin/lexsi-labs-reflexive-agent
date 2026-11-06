@@ -203,3 +203,22 @@ def test_the_command_reports_a_missing_golden_build_report(tmp_path, monkeypatch
     _, golden, _ = _folders(tmp_path, monkeypatch)
     (golden / "build_report.json").unlink()
     assert bh.main() == 1 and "can't read" in capsys.readouterr().out
+
+
+def test_the_report_records_the_code_that_labelled_the_subset(tmp_path, monkeypatch, capsys):
+    _, _, out = _folders(tmp_path, monkeypatch)
+    answers = {"rev-parse": "c0ffee" * 6, "status": " M src/reflexive/hallucination.py"}
+    monkeypatch.setattr(bh, "_git", lambda *args: answers[args[0]])
+    assert bh.main() == 0
+    code = json.loads((out / bh.REPORT).read_text())["code"]
+    assert code["commit"] == "c0ffee" * 6 and code["uncommitted"] == ["src/reflexive/hallucination.py"]
+    assert code["files"] == {f: sha256(bh.ROOT / f)[:16] for f in bh.LABEL_CODE}
+    assert "uncommitted changes to src/reflexive/hallucination.py" in capsys.readouterr().out
+
+
+def test_outside_a_git_checkout_the_commit_and_status_are_unknown(tmp_path, monkeypatch):
+    _, _, out = _folders(tmp_path, monkeypatch)
+    monkeypatch.setattr(bh, "_git", lambda *args: None)
+    assert bh.main() == 0
+    code = json.loads((out / bh.REPORT).read_text())["code"]
+    assert code["commit"] is None and code["uncommitted"] is None

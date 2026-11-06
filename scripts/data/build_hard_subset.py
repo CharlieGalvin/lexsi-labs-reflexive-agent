@@ -10,7 +10,9 @@ out; a test task stops the build. Golden v1 must be the build `just golden` chec
 
 Writes ``hard_subset.jsonl`` and ``hard_report.json`` (counts and checksums, which
 `just golden-publish --tag v1.1` re-checks) to ``data/golden/hard/`` (gitignored: the data goes
-to Hugging Face).
+to Hugging Face). The report also records the code that decided the labels: the repo commit, a
+checksum of each file in `LABEL_CODE`, and any of them with uncommitted changes (publishing
+refuses those: nobody could rebuild the same labels).
 """
 
 from __future__ import annotations
@@ -18,6 +20,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +33,28 @@ OUT = ROOT / "data" / "golden" / "hard"
 FILE = "hard_subset.jsonl"
 REPORT = "hard_report.json"
 GOLDEN_TRAIN = "golden_train.jsonl"
+# The files that decide each task's group and labels: a change to any of them can change the subset
+LABEL_CODE = ("src/reflexive/hallucination.py", "src/reflexive/hard.py", "configs/tool_schemas.json")
+
+
+def _git(*args: str) -> str | None:
+    try:
+        return subprocess.run(
+            ["git", "-C", str(ROOT), *args], capture_output=True, text=True, check=True
+        ).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        return None
+
+
+def code_version(root: Path = ROOT) -> dict[str, Any]:
+    """Which code labelled the subset: the commit, the label files' checksums, and any not committed."""
+    status = _git("status", "--porcelain", "--", *LABEL_CODE)
+    return {
+        "commit": _git("rev-parse", "HEAD"),
+        "files": {f: sha256(root / f)[:16] for f in LABEL_CODE},
+        # None: not a git checkout, so whether they're committed is unknown
+        "uncommitted": None if status is None else sorted(line[3:] for line in status.splitlines()),
+    }
 
 
 def load_golden(folder: Path) -> list[dict[str, Any]]:
@@ -113,13 +138,19 @@ def main() -> int:
             "arm_a": sources,
             "golden": {"file": shown(a.golden / GOLDEN_TRAIN), "sha256": sha256(a.golden / GOLDEN_TRAIN)},
         },
+        "code": code_version(),
         **report,
         "files": {FILE: sha256(a.out / FILE)},
     }
     (a.out / REPORT).write_text(json.dumps(report, indent=1) + "\n")
     print(f"{len(records)} train tasks from Arm A ({', '.join(sources)}) and {len(golden)} golden fixes")
     print_table(report)
-    print(f"\nwrote {shown(a.out)}/{FILE} and {REPORT}")
+    code = report["code"]
+    if code["uncommitted"]:
+        print(f"⚠ uncommitted changes to {', '.join(code['uncommitted'])}: commit them before publishing")
+    print(
+        f"\nwrote {shown(a.out)}/{FILE} and {REPORT} (code {(code['commit'] or 'not a git checkout')[:12]})"
+    )
     return 0
 
 

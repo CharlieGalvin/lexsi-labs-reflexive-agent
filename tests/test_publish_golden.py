@@ -278,6 +278,13 @@ def hard_rows(golden_train):
     ]
 
 
+CODE = {
+    "commit": "0123456789abcdef",
+    "files": {"src/reflexive/hallucination.py": "ab" * 8},
+    "uncommitted": [],
+}
+
+
 def _setup_hard(tmp_path, monkeypatch, existing, tags=(), args=(), recs=None):
     """The golden folder plus a hard subset built from it; publishes with --tag v1.1."""
     hard_dir = tmp_path / "hard"
@@ -288,6 +295,7 @@ def _setup_hard(tmp_path, monkeypatch, existing, tags=(), args=(), recs=None):
     report = {
         **hard.counts(hard_rows(rows()["train"]), collections.Counter()),
         "inputs": {"golden": {"sha256": pg.sha256(tmp_path / pg.FILES["train"])}},
+        "code": CODE,
         "files": {pg.HARD_FILE: pg.sha256(hard_dir / pg.HARD_FILE)},
     }
     (hard_dir / pg.HARD_REPORT).write_text(json.dumps(report))
@@ -418,3 +426,34 @@ def test_v1_1_reports_a_missing_or_broken_build_report_instead_of_crashing(
         (hard_dir / pg.HARD_REPORT).write_text(content)
     assert pg.main() == 1 and FakeApi.calls == []
     assert "⛔" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("code", "why"),
+    [
+        (None, "which commit labelled"),
+        ({**CODE, "commit": None}, "which commit labelled"),
+        ({**CODE, "files": {}}, "label code's checksums"),
+        (
+            {**CODE, "uncommitted": ["src/reflexive/hallucination.py"]},
+            "uncommitted code (src/reflexive/hallucination.py)",
+        ),
+        ({**CODE, "uncommitted": None}, "uncommitted code (the label code (not checked))"),
+    ],
+)
+def test_v1_1_refuses_a_hard_subset_whose_labelling_code_isnt_known_and_committed(
+    tmp_path, monkeypatch, capsys, code, why
+):
+    hard_dir = _setup_hard(tmp_path, monkeypatch, existing={})
+    report = json.loads((hard_dir / pg.HARD_REPORT).read_text())
+    report["code"] = code
+    (hard_dir / pg.HARD_REPORT).write_text(json.dumps(report))
+    assert pg.main() == 1 and FakeApi.calls == []
+    assert why in capsys.readouterr().out
+
+
+def test_the_v1_1_card_names_the_commit_and_label_code(tmp_path, monkeypatch):
+    _setup_hard(tmp_path, monkeypatch, existing={})
+    assert pg.main() == 0
+    card = FakeApi.uploaded["README.md"].decode()
+    assert "commit `0123456789ab`" in card and "`hallucination.py` `abababababababab`" in card
