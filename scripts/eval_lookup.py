@@ -3,6 +3,7 @@
     python scripts/eval_lookup.py                                   # base model
     python scripts/eval_lookup.py --adapter runs/messy-grpo         # trained adapter
     python scripts/eval_lookup.py --split train --limit 40          # a quick look
+    python scripts/eval_lookup.py --record base --arm A             # = just baseline
 
 The question mix, model and max_steps_per_turn come from the training config (``--config``,
 default configs/train/messy_grpo.yaml), so the eval matches training.
@@ -12,7 +13,8 @@ Greedy decoding, the same rollout code and tool prompt as training (AgentTune's
 The eval split's 40 customers never appear in training.
 
 Writes one CSV row per question (``--out``, default ``<adapter or runs/base-messy>/eval_<split>.csv``)
-and prints success rates by level (question type).
+and prints success rates by level (question type). ``--record RUN`` then writes
+``results/RUN.metrics.json`` and a docs/EXPERIMENTS.md row (scripts/experiment_log.py).
 """
 
 from __future__ import annotations
@@ -38,8 +40,16 @@ def main() -> int:
     ap.add_argument("--max-tool-steps", type=int, help="default: the config's max_steps_per_turn, else 3")
     ap.add_argument("--max-new-tokens", type=int, default=256)
     ap.add_argument("--out", type=pathlib.Path)
+    ap.add_argument("--record", metavar="RUN", help="also record results/RUN.metrics.json + a log row")
+    ap.add_argument("--arm", help="with --record: the experiment arm, e.g. A")
     a = ap.parse_args()
 
+    if a.record and a.split != "eval":
+        ap.error("--record only records the eval split")
+    if a.record and (pathlib.Path("results") / f"{a.record}.metrics.json").exists():
+        ap.error(f"results/{a.record}.metrics.json exists; pick a new run name")
+
+    import experiment_log  # scripts/experiment_log.py (this script's folder is on sys.path)
     import pandas as pd
     import torch
     from agenttune.agentic.rollout_engines.rollout_factory import create_rollout_fn
@@ -89,9 +99,15 @@ def main() -> int:
     print("\nOverall:")
     print(df[cols].mean().round(2).to_string())
     summary = {"model": a.model, "adapter": str(a.adapter) if a.adapter else None, "split": a.split,
+               "commit": experiment_log._git("rev-parse", "--short", "HEAD"),
                "n": len(df), "seconds": round(time.time() - t0), **df[cols].mean().round(3).to_dict()}
     dest.with_suffix(".json").write_text(json.dumps(summary, indent=2))
     print(f"\nwrote {dest} and {dest.with_suffix('.json')}")
+    if a.record:
+        rec = argparse.Namespace(eval_csv=dest, run=a.record, arm=a.arm, config=str(a.config),
+                                 adapter=str(a.adapter) if a.adapter else None, commit=None,
+                                 owner=None, change=None, notes="")
+        return experiment_log.record(rec)
     return 0
 
 

@@ -143,3 +143,25 @@ train config *args:
 # Messy-ID Lookup eval (base model; add `--adapter runs/messy-grpo` for the trained one)
 eval-lookup *args:
     python scripts/eval_lookup.py {{args}}
+
+# --- Starter task: Arm A vs one GRPO run (docs/experiments/MESSY_LOOKUP.md) ------
+
+# Arm A: eval the untuned student -> results/base.metrics.json + docs/EXPERIMENTS.md row
+baseline *args:
+    python scripts/eval_lookup.py --record base --arm A {{args}}
+
+# One GRPO run on the starter task -> runs/<run> (W&B on), e.g. `just after messy-grpo-2`
+after run="messy-grpo" *args:
+    python scripts/train_grpo.py configs/train/messy_grpo.yaml --output-dir runs/{{run}} {{args}}
+
+# Eval the trained adapter -> results/<run>.metrics.json + docs/EXPERIMENTS.md row
+evaluate run="messy-grpo" *args:
+    python scripts/eval_lookup.py --adapter runs/{{run}} --record {{run}} {{args}}
+
+# Markdown table of two recorded runs, to post on the ticket
+compare a="base" b="messy-grpo":
+    python scripts/experiment_log.py compare {{a}} {{b}}
+
+# Record an eval that already ran, e.g. `just record runs/base-messy/eval_eval.csv base --arm A`
+record csv run *args:
+    python scripts/experiment_log.py record {{csv}} {{run}} {{args}}

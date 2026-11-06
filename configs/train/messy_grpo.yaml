@@ -1,9 +1,9 @@
-# Experiment A: GRPO on Messy-ID Lookup (docs/experiments/MESSY_LOOKUP.md). One tool call per
-# question; the skill is getting the ID argument right. LoRA on Tiny Aya, logged to W&B.
-#   just eval-lookup --config configs/train/messy_grpo.yaml                     # baseline
-#   just train configs/train/messy_grpo.yaml --max-steps 3 --output-dir runs/messy-try --report-to none
-#   just train configs/train/messy_grpo.yaml                                    # the full run
-#   just eval-lookup --config configs/train/messy_grpo.yaml --adapter runs/messy-grpo
+# The starter task: GRPO on Messy-ID Lookup (docs/experiments/MESSY_LOOKUP.md). One tool call
+# per question; the skill is getting the ID argument right. LoRA on Tiny Aya, logged to W&B.
+#   just baseline        # Arm A (untuned) -> results/base.metrics.json + EXPERIMENTS.md row
+#   just after           # this config -> runs/messy-grpo
+#   just evaluate        # -> results/messy-grpo.metrics.json + EXPERIMENTS.md row
+#   just compare         # base vs messy-grpo table
 task: messy_lookup
 task_options:
   styles:                         # weights of the question types; tune after the baseline

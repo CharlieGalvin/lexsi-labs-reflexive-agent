@@ -40,20 +40,32 @@ will training fix?). Comparing them with the results is the fastest way to build
 
 ## Run ladder
 
+This is the project's **starter task**: Arm A (the untuned student) against one GRPO run.
 All commands are **terminal**, run on the pod in `/workspace/lexsi-labs-reflexive-agent`.
 
-| # | Command | Time | Check |
+| # | Command | Time | Writes / check |
 |---|---|---|---|
-| 1 | `just eval-lookup --config configs/train/messy_grpo.yaml` | ~10 min | Per-type baseline. Overall `correct` ideally 20–70% (see below) |
-| 2 | `just train configs/train/messy_grpo.yaml --max-steps 3 --output-dir runs/messy-try --report-to none` | ~5 min | It runs; `run_summary.json` gives s/step and peak memory |
-| 3 | `just train configs/train/messy_grpo.yaml` | ~1–2 h | Watch W&B (guide below) |
-| 4 | `just eval-lookup --config configs/train/messy_grpo.yaml --adapter runs/messy-grpo` | ~10 min | Per-type improvement over step 1 |
+| 1 | `just baseline` | ~10 min | **Arm A**: `results/base.metrics.json` + the `base` row in [EXPERIMENTS.md](../EXPERIMENTS.md). Overall `correct` ideally 20–70% |
+| 2 | `just after messy-try --max-steps 3 --report-to none` | ~5 min | A trial: it runs; `runs/messy-try/run_summary.json` gives s/step and peak memory |
+| 3 | `just after` | ~1–2 h | **The GRPO run** → `runs/messy-grpo/`. Watch W&B (guide below) |
+| 4 | `just evaluate` | ~10 min | `results/messy-grpo.metrics.json` + a new EXPERIMENTS.md row |
+| 5 | `just compare` | instant | The base-vs-GRPO table to post on the ticket |
 
-**After step 1, tune the mix** in `task_options.styles` of the config: a type at ~100% teaches
-nothing (lower its weight); a type at 0% may be out of reach (keep it, but don't make it most
-of the data). Re-run step 1 after any change: eval and training must use the same mix.
-To keep the adapter on the Hub (private), add `--push reagent-lexsi/tiny-aya-messy-grpo-v0`
-to the step 3 command.
+Then commit `results/*.metrics.json` and `docs/EXPERIMENTS.md`. Metrics files are never
+overwritten: a second GRPO run gets its own name (`just after messy-grpo-2`, then
+`just evaluate messy-grpo-2` and `just compare base messy-grpo-2`). An eval that already ran
+can be recorded without re-running it: `just record runs/base-messy/eval_eval.csv base --arm A`.
+
+**Metrics** (all on the 120 eval questions, greedy decoding): `task_success` = share answered
+correctly, with a 95% interval; `calls/success` = tool calls ÷ correct answers;
+`halluc. rate` = share of questions with an Arg error (an ID that doesn't exist, or a real ID
+of the wrong customer).
+
+**Tuning the mix** (`task_options.styles` in the config): a type at ~100% teaches nothing
+(lower its weight); a type at 0% may be out of reach (keep it, but don't make it most of the
+data). Eval and training must use the same mix, so a change means a new baseline under a new
+run name. To keep the adapter on the Hub (private), add
+`--push reagent-lexsi/tiny-aya-messy-grpo-v0` to the step 3 command.
 
 ## Reading the W&B charts
 

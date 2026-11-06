@@ -54,6 +54,14 @@ def says_five(completions, **kwargs) -> list[float]:
     return [1.0 if "5" in str(c) else 0.0 for c in completions]
 
 
+def _wandb_url() -> str | None:
+    try:
+        import wandb
+    except ImportError:
+        return None
+    return wandb.run.url if wandb.run is not None else None
+
+
 def build_task(cfg: dict, out: pathlib.Path):
     """(train dataset, tools, reward functions) for the config's task."""
     from datasets import Dataset
@@ -131,6 +139,8 @@ def main() -> int:
         "seconds_per_step": round(wall / steps, 1) if steps else None,
         "peak_gpu_gb": round(torch.cuda.max_memory_allocated() / 1e9, 1) if gpu else None,
         "final_loss": stats.get("final_loss"),
+        "wandb_url": _wandb_url(),
+        "hub_repo": a.push,
         "trainer": {k: v for k, v in trainer_kw.items() if isinstance(v, str | int | float | bool | dict)},
     }
     (out / "run_summary.json").write_text(json.dumps(summary, indent=2, default=str))
