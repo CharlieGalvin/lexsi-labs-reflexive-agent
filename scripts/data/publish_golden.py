@@ -150,7 +150,8 @@ def check_hard_files(hard_dir: Path, hard_report: dict, golden_dir: Path) -> lis
     problems = []
     if (hard_report.get("files") or {}).get(HARD_FILE) != sha256(hard_dir / HARD_FILE):
         problems.append(f"{HARD_FILE} changed since `just hard-subset` built it: rebuild")
-    code = hard_report.get("code") if isinstance(hard_report.get("code"), dict) else {}
+    raw = hard_report.get("code")
+    code: dict[str, Any] = raw if isinstance(raw, dict) else {}
     if not code.get("commit"):
         problems.append(
             f"{HARD_REPORT} doesn't say which commit labelled the subset: rebuild with `just hard-subset --force`"
