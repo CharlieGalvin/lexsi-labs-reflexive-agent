@@ -12,6 +12,11 @@ One cycle:
 5. **Gate**: the current and the candidate adapter both run the gate tasks; the gate decides.
 6. **Swap**: the agent keeps the candidate only if the gate passes.
 
+A conversation that broke (an API error, a crash: `reflexive.metrics.is_broken`) says nothing
+about the student, so it is never treated as a failure: a broken heal run isn't sent to the
+teacher, and a gate task that broke for either adapter is left out on both sides, so the
+comparison stays paired. Both are kept in the report.
+
 Classify is the real classifier. Rollout is whatever callable it's given: `arm_rollout` wraps
 `reflexive.arms.run_episode`, and the tests pass a fake. Fix, retrain and gate are stubs for now,
 behind small protocols, so the real ones drop in without changing the loop:
@@ -21,7 +26,8 @@ behind small protocols, so the real ones drop in without changing the loop:
 - gate: SEL-51 (the agreed deployment rule)
 
 Heal tasks come from **train**, gate tasks from **dev**; a test task anywhere is refused
-(`reflexive.splits.assert_not_test`). Nothing here needs a GPU, τ²-bench or an API key.
+(`reflexive.splits.assert_not_test`), as is a task in no split, a task listed twice, or no gate
+tasks at all. Nothing here needs a GPU, τ²-bench or an API key.
 """
 
 from __future__ import annotations
@@ -31,6 +37,7 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from reflexive.hallucination import Diagnosis, FailureType, classify_record
+from reflexive.metrics import is_broken
 from reflexive.splits import assert_not_test, split_of
 
 Record = dict[str, Any]  # a `reagent.tau2.episode` record
@@ -146,6 +153,10 @@ class CycleReport:
     candidate: Adapter
     gate: GateDecision | None
     skipped: str = ""  # why the cycle stopped early, if it did
+    broken: list[Record] = field(default_factory=list)  # heal runs that broke: not failures
+    gate_baseline: list[Record] = field(default_factory=list)  # every gate run, broken ones too
+    gate_candidate: list[Record] = field(default_factory=list)
+    gate_dropped: list[Task] = field(default_factory=list)  # broke for either adapter: left out
 
     @property
     def swapped(self) -> bool:
@@ -158,10 +169,12 @@ class CycleReport:
             "swapped": self.swapped,
             "rollouts": len(self.rollouts),
             "passed": sum(map(passed, self.rollouts)),
+            "broken": len(self.broken),
             "failures": {t.value: sum(f.diagnosis.failure is t for f in self.failures) for t in FailureType},
             "fixes": len(self.fixes),
             "candidate": self.candidate,
             "gate": None if self.gate is None else vars(self.gate),
+            "gate_dropped": [list(t) for t in self.gate_dropped],
             "skipped": self.skipped,
         }
 
@@ -192,26 +205,57 @@ class ReflexiveAgent:
         """Rollout → classify → fix → retrain → gate → swap. Returns what happened."""
         _check(heal_tasks, "train", "heal")
         _check(gate_tasks, "dev", "gate")
+        if not gate_tasks:
+            raise ValueError("no gate tasks: the gate needs dev tasks to decide on")
         before = self.adapter
 
         rollouts = self._run(before, heal_tasks)
-        failures = [Failure(r, classify_record(r)) for r in rollouts if not passed(r)]
+        broken = [r for r in rollouts if is_broken(r)]
+        failures = [Failure(r, classify_record(r)) for r in rollouts if not passed(r) and not is_broken(r)]
         fixes = [fx for f in failures if (fx := self.teacher.fix(f)) is not None]
+        gate_runs: dict[str, Any] = {}
 
         def done(
             candidate: Adapter = None, gate: GateDecision | None = None, skipped: str = ""
         ) -> CycleReport:
-            report = CycleReport(before, self.adapter, rollouts, failures, fixes, candidate, gate, skipped)
+            report = CycleReport(
+                adapter_before=before,
+                adapter_after=self.adapter,
+                rollouts=rollouts,
+                failures=failures,
+                fixes=fixes,
+                candidate=candidate,
+                gate=gate,
+                skipped=skipped,
+                broken=broken,
+                **gate_runs,
+            )
             self.history.append(report)
             return report
 
         if not failures:
-            return done(skipped="no failures to heal")
+            left_out = f" ({len(broken)} broken runs left out)" if broken else ""
+            return done(skipped=f"no failures to heal{left_out}")
         if not fixes:
             return done(skipped="the teacher fixed none of the failures")
 
         candidate = self.trainer.train(fixes, before)
-        decision = self.gate.decide(self._run(before, gate_tasks), self._run(candidate, gate_tasks))
+        base_runs, cand_runs = self._run(before, gate_tasks), self._run(candidate, gate_tasks)
+        # Paired: a task that broke for either adapter is left out of both sides
+        keep = [
+            i
+            for i, (b, c) in enumerate(zip(base_runs, cand_runs, strict=True))
+            if not (is_broken(b) or is_broken(c))
+        ]
+        gate_runs = {
+            "gate_baseline": base_runs,
+            "gate_candidate": cand_runs,
+            "gate_dropped": [tuple(gate_tasks[i]) for i in range(len(gate_tasks)) if i not in keep],
+        }
+        if not keep:
+            decision = GateDecision(False, 0.0, 0.0, "every gate task broke for one adapter or both")
+        else:
+            decision = self.gate.decide([base_runs[i] for i in keep], [cand_runs[i] for i in keep])
         if decision.passed:
             self.adapter = candidate
         return done(candidate, decision)
@@ -220,10 +264,18 @@ class ReflexiveAgent:
 def _check(tasks: Sequence[Task], want: str, role: str) -> None:
     """Never touch test; heal only on train and gate only on dev, so the gate isn't graded on
     what was trained on."""
+    seen: set[Task] = set()
     for domain, task_id in tasks:
-        assert_not_test(domain, task_id)
-        if (got := split_of(domain, task_id)) != want:
+        try:
+            assert_not_test(domain, task_id)
+            got = split_of(domain, task_id)
+        except KeyError as e:
+            raise ValueError(f"{domain} task {task_id!r} is in no split") from e
+        if got != want:
             raise ValueError(f"{domain} task {task_id!r} is a {got} task; {role} tasks must be {want}")
+        if (domain, str(task_id)) in seen:
+            raise ValueError(f"{domain} task {task_id!r} is listed twice in the {role} tasks")
+        seen.add((domain, str(task_id)))
 
 
 def arm_rollout(arm: Any, make_agent: Callable[[Adapter], Any], **kwargs: Any) -> Rollout:
