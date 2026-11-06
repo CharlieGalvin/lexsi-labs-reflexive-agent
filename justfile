@@ -151,6 +151,9 @@ bakeoff-report:
 
 # --- Experiment arms (configs/arms.yaml) ----------------------------------------
 
+# Re-score saved rollouts with the AuditKIT oracle: verified success rate (judges on; `--only dev`, `--judges off`)
+oracle-score *files:
+    python scripts/arms/oracle_score.py {{files}}
 # Summarise a rollout file as results/arm-<arm>-<domain>-<split>.metrics.json (no API calls; `--only dev`)
 arm-metrics file *args:
     python scripts/arms/metrics.py {{file}} {{args}}
