@@ -1,0 +1,77 @@
+{
+  "run": "messy-grpo",
+  "date": "2026-11-06",
+  "owner": "katiemarieek",
+  "commit": "0c1d2dd",
+  "config": "configs/train/messy_grpo.yaml",
+  "arm": null,
+  "task": "messy_lookup (starter task, docs/experiments/MESSY_LOOKUP.md)",
+  "student": "CohereLabs/tiny-aya-global + LoRA adapter runs/messy-grpo",
+  "split": "eval: 40 held-out customers x 3 questions",
+  "decoding": "greedy",
+  "questions": 120,
+  "passed": 67,
+  "task_success": 0.5583,
+  "task_success_wilson95": [
+    0.469,
+    0.644
+  ],
+  "tool_ok": 0.6083,
+  "format": 1.0,
+  "hallucination_rate": 0.3917,
+  "hallucinated": 47,
+  "hallucination_method": "Arg error: a get_customer ID that doesn't exist, or a real ID of the wrong customer (reflexive.messy_lookup.score)",
+  "tool_calls_per_question": 1.025,
+  "calls_per_success": 1.84,
+  "by_type": {
+    "clean": {
+      "passed": 19,
+      "n": 22,
+      "tool_ok": 1.0,
+      "hallucination_rate": 0.0
+    },
+    "lower_dash": {
+      "passed": 2,
+      "n": 21,
+      "tool_ok": 0.0476,
+      "hallucination_rate": 0.9524
+    },
+    "spaced": {
+      "passed": 19,
+      "n": 21,
+      "tool_ok": 1.0,
+      "hallucination_rate": 0.0
+    },
+    "number_only": {
+      "passed": 0,
+      "n": 22,
+      "tool_ok": 0.0,
+      "hallucination_rate": 1.0
+    },
+    "spelled": {
+      "passed": 9,
+      "n": 15,
+      "tool_ok": 0.6667,
+      "hallucination_rate": 0.3333
+    },
+    "distractor": {
+      "passed": 18,
+      "n": 19,
+      "tool_ok": 1.0,
+      "hallucination_rate": 0.0
+    }
+  },
+  "training": {
+    "config": "configs/train/messy_grpo.yaml",
+    "task": "messy_lookup",
+    "model": "CohereLabs/tiny-aya-global",
+    "steps": 100,
+    "wall_seconds": 3219,
+    "seconds_per_step": 32.2,
+    "peak_gpu_gb": 10.1,
+    "final_loss": 0.0045160632161423565,
+    "wandb_url": "https://forge.coreweave.com/wandb/reagent_wandb/lexsi-track3/runs/chkqk6eg",
+    "hub_repo": null
+  },
+  "records": "runs/messy-grpo/eval_eval.csv (not committed)"
+}

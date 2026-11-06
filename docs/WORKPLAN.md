@@ -48,8 +48,8 @@ The live, day-by-day plan (with sub-issues SEL-31…SEL-55) is the *Delivery pla
 - [ ] (Stretch) Online mode: heal cycles triggered during serving, with `DeploymentGate`
 
 ## Role 3 — Model & Training, "the Trainer" (`area:training`)
-- [ ] GPU access sorted; a 10-step smoke training run passes with `CohereLabs/tiny-aya-global` (gated licence accepted by all)
-- [ ] Baseline GRPO run (first config in `configs/`)
+- [x] GPU access sorted; a 10-step smoke training run passes with `CohereLabs/tiny-aya-global` (gated licence accepted by all) — `just train-smoke`, 5 Nov (licence: Trainer done; others to confirm)
+- [x] Baseline GRPO run (first config in `configs/`) — `configs/train/messy_grpo.yaml` on the starter task, 6 Nov: [MESSY_LOOKUP.md](experiments/MESSY_LOOKUP.md)
 - [ ] HEAL training step: retrain the student on the Curator's golden trajectories (GRPO with rewards, and BCO)
 - [ ] Adapter lifecycle: version every adapter on the Hub with model card + `lexsi_provenance.json`
 - [ ] Multiple heal cycles: success / hallucination vs. cycle number (does it keep improving or overfit?)
