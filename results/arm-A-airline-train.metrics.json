@@ -1,0 +1,52 @@
+{
+  "run": "arm-A-airline-train",
+  "date": "2026-11-05",
+  "owner": "Charlie",
+  "commit": "e8155a0",
+  "config": "configs/arms.yaml",
+  "arm": "A",
+  "prompt_variant": "default",
+  "prompt_version": "tau2/default",
+  "student": "c4ai-aya-expanse-32b (Cohere API, prompted, cohere Action: format)",
+  "customer": "gpt-4.1-2025-04-14",
+  "domain": "airline",
+  "split": "train (frozen splits, configs/splits.json)",
+  "samples_per_task": 1,
+  "judges": true,
+  "note_judges": "τ²-bench's LLM judges ran (OPENAI_API_KEY set)",
+  "records": "results/episodes/arms/A-airline-train.jsonl (not committed)",
+  "conversations": 24,
+  "crashed": 0,
+  "passed": 4,
+  "task_success": 0.1667,
+  "task_success_wilson95": [
+    0.0668,
+    0.3585
+  ],
+  "by_issue": null,
+  "termination": {
+    "user_stop": 24
+  },
+  "context_overflow": 0,
+  "conversations_flagged": {
+    "tool_unknown_tool": 0,
+    "arg_unseen_id_like_argument": 15,
+    "loop_repeated_failed_call": 4,
+    "tool_or_arg": 15
+  },
+  "flag_method": "heuristic diagnostics (reflexive.teacher.unseen_arguments / tool_errors), not the SEL-12 classifier",
+  "hallucination_rate_tool_or_arg": 0.625,
+  "transferred_to_human": 5,
+  "judged": 24,
+  "skipped_checks": 0,
+  "student_calls": 226,
+  "student_calls_per_success": 56.5,
+  "student_replies_cut_off": 0,
+  "tool_calls_per_conversation": 7.2,
+  "student_tokens_per_conversation_median": 37628,
+  "cost_usd": {
+    "customer": 0.35,
+    "student_est": 0.63,
+    "total": 0.99
+  }
+}

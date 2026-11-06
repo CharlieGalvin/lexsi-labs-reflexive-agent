@@ -27,6 +27,7 @@ from collections.abc import Callable
 from typing import Any
 
 from reflexive.episode import Tau2Episode, estimate_tokens, official_split
+from reflexive.metrics import BROKEN_ENDINGS, is_broken  # noqa: F401 - re-exported
 from reflexive.teacher import (
     CohereClient,
     ContextTooLong,
@@ -421,13 +422,6 @@ def openrouter_credits() -> float | None:
 
 
 # --- What a saved run says ----------------------------------------------------------------------
-
-BROKEN_ENDINGS = {"unexpected_error", "infrastructure_error", "agent_error", "user_error"}
-
-
-def is_broken(rec: Record) -> bool:
-    """The run broke (an API failure, a crash), so it says nothing about the model's ability."""
-    return bool(rec.get("error")) or rec.get("termination") in BROKEN_ENDINGS
 
 
 def out_of_credits(rec: Record) -> bool:
