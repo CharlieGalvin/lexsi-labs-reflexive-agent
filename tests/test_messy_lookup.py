@@ -53,7 +53,7 @@ def test_style_weights_and_unknown_types():
 
 
 def test_tool_docstring_has_no_real_ids():
-    doc = inspect.getdoc(ml.get_customer)
+    doc = inspect.getdoc(ml.get_customer) or ""
     assert not any(c["customer_id"] in doc for c in ml.customers())
 
 
@@ -71,8 +71,12 @@ def _conv(calls, results, final, folded=False):
     for call, result in zip(calls, results, strict=True):
         conv.append({"role": "assistant", "content": "", "tool_calls": [call]})
         if folded:  # how AgentTune shows tool results to Tiny Aya
-            conv.append({"role": "user", "content": ml.TOOL_RESULT_FORMAT.format(
-                name="get_customer", content=str(result))})
+            conv.append(
+                {
+                    "role": "user",
+                    "content": ml.TOOL_RESULT_FORMAT.format(name="get_customer", content=str(result)),
+                }
+            )
         else:
             conv.append({"role": "tool", "name": "get_customer", "content": str(result)})
     conv.append({"role": "assistant", "content": final})
@@ -82,9 +86,13 @@ def _conv(calls, results, final, folded=False):
 def test_correct_rollout_in_both_call_shapes():
     c = ml.customers()[0]
     final = f"The balance is *{c['balance']}*."
-    for call in ({"id": "a", "function": {"name": "get_customer",
-                                          "arguments": f'{{"customer_id": "{c["customer_id"]}"}}'}},
-                 {"name": "get_customer", "parameters": {"customer_id": c["customer_id"]}}):
+    for call in (
+        {
+            "id": "a",
+            "function": {"name": "get_customer", "arguments": f'{{"customer_id": "{c["customer_id"]}"}}'},
+        },
+        {"name": "get_customer", "parameters": {"customer_id": c["customer_id"]}},
+    ):
         conv = _conv([call], [ml.get_customer(c["customer_id"])], final)
         s = ml.score(conv, final, c["balance"], "balance", c["customer_id"])
         assert (s["correct"], s["tool_ok"], s["format"], s["n_tool_calls"]) == (1.0, 1.0, 1.0, 1)
@@ -93,8 +101,10 @@ def test_correct_rollout_in_both_call_shapes():
 def test_badly_normalised_id_then_retry():
     c = ml.customers()[0]
     messy = f"c-{c['customer_id'][1:]}"
-    calls = [{"name": "get_customer", "arguments": {"customer_id": messy}},
-             {"name": "get_customer", "arguments": {"customer_id": c["customer_id"]}}]
+    calls = [
+        {"name": "get_customer", "arguments": {"customer_id": messy}},
+        {"name": "get_customer", "arguments": {"customer_id": c["customer_id"]}},
+    ]
     results = [ml.get_customer(messy), ml.get_customer(c["customer_id"])]
     final = f"*{c['plan']}*"
     s = ml.score(_conv(calls, results, final, folded=True), final, c["plan"], "plan", c["customer_id"])
@@ -106,8 +116,13 @@ def test_real_record_of_the_wrong_customer_is_not_tool_ok():
     asked, other = ml.customers()[0], ml.customers()[23]
     calls = [{"name": "get_customer", "arguments": {"customer_id": other["customer_id"]}}]
     final = f"*{other['balance']}*"
-    s = ml.score(_conv(calls, [ml.get_customer(other["customer_id"])], final), final,
-                 asked["balance"], "balance", asked["customer_id"])
+    s = ml.score(
+        _conv(calls, [ml.get_customer(other["customer_id"])], final),
+        final,
+        asked["balance"],
+        "balance",
+        asked["customer_id"],
+    )
     assert s["tool_ok"] == 0.0 and s["wrong_customer"] == 1 and s["hallucinated_ids"] == 0
 
 
@@ -128,12 +143,22 @@ def test_answer_matching():
 def test_reward_fn_logs_rows_and_debug(tmp_path):
     c = ml.customers()[0]
     final = f"*{c['plan']}*"
-    conv = _conv([{"name": "get_customer", "arguments": {"customer_id": c["customer_id"]}}],
-                 [ml.get_customer(c["customer_id"])], final)
+    conv = _conv(
+        [{"name": "get_customer", "arguments": {"customer_id": c["customer_id"]}}],
+        [ml.get_customer(c["customer_id"])],
+        final,
+    )
     fn = ml.make_reward_fn(log_path=tmp_path / "rewards.jsonl")
-    r = fn(["x", "y"], answer=[c["plan"]] * 2, field=["plan"] * 2, qid=["q1", "q2"],
-           level=["clean"] * 2, customer_id=[c["customer_id"]] * 2,
-           conversations=[conv, []], responses=[final, "no idea"])
+    r = fn(
+        ["x", "y"],
+        answer=[c["plan"]] * 2,
+        field=["plan"] * 2,
+        qid=["q1", "q2"],
+        level=["clean"] * 2,
+        customer_id=[c["customer_id"]] * 2,
+        conversations=[conv, []],
+        responses=[final, "no idea"],
+    )
     assert r == pytest.approx([1.7, 0.0])
     assert len((tmp_path / "rewards.jsonl").read_text().splitlines()) == 2
     assert (tmp_path / "reward_inputs_debug.json").exists()

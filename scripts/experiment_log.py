@@ -48,8 +48,9 @@ def wilson(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
 
 def _git(*args: str) -> str:
     try:
-        return subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True,
-                              check=True).stdout.strip()
+        return subprocess.run(
+            ["git", *args], cwd=ROOT, capture_output=True, text=True, check=True
+        ).stdout.strip()
     except (OSError, subprocess.CalledProcessError):
         return ""
 
@@ -62,9 +63,19 @@ def _arg_error(r: dict) -> bool:
     return float(r["hallucinated_ids"]) > 0 or float(r["wrong_customer"]) > 0
 
 
-def metrics(rows: list[dict], *, run: str, arm: str | None, config: str, model: str,
-            adapter: str | None, commit: str, owner: str, eval_csv: str,
-            training: dict | None = None) -> dict:
+def metrics(
+    rows: list[dict],
+    *,
+    run: str,
+    arm: str | None,
+    config: str,
+    model: str,
+    adapter: str | None,
+    commit: str,
+    owner: str,
+    eval_csv: str,
+    training: dict | None = None,
+) -> dict:
     """The metrics record for one eval (``rows``: the eval CSV, one dict per question)."""
     n = len(rows)
     passed = sum(1 for r in rows if float(r["correct"]) == 1.0)
@@ -99,7 +110,7 @@ def metrics(rows: list[dict], *, run: str, arm: str | None, config: str, model: 
         "hallucination_rate": round(halluc / n, 4) if n else 0.0,
         "hallucinated": halluc,
         "hallucination_method": "Arg error: a get_customer ID that doesn't exist, or a real ID of "
-                                "the wrong customer (reflexive.messy_lookup.score)",
+        "the wrong customer (reflexive.messy_lookup.score)",
         "tool_calls_per_question": round(calls / n, 3) if n else 0.0,
         "calls_per_success": round(calls / passed, 2) if passed else None,
         "by_type": by_type,
@@ -111,8 +122,7 @@ def metrics(rows: list[dict], *, run: str, arm: str | None, config: str, model: 
 def log_row(m: dict, change: str, notes: str = "") -> str:
     """One docs/EXPERIMENTS.md table row for metrics record ``m``."""
     lo, hi = m["task_success_wilson95"]
-    success = (f"{m['passed']}/{m['questions']} = {m['task_success']:.1%} "
-               f"(95% {lo:.1%}–{hi:.1%})")
+    success = f"{m['passed']}/{m['questions']} = {m['task_success']:.1%} (95% {lo:.1%}–{hi:.1%})"
     halluc = f"{m['hallucination_rate']:.1%} ({m['hallucinated']}/{m['questions']}, Arg)"
     by_type = ", ".join(f"{t} {v['passed']}/{v['n']}" for t, v in m["by_type"].items())
     links = [f"[metrics](../results/{m['run']}.metrics.json)"]
@@ -123,19 +133,38 @@ def log_row(m: dict, change: str, notes: str = "") -> str:
         links.append(f"[adapter](https://huggingface.co/{tr['hub_repo']})")
     note = "; ".join(x for x in (notes, f"Correct by type: {by_type}", " ".join(links)) if x)
     calls = m["calls_per_success"] if m["calls_per_success"] is not None else "–"
-    cells = [m["date"], m["run"], m["owner"], f"`{m['config']}` @ {m['commit']}", change,
-             success, str(calls), halluc, note]
+    cells = [
+        m["date"],
+        m["run"],
+        m["owner"],
+        f"`{m['config']}` @ {m['commit']}",
+        change,
+        success,
+        str(calls),
+        halluc,
+        note,
+    ]
     return "| " + " | ".join(c.replace("|", "/") for c in cells) + " |"
 
 
+def _runs_table(lines: list[str]) -> list[int]:
+    """Line numbers of the training/eval runs table: the one whose header has ``task_success``
+    (EXPERIMENTS.md also has a Curator table for data runs, with other columns)."""
+    for start, line in enumerate(lines):
+        if line.startswith("|") and "task_success" in line:
+            end = start
+            while end + 1 < len(lines) and lines[end + 1].startswith("|"):
+                end += 1
+            return list(range(start, end + 1))
+    raise ValueError("no runs table (a header with task_success) in the experiment log")
+
+
 def add_to_log(text: str, run: str, row: str) -> str:
-    """``text`` (EXPERIMENTS.md) with ``row`` filling ``run``'s empty placeholder row, or added
-    after the table's last row."""
+    """``text`` (EXPERIMENTS.md) with ``row`` filling ``run``'s empty placeholder row in the runs
+    table, or added after that table's last row."""
     lines = text.splitlines()
-    table = [i for i, line in enumerate(lines) if line.startswith("|")]
-    if not table:
-        raise ValueError("no table in the experiment log")
-    for i in table[2:]:
+    table = _runs_table(lines)
+    for i in table[2:]:  # skip the header and the |---| line
         cells = [c.strip() for c in lines[i].strip().strip("|").split("|")]
         if len(cells) > 5 and cells[1] == run and not cells[5]:
             lines[i] = row
@@ -158,10 +187,16 @@ def record(a: argparse.Namespace) -> int:
         training = json.loads((pathlib.Path(a.adapter) / "run_summary.json").read_text())
         training.pop("trainer", None)
     m = metrics(
-        rows, run=a.run, arm=a.arm, config=a.config, adapter=a.adapter,
+        rows,
+        run=a.run,
+        arm=a.arm,
+        config=a.config,
+        adapter=a.adapter,
         model=summary.get("model", "CohereLabs/tiny-aya-global"),
         commit=a.commit or summary.get("commit") or _git("rev-parse", "--short", "HEAD"),
-        owner=a.owner or _git("config", "user.name"), eval_csv=str(a.eval_csv), training=training,
+        owner=a.owner or _git("config", "user.name"),
+        eval_csv=str(a.eval_csv),
+        training=training,
     )
     RESULTS.mkdir(exist_ok=True)
     out.write_text(json.dumps(m, indent=2) + "\n")
@@ -184,6 +219,7 @@ def _pct(x: float) -> str:
 
 def compare_table(a: dict, b: dict) -> str:
     """A markdown table of run ``a`` vs run ``b`` (overall, then correct by question type)."""
+
     def pts(x: float, y: float) -> str:
         return f"{(y - x) * 100:+.1f} pts"
 
@@ -191,8 +227,12 @@ def compare_table(a: dict, b: dict) -> str:
         return "–" if m["calls_per_success"] is None else str(m["calls_per_success"])
 
     lines = [f"| Metric | {a['run']} | {b['run']} | Change |", "|---|---:|---:|---:|"]
-    for label, key in (("task_success", "task_success"), ("tool_ok", "tool_ok"),
-                       ("hallucination rate (Arg)", "hallucination_rate"), ("format", "format")):
+    for label, key in (
+        ("task_success", "task_success"),
+        ("tool_ok", "tool_ok"),
+        ("hallucination rate (Arg)", "hallucination_rate"),
+        ("format", "format"),
+    ):
         lines.append(f"| {label} | {_pct(a[key])} | {_pct(b[key])} | {pts(a[key], b[key])} |")
     if a["calls_per_success"] and b["calls_per_success"]:
         change = f"{b['calls_per_success'] - a['calls_per_success']:+.2f}"
@@ -202,8 +242,7 @@ def compare_table(a: dict, b: dict) -> str:
     for t in [t for t in TYPE_ORDER if t in a["by_type"] and t in b["by_type"]]:
         x, y = a["by_type"][t], b["by_type"][t]
         px, py = x["passed"] / x["n"], y["passed"] / y["n"]
-        lines.append(f"| correct: `{t}` | {x['passed']}/{x['n']} | {y['passed']}/{y['n']} "
-                     f"| {pts(px, py)} |")
+        lines.append(f"| correct: `{t}` | {x['passed']}/{x['n']} | {y['passed']}/{y['n']} | {pts(px, py)} |")
     return "\n".join(lines)
 
 
@@ -217,9 +256,11 @@ def compare(a: argparse.Namespace) -> int:
         runs.append(json.loads(path.read_text()))
     table = compare_table(*runs)
     out = RESULTS / f"{a.run_a}-vs-{a.run_b}.compare.md"
-    header = (f"# {a.run_a} vs {a.run_b}\n\nStarter task (Messy-ID Lookup), eval split, greedy. "
-              f"Made by `just compare {a.run_a} {a.run_b}` from "
-              f"[{a.run_a}]({a.run_a}.metrics.json) and [{a.run_b}]({a.run_b}.metrics.json).\n\n")
+    header = (
+        f"# {a.run_a} vs {a.run_b}\n\nStarter task (Messy-ID Lookup), eval split, greedy. "
+        f"Made by `just compare {a.run_a} {a.run_b}` from "
+        f"[{a.run_a}]({a.run_a}.metrics.json) and [{a.run_b}]({a.run_b}.metrics.json).\n\n"
+    )
     out.write_text(header + table + "\n")
     print(table)
     print(f"\nsaved to {out.relative_to(ROOT)}")

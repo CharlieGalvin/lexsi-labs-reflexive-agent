@@ -26,6 +26,7 @@ import json
 import random
 import re
 import threading
+from collections.abc import Callable
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -35,10 +36,50 @@ N_CUSTOMERS = 200
 N_EVAL_CUSTOMERS = 40
 
 PLANS = ("Basic", "Plus", "Premium", "Unlimited", "Student", "Family")
-FIRST = ("Priya", "Tom", "Aisha", "Liam", "Mei", "Omar", "Sofia", "Jack", "Zara", "Noah",
-         "Elena", "Ravi", "Chloe", "Kwame", "Hana", "Lucas", "Fatima", "Ben", "Ines", "Yusuf")
-LAST = ("Shah", "Brown", "Khan", "Murphy", "Chen", "Haddad", "Rossi", "Taylor", "Ali", "Smith",
-        "Cho", "Patel", "Dubois", "Mensah", "Sato", "Silva", "Begum", "Walsh", "Costa", "Okafor")
+FIRST = (
+    "Priya",
+    "Tom",
+    "Aisha",
+    "Liam",
+    "Mei",
+    "Omar",
+    "Sofia",
+    "Jack",
+    "Zara",
+    "Noah",
+    "Elena",
+    "Ravi",
+    "Chloe",
+    "Kwame",
+    "Hana",
+    "Lucas",
+    "Fatima",
+    "Ben",
+    "Ines",
+    "Yusuf",
+)
+LAST = (
+    "Shah",
+    "Brown",
+    "Khan",
+    "Murphy",
+    "Chen",
+    "Haddad",
+    "Rossi",
+    "Taylor",
+    "Ali",
+    "Smith",
+    "Cho",
+    "Patel",
+    "Dubois",
+    "Mensah",
+    "Sato",
+    "Silva",
+    "Begum",
+    "Walsh",
+    "Costa",
+    "Okafor",
+)
 
 # field -> (how the question names it, tolerance for a numeric answer; None = text)
 FIELDS = {
@@ -173,14 +214,16 @@ def questions(split: str, styles: dict[str, float] | None = None, per_customer: 
         for field in rng.sample(list(FIELDS), per_customer):
             style = rng.choices(names, weights=w)[0]
             other = rng.choice([o for o in pool if o is not c])  # same split: no leakage
-            rows.append({
-                "qid": f"{split}-{len(rows):04d}",
-                "customer_id": c["customer_id"],
-                "level": style,
-                "field": field,
-                "question": _question(style, field, c["customer_id"], other["customer_id"], rng),
-                "answer": c[field],
-            })
+            rows.append(
+                {
+                    "qid": f"{split}-{len(rows):04d}",
+                    "customer_id": c["customer_id"],
+                    "level": style,
+                    "field": field,
+                    "question": _question(style, field, c["customer_id"], other["customer_id"], rng),
+                    "answer": c[field],
+                }
+            )
     return rows
 
 
@@ -234,8 +277,9 @@ def _matches(predicted: str | None, expected: str, field: str) -> bool:
     return num is not None and abs(float(num.group()) - float(expected)) <= tol
 
 
-def score(conversation: list[dict], final_text: str, answer: str, field: str,
-          customer_id: str | None = None) -> dict:
+def score(
+    conversation: list[dict], final_text: str, answer: str, field: str, customer_id: str | None = None
+) -> dict:
     """Score one rollout. The components (each 0 or 1, plus counts):
 
     - ``correct``: the starred answer matches the true value
@@ -248,21 +292,31 @@ def score(conversation: list[dict], final_text: str, answer: str, field: str,
     calls = tool_calls(conversation)
     names = {f.__name__ for f in TOOLS}
     ids = _by_id()
-    fetched = [str(args.get("customer_id", "")).strip().upper()
-               for name, args in calls if name == "get_customer"]
+    fetched = [
+        str(args.get("customer_id", "")).strip().upper() for name, args in calls if name == "get_customer"
+    ]
     hallucinated = sum(1 for i in fetched if i not in ids)
     wrong = sum(1 for i in fetched if i in ids and customer_id and i != customer_id)
     # Tool results are "tool" turns, or "user" turns starting "Tool result" when AgentTune folds
     # them for a model without tool support (Tiny Aya).
     errors = sum(
-        1 for m in conversation or []
-        if isinstance(m, dict) and "'error'" in str(m.get("content", ""))
-        and (m.get("role") == "tool"
-             or (m.get("role") == "user" and str(m.get("content", "")).startswith("Tool result")))
+        1
+        for m in conversation or []
+        if isinstance(m, dict)
+        and "'error'" in str(m.get("content", ""))
+        and (
+            m.get("role") == "tool"
+            or (m.get("role") == "user" and str(m.get("content", "")).startswith("Tool result"))
+        )
     )
     right_record = bool(fetched) and (customer_id is None or customer_id in fetched)
-    tool_ok = (right_record and hallucinated == 0 and wrong == 0 and errors == 0
-               and all(n in names for n, _ in calls))
+    tool_ok = (
+        right_record
+        and hallucinated == 0
+        and wrong == 0
+        and errors == 0
+        and all(n in names for n, _ in calls)
+    )
     n_starred = sum(1 for f in _STARRED.findall(final_text or "") if f.strip())
     predicted = starred(final_text)
     return {
@@ -288,7 +342,9 @@ def _final_text(conversation: list[dict] | None, completion: Any) -> str:
     return str(completion or "")
 
 
-def make_reward_fn(weights: dict | None = None, log_path: str | Path | None = None):
+def make_reward_fn(
+    weights: dict | None = None, log_path: str | Path | None = None
+) -> Callable[..., list[float]]:
     """A GRPO reward function: the weighted sum of :func:`score`'s components.
 
     TRL passes the dataset columns (``answer``, ``field``, ``customer_id``, ``qid``, ``level``)
@@ -303,8 +359,19 @@ def make_reward_fn(weights: dict | None = None, log_path: str | Path | None = No
     lock = threading.Lock()
     state = {"calls": 0}
 
-    def lookup_reward(completions, answer=None, field=None, qid=None, level=None, customer_id=None,
-                      conversations=None, responses=None, **kwargs) -> list[float]:
+    def lookup_reward(
+        completions: list[Any],
+        answer: list[str] | None = None,
+        field: list[str] | None = None,
+        qid: list[str] | None = None,
+        level: list[str] | None = None,
+        customer_id: list[str] | None = None,
+        conversations: list[Any] | None = None,
+        responses: list[str] | None = None,
+        **kwargs: Any,
+    ) -> list[float]:
+        if answer is None or field is None:
+            raise ValueError("the training dataset needs 'answer' and 'field' columns")
         n = len(completions)
         convs = conversations if conversations is not None else [None] * n
         state["calls"] += 1
@@ -314,15 +381,27 @@ def make_reward_fn(weights: dict | None = None, log_path: str | Path | None = No
         step = getattr(trainer_state, "global_step", None)
         rewards, rows = [], []
         for i in range(n):
-            text = (responses[i] if responses is not None and responses[i] else
-                    _final_text(convs[i], completions[i]))
-            s = score(convs[i] or [], text, answer[i], field[i],
-                      customer_id[i] if customer_id else None)
+            text = (
+                responses[i]
+                if responses is not None and responses[i]
+                else _final_text(convs[i], completions[i])
+            )
+            s = score(convs[i] or [], text, answer[i], field[i], customer_id[i] if customer_id else None)
             r = sum(w[k] * s[k] for k in w)
             rewards.append(r)
-            rows.append({"step": step, "call": state["calls"], "qid": qid[i] if qid else None,
-                         "level": level[i] if level else None, "field": field[i],
-                         "expected": answer[i], **s, "reward": r, "final_text": text[:300]})
+            rows.append(
+                {
+                    "step": step,
+                    "call": state["calls"],
+                    "qid": qid[i] if qid else None,
+                    "level": level[i] if level else None,
+                    "field": field[i],
+                    "expected": answer[i],
+                    **s,
+                    "reward": r,
+                    "final_text": text[:300],
+                }
+            )
         if log_path:
             with lock, open(log_path, "a", encoding="utf-8") as f:
                 for row in rows:
@@ -348,11 +427,10 @@ def _log_parts_to_wandb(rows: list[dict]) -> None:
         return
     if wandb.run is None or not rows:
         return
-    wandb.log({f"reward_parts/{k}": sum(float(r[k]) for r in rows) / len(rows) for k in _PARTS},
-              commit=False)
+    wandb.log({f"reward_parts/{k}": sum(float(r[k]) for r in rows) / len(rows) for k in _PARTS}, commit=False)
 
 
-def _write_debug(path: Path, completions, conversations, kwargs) -> None:
+def _write_debug(path: Path, completions: list[Any], conversations: list[Any], kwargs: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     debug = {
         "kwarg_names": sorted(kwargs) + ["completions", "conversations"],

@@ -24,6 +24,8 @@ import json
 import os
 import pathlib
 import time
+from collections.abc import Callable, Sequence
+from typing import Any
 
 import yaml
 
@@ -49,7 +51,7 @@ def add(a: int, b: int) -> int:
     return a + b
 
 
-def says_five(completions, **kwargs) -> list[float]:
+def says_five(completions: list[Any], **kwargs: Any) -> list[float]:
     """Smoke-run reward (AgentTune README): 1 if the rollout mentions 5."""
     return [1.0 if "5" in str(c) else 0.0 for c in completions]
 
@@ -84,7 +86,9 @@ def _wandb_url() -> str | None:
     return wandb.run.url if wandb.run is not None else None
 
 
-def build_task(cfg: dict, out: pathlib.Path):
+def build_task(
+    cfg: dict, out: pathlib.Path
+) -> tuple[Any, Sequence[Callable[..., Any]], Sequence[Callable[..., Any]]]:
     """(train dataset, tools, reward functions) for the config's task."""
     from datasets import Dataset
 
@@ -95,11 +99,19 @@ def build_task(cfg: dict, out: pathlib.Path):
     if task == "messy_lookup":
         mod = messy_lookup
         rows = mod.questions("train", styles=cfg.get("task_options", {}).get("styles"))
-        ds = Dataset.from_list([
-            {"prompt": mod.prompt(r), "answer": r["answer"], "field": r["field"],
-             "customer_id": r["customer_id"], "qid": r["qid"], "level": r["level"]}
-            for r in rows
-        ])
+        ds = Dataset.from_list(
+            [
+                {
+                    "prompt": mod.prompt(r),
+                    "answer": r["answer"],
+                    "field": r["field"],
+                    "customer_id": r["customer_id"],
+                    "qid": r["qid"],
+                    "level": r["level"],
+                }
+                for r in rows
+            ]
+        )
         reward = mod.make_reward_fn(cfg.get("reward_weights"), log_path=out / "rewards.jsonl")
         return ds, mod.TOOLS, [reward]
     raise ValueError(f"unknown task {task!r}: expected add_smoke or messy_lookup")
@@ -149,8 +161,14 @@ def main() -> int:
         torch.cuda.reset_peak_memory_stats()  # peak_gpu_gb excludes vLLM's own memory
     t0 = time.time()
     trainer = create_agentic_trainer(
-        algorithm="grpo", backend="trl", model=cfg["model"], train_dataset=ds,
-        tools=tools, reward_funcs=rewards, output_dir=str(out), **trainer_kw,
+        algorithm="grpo",
+        backend="trl",
+        model=cfg["model"],
+        train_dataset=ds,
+        tools=tools,
+        reward_funcs=rewards,
+        output_dir=str(out),
+        **trainer_kw,
     )
     stats = trainer.train()
     wall = time.time() - t0
