@@ -3,6 +3,7 @@
     just oracle-score results/episodes/arms/A-retail-dev.jsonl results/episodes/arms/A-airline-dev.jsonl
     just oracle-score results/episodes/arms/A-telecom-train.jsonl --only dev
     just oracle-score <files> --judges off      # deterministic checks only: free, but some → unknown
+    python scripts/arms/oracle_score.py <files> --workers 8 --json results/oracle.json
 
 Each conversation is re-scored by ``reflexive.oracle.Tau2Oracle`` (τ²-bench's evaluator, inside
 AuditKIT), never read from the record. Prints the verdicts (success / failure / unknown /
@@ -11,9 +12,15 @@ conversation where the oracle disagrees with the verdict the run saved. With ``u
 verdicts (judges off), the success rate is given as bounds: unknowns counted as failures,
 then as successes.
 
-**Judges** (default on): retail's and airline's LLM-judged checks call OpenAI (needs
-``OPENAI_API_KEY``, about a cent per conversation). With ``--judges off`` a conversation that
-passes its deterministic checks is ``unknown``, not ``success``.
+**Judges** (``--judges auto``, the default, as in ``rollout.py``: on when ``OPENAI_API_KEY`` is
+set): retail's and airline's LLM-judged checks call OpenAI, about a cent per conversation.
+``--judges on`` without the key is refused. With judges off, a conversation that passes its
+deterministic checks is ``unknown``, not ``success``.
+
+Conversations are scored ``--workers`` at a time (default 4; the judges are API calls). A
+half-written last line (a rollout still running, or stopped) is skipped. A record that can't be
+made into an episode is an ``error`` verdict, not a traceback. Each conversation is keyed by
+arm, domain, task and sample: the same one in two files is counted once overall, with a warning.
 """
 
 from __future__ import annotations
@@ -21,7 +28,9 @@ from __future__ import annotations
 import argparse
 import collections
 import json
+import os
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -31,15 +40,37 @@ from reflexive.oracle import Tau2Oracle, case_for, episode_from_record
 from reflexive.stats import wilson
 
 
-def score_all(recs: list[dict[str, Any]], oracle: Tau2Oracle) -> list[tuple[dict[str, Any], Any, Any]]:
-    """(record, verdict, the record's own saved verdict) for each record."""
-    from auditkit.agent_eval.outcome import resolve_outcome
+def key(r: dict[str, Any]) -> str:
+    """One conversation: arm, domain, task and sample (``A retail:12 #0``)."""
+    return f"{r.get('arm', '?')} {r.get('domain')}:{r.get('task_id')} #{r.get('sample', 0)}"
 
-    out = []
-    for r in recs:
+
+def score_one(r: dict[str, Any], oracle: Tau2Oracle) -> tuple[dict[str, Any], Any, Any]:
+    """(record, verdict, the record's own saved verdict). A malformed record is an ``error``."""
+    from auditkit.agent_eval.outcome import ERROR, Outcome, resolve_outcome
+
+    try:
         ep = episode_from_record(r)
-        out.append((r, resolve_outcome(ep, case_for(r, oracle)), ep.source_verdict))
-    return out
+    except Exception as e:  # noqa: BLE001 - one bad record shouldn't stop the run
+        why = f"the record can't be read as a conversation ({type(e).__name__}: {str(e)[:200]})"
+        return r, Outcome(ERROR, reason=why, source=oracle.identity()), None
+    return r, resolve_outcome(ep, case_for(r, oracle)), ep.source_verdict
+
+
+def score_all(
+    recs: list[dict[str, Any]], oracle: Tau2Oracle, workers: int = 1
+) -> list[tuple[dict[str, Any], Any, Any]]:
+    """``score_one`` for each record, ``workers`` at a time, in the records' order."""
+    with ThreadPoolExecutor(max(1, workers)) as pool:
+        return list(pool.map(lambda r: score_one(r, oracle), recs))
+
+
+def in_split(r: dict[str, Any], only: str) -> bool:
+    """Whether a record's task is in the ``only`` split; a task in no split (or no task) isn't."""
+    try:
+        return splits.split_of(r["domain"], str(r["task_id"])) == only
+    except KeyError:
+        return False
 
 
 def summary(scored: list[tuple[dict[str, Any], Any, Any]]) -> dict[str, Any]:
@@ -48,7 +79,7 @@ def summary(scored: list[tuple[dict[str, Any], Any, Any]]) -> dict[str, Any]:
     k, n, u = counts["success"], counts["success"] + counts["failure"], counts["unknown"]
     lo, hi = wilson(k, n)
     disagree = [
-        {"task": f"{r['domain']}:{r['task_id']}", "oracle": o.verdict, "saved": saved, "reason": o.reason}
+        {"task": key(r), "oracle": o.verdict, "saved": saved, "reason": o.reason}
         for r, o, saved in scored
         if saved and o.verdict in ("success", "failure") and o.verdict != saved
     ]
@@ -79,26 +110,55 @@ def main() -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("files", type=Path, nargs="+", help="rollout files (results/episodes/arms/*.jsonl)")
     p.add_argument("--only", choices=["train", "dev"], help="keep only this frozen split's tasks")
-    p.add_argument("--judges", choices=["on", "off"], default="on")
+    p.add_argument(
+        "--judges", choices=["auto", "on", "off"], default="auto", help="auto: on with OPENAI_API_KEY"
+    )
+    p.add_argument("--workers", type=int, default=4, help="conversations scored at once (default 4)")
     p.add_argument("--json", type=Path, help="also write the summary per file, and overall, here")
     a = p.parse_args()
+    key_set = bool(os.environ.get("OPENAI_API_KEY"))
+    if a.judges == "on" and not key_set:
+        print(
+            "⛔ --judges on needs OPENAI_API_KEY (retail's and airline's judges call OpenAI): "
+            "set it, or pass --judges off"
+        )
+        return 1
+    if len({f.resolve() for f in a.files}) < len(a.files):
+        print("⛔ the same file is given twice: each conversation would count twice overall")
+        return 1
     from loguru import logger
 
     logger.remove()  # τ²-bench logs every step
-    oracle = Tau2Oracle(judges=a.judges == "on")
-    print(f"oracle: {oracle.identity()['version']}")
+    oracle = Tau2Oracle(judges={"on": True, "off": False}.get(a.judges, key_set))
+    print(
+        f"oracle: {oracle.identity()['version']}"
+        + (" (auto: no OPENAI_API_KEY)" if a.judges == "auto" and not key_set else "")
+    )
     report: dict[str, Any] = {"oracle": oracle.identity(), "files": {}}
-    everything = []
+    everything, seen = [], set()
     for f in a.files:
         try:
-            recs = read_jsonl(f)
+            recs = read_jsonl(f, partial_last_ok=True)
         except (BadJsonLine, FileNotFoundError) as e:
             print(f"⛔ {e}")
             return 1
         if a.only:
-            recs = [r for r in recs if splits.split_of(r["domain"], str(r["task_id"])) == a.only]
-        scored = score_all(recs, oracle)
-        everything += scored
+            unsplit = [r for r in recs if not any(in_split(r, sp) for sp in splits.SPLITS)]
+            if unsplit:
+                print(
+                    f"⚠ {shown(f)}: {len(unsplit)} records in no frozen split "
+                    f"(e.g. {key(unsplit[0])}): left out"
+                )
+            recs = [r for r in recs if in_split(r, a.only)]
+        scored = score_all(recs, oracle, a.workers)
+        repeats = [x for x in scored if key(x[0]) in seen]
+        if repeats:
+            print(
+                f"⚠ {shown(f)}: {len(repeats)} conversations already in an earlier file "
+                f"(e.g. {key(repeats[0][0])}): counted once overall"
+            )
+        everything += [x for x in scored if key(x[0]) not in seen]
+        seen |= {key(r) for r in recs}
         if not recs:
             print(f"⚠ {shown(f)}: no records{f' in the {a.only} split' if a.only else ''}")
         s = summary(scored)

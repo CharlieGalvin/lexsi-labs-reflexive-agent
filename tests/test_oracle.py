@@ -12,7 +12,7 @@ import pytest
 from auditkit.agent_eval.outcome import ERROR, FAILURE, SUCCESS, UNKNOWN, resolve_outcome
 from test_golden import record
 
-from reflexive.oracle import Tau2Oracle, case_for, episode_from_record
+from reflexive.oracle import Tau2Oracle, case_for, episode_from_record, record_of
 
 Record = dict[str, Any]
 
@@ -41,7 +41,7 @@ def test_an_episode_without_its_record_is_an_error() -> None:
 
 def test_the_identity_names_the_scorer_and_whether_judges_ran() -> None:
     on, off = Tau2Oracle(judges=True).identity(), Tau2Oracle(judges=False).identity()
-    assert on["type"] == "custom_predicate" and on["fn"] == "reflexive.outcome.score"
+    assert on["type"] == "tau2_score" and on["fn"] == "reflexive.outcome.score"
     assert "tau2-bench 2.0.0" in on["version"] and on["version"] != off["version"]
     assert "judges off" in off["version"]
 
@@ -51,7 +51,8 @@ def test_the_episode_shows_what_the_agent_saw_and_keeps_the_record_for_scoring()
     ep = episode_from_record(rec)
     calls = [e for e in ep.events if e.type == "tool_call"]
     assert calls and all("check_status_bar" not in str(e.payload) for e in calls)  # the customer's own action
-    assert ep.metadata["tau2_record"] is rec and ep.stop_reason == rec["termination"]
+    assert record_of(ep)["messages"] == rec["messages"] and ep.stop_reason == rec["termination"]
+    assert "tau2_record" not in ep.metadata and "tau2_record" not in ep.to_dict()
     assert ep.source_verdict == SUCCESS  # provenance only: AuditKIT never acts on it
     assert episode_from_record(record(error="boom")).source_verdict is None
 
@@ -192,3 +193,120 @@ def test_the_overall_line_survives_nothing_left_to_score(tmp_path: Any, monkeypa
     assert os_.main() == 0
     out = capsys.readouterr().out
     assert "overall: success rate n/a (nothing scored)" in out and "no records in the dev split" in out
+
+
+# --- Review of #43 (Chiara, 6 Nov) -------------------------------------------------------------
+
+
+def test_a_pass_with_judged_checks_skipped_is_unverified_even_when_no_check_ran() -> None:
+    """A judged-only task with judges off: τ²-bench runs nothing and returns 1.0."""
+    from reflexive.outcome import Outcome
+
+    nothing_ran = Outcome(passed=True, reward=1.0, checks={}, judged=False, skipped=["NL_ASSERTION"])
+    assert not nothing_ran.verified
+    failed = Outcome(passed=False, reward=0.0, checks={"DB": 0.0}, judged=False, skipped=["NL_ASSERTION"])
+    assert failed.verified  # a check that ran failed: the skipped ones can't save it
+    assert Outcome(passed=True, reward=1.0, checks={"DB": 1.0}, judged=True).verified
+
+
+def test_the_oracle_calls_a_judged_only_pass_unknown(monkeypatch) -> None:
+    import reflexive.outcome as outcome
+
+    fake = outcome.Outcome(passed=True, reward=1.0, checks={}, judged=False, skipped=["COMMUNICATE"])
+    monkeypatch.setattr(outcome, "score", lambda *a, **k: fake)
+    out = verdict(record())
+    assert out.verdict == UNKNOWN and "no check ran" in out.reason
+
+
+def test_a_failure_saved_with_judges_off_is_still_compared() -> None:
+    saved = {"passed": False, "reward": 0.0, "checks": {"DB": 0.0}, "skipped": ["NL_ASSERTION"]}
+    assert episode_from_record(record(outcome=saved)).source_verdict == FAILURE
+
+
+def test_a_crash_with_no_ending_keeps_its_error_text() -> None:
+    rec = record(error="RateLimitError: 429")
+    rec.pop("termination")
+    out = verdict(rec)
+    assert out.verdict == ERROR and "RateLimitError" in out.reason and out.evidence["error"]
+
+
+def test_the_episode_carries_only_what_the_oracle_scores_from() -> None:
+    ep = episode_from_record(record())
+    assert set(record_of(ep)) == {"domain", "task_id", "messages", "termination", "error"}
+
+
+# --- just oracle-score (review of #43) ---------------------------------------------------------
+
+
+def _script() -> Any:
+    from _scripts import load_script
+
+    pytest.importorskip("loguru")
+    return load_script("arms/oracle_score")
+
+
+def _main(monkeypatch, *argv: str) -> int:
+    import sys
+
+    monkeypatch.setattr(sys, "argv", ["oracle_score.py", *argv])
+    return _script().main()
+
+
+def _write(path: Any, *recs: Record, tail: str = "") -> str:
+    import json
+
+    path.write_text("".join(json.dumps(r) + "\n" for r in recs) + tail)
+    return str(path)
+
+
+def test_a_malformed_record_is_an_error_verdict_not_a_traceback() -> None:
+    os_ = _script()
+    bad = record()
+    bad.pop("messages")
+    [(_, out, saved)] = os_.score_all([bad], Tau2Oracle(judges=False))
+    assert out.verdict == ERROR and "can't be read" in out.reason and saved is None
+
+
+def test_scoring_in_parallel_keeps_the_records_order() -> None:
+    os_ = _script()
+    recs = [record(task_id=str(i), error="boom") for i in range(20)]
+    got = os_.score_all(recs, Tau2Oracle(judges=False), workers=8)
+    assert [r["task_id"] for r, _, _ in got] == [str(i) for i in range(20)]
+
+
+def test_a_half_written_last_line_is_skipped(tmp_path: Any, monkeypatch, capsys) -> None:
+    f = _write(tmp_path / "A-telecom-train.jsonl", record(error="boom"), tail='{"domain": "tel')
+    assert _main(monkeypatch, f, "--judges", "off") == 0
+    assert "1 error" in capsys.readouterr().out
+
+
+def test_judges_on_without_the_key_is_refused_and_auto_falls_back(tmp_path: Any, monkeypatch, capsys) -> None:
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    f = _write(tmp_path / "A-telecom-train.jsonl", record(error="boom"))
+    assert _main(monkeypatch, f, "--judges", "on") == 1 and "needs OPENAI_API_KEY" in capsys.readouterr().out
+    assert _main(monkeypatch, f) == 0 and "judges off (auto: no OPENAI_API_KEY)" in capsys.readouterr().out
+
+
+def test_the_same_file_twice_is_refused_and_repeats_count_once(tmp_path: Any, monkeypatch, capsys) -> None:
+    f = _write(tmp_path / "a.jsonl", record(error="boom"))
+    assert _main(monkeypatch, f, f, "--judges", "off") == 1 and "given twice" in capsys.readouterr().out
+    g = _write(tmp_path / "b.jsonl", record(error="boom"), record(error="boom", sample=1))
+    assert _main(monkeypatch, f, g, "--judges", "off") == 0
+    out = capsys.readouterr().out
+    assert "1 conversations already in an earlier file (e.g. ? telecom:t1 #0)" in out
+    assert "overall: success rate n/a (nothing scored), 0 unknown, 2 error" in out
+
+
+def test_only_leaves_out_a_task_in_no_split_with_a_warning(tmp_path: Any, monkeypatch, capsys) -> None:
+    f = _write(tmp_path / "a.jsonl", record(domain="retail", task_id="9999"))
+    assert _main(monkeypatch, f, "--only", "dev", "--judges", "off") == 0
+    assert "1 records in no frozen split" in capsys.readouterr().out
+
+
+def test_disagreements_name_the_sample() -> None:
+    from types import SimpleNamespace as NS
+
+    os_ = _script()
+    r = {"arm": "A", "domain": "retail", "task_id": "12", "sample": 2}
+    s = os_.summary([(r, NS(verdict=FAILURE, reason="DB"), SUCCESS)])
+    assert s["disagreements_with_saved"][0]["task"] == "A retail:12 #2"
