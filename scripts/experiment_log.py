@@ -14,6 +14,10 @@ customers): ``task_success`` = share answered correctly, with a 95% Wilson inter
 ``calls_per_success`` = tool calls ÷ correct answers; ``hallucination_rate`` = share of questions
 with an Arg error (a ``customer_id`` that doesn't exist, or a real one of the wrong customer).
 
+**Only the official eval is recorded**: the whole eval split, greedy, with the config's model,
+tool steps and token budget (``official_problems``, from the settings ``eval_lookup.py`` saves
+next to its CSV). Anything else is refused, so a quick look can't become a metrics file.
+
 **The log row** fills an empty placeholder row with the same run name (the ``base`` row), or is
 added at the end of the table. A metrics file is never overwritten: record under a new run name.
 Stdlib only.
@@ -34,6 +38,31 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 RESULTS = ROOT / "results"
 LOG = ROOT / "docs" / "EXPERIMENTS.md"
 TYPE_ORDER = ("clean", "lower_dash", "spaced", "number_only", "spelled", "distractor")
+MAX_NEW_TOKENS = 256  # the official eval's budget per turn (eval_lookup.py's default)
+
+
+def official_problems(s: dict) -> list[str]:
+    """Why an eval (its summary: the settings ``eval_lookup.py`` saves next to the CSV) isn't
+    the official one a metrics file describes: the whole eval split, greedy, with the config's
+    model, tool steps and the standard token budget. Empty if it is."""
+    if not s or "temperature" not in s:
+        return ["the eval's settings aren't recorded next to its CSV (an older eval): re-run it"]
+    problems = []
+    if s.get("split") != "eval":
+        problems.append(f"split {s.get('split')!r}, not the eval split")
+    if s.get("temperature"):
+        problems.append(f"temperature {s['temperature']}, not greedy")
+    if s.get("limit") is not None or s.get("n") != s.get("questions_in_split"):
+        problems.append(f"{s.get('n')} of the split's {s.get('questions_in_split')} questions (--limit)")
+    if s.get("max_tool_steps") != s.get("config_max_tool_steps"):
+        problems.append(
+            f"--max-tool-steps {s.get('max_tool_steps')}, the config has {s.get('config_max_tool_steps')}"
+        )
+    if s.get("max_new_tokens") != MAX_NEW_TOKENS:
+        problems.append(f"--max-new-tokens {s.get('max_new_tokens')}, not {MAX_NEW_TOKENS}")
+    if s.get("model") != s.get("config_model"):
+        problems.append(f"--model {s.get('model')}, the config's model is {s.get('config_model')}")
+    return problems
 
 
 def wilson(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
@@ -182,6 +211,15 @@ def record(a: argparse.Namespace) -> int:
         rows = list(csv.DictReader(f))
     summary_path = pathlib.Path(a.eval_csv).with_suffix(".json")
     summary = json.loads(summary_path.read_text()) if summary_path.exists() else {}
+    # The metrics file says "greedy, the whole eval split": refuse any eval that isn't
+    problems = official_problems(summary)
+    if summary and summary.get("n") != len(rows):
+        problems.append(f"the CSV has {len(rows)} rows, its summary says {summary.get('n')}")
+    if problems:
+        for x in problems:
+            print(f"not the official eval: {x}", file=sys.stderr)
+        print("nothing recorded: run `just baseline` / `just evaluate` without overrides", file=sys.stderr)
+        return 1
     training = None
     if a.adapter and (pathlib.Path(a.adapter) / "run_summary.json").exists():
         training = json.loads((pathlib.Path(a.adapter) / "run_summary.json").read_text())

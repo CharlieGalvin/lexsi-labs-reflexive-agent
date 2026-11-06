@@ -13,8 +13,12 @@ Greedy decoding, the same rollout code and tool prompt as training (AgentTune's
 The eval split's 40 customers never appear in training.
 
 Writes one CSV row per question (``--out``, default ``<adapter or runs/base-messy>/eval_<split>.csv``)
-and prints success rates by level (question type). ``--record RUN`` then writes
-``results/RUN.metrics.json`` and a docs/EXPERIMENTS.md row (scripts/experiment_log.py).
+and prints success rates by level (question type). A run with any override (``--limit``,
+``--temperature``, ``--model``, ``--max-tool-steps``, ``--max-new-tokens``) gets its own file
+name, e.g. ``eval_eval_n10.csv``, so it never replaces the full eval. The settings are saved
+next to the CSV (``.json``). ``--record RUN`` then writes ``results/RUN.metrics.json`` and a
+docs/EXPERIMENTS.md row (scripts/experiment_log.py); it refuses, before loading the model,
+anything but the official eval (``experiment_log.official_problems``).
 """
 
 from __future__ import annotations
@@ -24,9 +28,26 @@ import json
 import pathlib
 import time
 
-import yaml
+import experiment_log  # scripts/experiment_log.py (this script's folder is on sys.path); stdlib only
+from train_grpo import load_config  # the same config reading as training, `base:` included
 
 from reflexive import messy_lookup
+
+
+def suffix(s: dict) -> str:
+    """The CSV name's tag for every setting that differs from the official eval ("" for it)."""
+    tags = []
+    if s["temperature"]:
+        tags.append(f"t{s['temperature']:g}")
+    if s["limit"] is not None:
+        tags.append(f"n{s['limit']}")
+    if s["max_tool_steps"] != s["config_max_tool_steps"]:
+        tags.append(f"steps{s['max_tool_steps']}")
+    if s["max_new_tokens"] != experiment_log.MAX_NEW_TOKENS:
+        tags.append(f"tok{s['max_new_tokens']}")
+    if s["model"] != s["config_model"]:
+        tags.append("model-" + "".join(c if c.isalnum() or c in "-." else "-" for c in s["model"]))
+    return "".join(f"_{t}" for t in tags)
 
 
 def main() -> int:
@@ -42,7 +63,7 @@ def main() -> int:
     ap.add_argument("--split", default="eval", choices=["eval", "train"])
     ap.add_argument("--limit", type=int, help="only the first N questions")
     ap.add_argument("--max-tool-steps", type=int, help="default: the config's max_steps_per_turn, else 3")
-    ap.add_argument("--max-new-tokens", type=int, default=256)
+    ap.add_argument("--max-new-tokens", type=int, default=experiment_log.MAX_NEW_TOKENS)
     ap.add_argument(
         "--temperature",
         type=float,
@@ -54,28 +75,46 @@ def main() -> int:
     ap.add_argument("--arm", help="with --record: the experiment arm, e.g. A")
     a = ap.parse_args()
 
-    if a.record and (a.split != "eval" or a.temperature):
-        ap.error("--record only records the eval split with greedy decoding")
-    if a.record and (pathlib.Path("results") / f"{a.record}.metrics.json").exists():
-        ap.error(f"results/{a.record}.metrics.json exists; pick a new run name")
+    cfg = load_config(a.config)
+    task = cfg.get("task")
+    if task != "messy_lookup":
+        raise SystemExit(f"--config: task is {task!r}, expected messy_lookup")
+    mod = messy_lookup
+    config_model = cfg.get("model", "CohereLabs/tiny-aya-global")
+    config_steps = cfg.get("trainer", {}).get("max_steps_per_turn", 3)
+    a.model = a.model or config_model
+    max_tool_steps = a.max_tool_steps or config_steps
+    split_rows = mod.questions(a.split, styles=cfg.get("task_options", {}).get("styles"))
+    rows = split_rows[: a.limit]
+    settings = {
+        "model": a.model,
+        "config_model": config_model,
+        "adapter": str(a.adapter) if a.adapter else None,
+        "config": str(a.config),
+        "split": a.split,
+        "temperature": a.temperature,
+        "limit": a.limit,
+        "n": len(rows),
+        "questions_in_split": len(split_rows),
+        "max_tool_steps": max_tool_steps,
+        "config_max_tool_steps": config_steps,
+        "max_new_tokens": a.max_new_tokens,
+    }
+    # Refuse before loading the model: a wrong --record would only fail after the whole eval
+    if a.record:
+        out = experiment_log.RESULTS / f"{a.record}.metrics.json"
+        if out.exists():
+            ap.error(f"{out.relative_to(experiment_log.ROOT)} exists; pick a new run name")
+        if problems := experiment_log.official_problems(settings):
+            ap.error("--record only records the official eval: " + "; ".join(problems))
+    dest = a.out or (a.adapter or pathlib.Path("runs/base-messy")) / f"eval_{a.split}{suffix(settings)}.csv"
 
-    import experiment_log  # scripts/experiment_log.py (this script's folder is on sys.path)
     import pandas as pd
     import torch
     from agenttune.agentic.rollout_engines.rollout_factory import create_rollout_fn
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
-    cfg = yaml.safe_load(a.config.read_text())
-    if "base" in cfg:
-        raise SystemExit("--config: pass the config the 'base:' line points to")
-    task = cfg.get("task")
-    if task != "messy_lookup":
-        raise SystemExit(f"--config: task is {task!r}, expected messy_lookup")
-    mod = messy_lookup
-    a.model = a.model or cfg.get("model", "CohereLabs/tiny-aya-global")
-    max_tool_steps = a.max_tool_steps or cfg.get("trainer", {}).get("max_steps_per_turn", 3)
-    rows = mod.questions(a.split, styles=cfg.get("task_options", {}).get("styles"))[: a.limit]
-    print(f"task={task} model={a.model} adapter={a.adapter} questions={len(rows)}")
+    print(f"task={task} model={a.model} adapter={a.adapter} questions={len(rows)} -> {dest}")
     tok = AutoTokenizer.from_pretrained(a.model)
     model = AutoModelForCausalLM.from_pretrained(a.model, dtype=torch.bfloat16, device_map="cuda")
     if a.adapter:
@@ -104,8 +143,6 @@ def main() -> int:
             print(f"{i}/{len(rows)}  correct so far {done.correct.mean():.0%}  ({time.time() - t0:.0f}s)")
 
     df = pd.DataFrame(records)
-    suffix = f"_t{a.temperature:g}" if a.temperature else ""
-    dest = a.out or (a.adapter or pathlib.Path("runs/base-messy")) / f"eval_{a.split}{suffix}.csv"
     dest.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(dest, index=False)
 
@@ -115,9 +152,7 @@ def main() -> int:
     print("\nOverall:")
     print(df[cols].mean().round(2).to_string())
     summary = {
-        "model": a.model,
-        "adapter": str(a.adapter) if a.adapter else None,
-        "split": a.split,
+        **settings,
         "commit": experiment_log._git("rev-parse", "--short", "HEAD"),
         "n": len(df),
         "seconds": round(time.time() - t0),

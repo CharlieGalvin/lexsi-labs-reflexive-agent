@@ -26,7 +26,8 @@ import json
 import random
 import re
 import threading
-from collections.abc import Callable
+import time
+from collections.abc import Callable, Mapping
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -192,7 +193,24 @@ def _question(style: str, field: str, cid: str, other_cid: str, rng: random.Rand
     return f"My partner is customer {other_cid}, but I'm asking about me: customer {cid}. What is {what}?"
 
 
-def questions(split: str, styles: dict[str, float] | None = None, per_customer: int = 3) -> list[dict]:
+def _canonical(styles: Mapping[str, float]) -> dict[str, float]:
+    """The weights in ``STYLES`` order, whole numbers as ints, so the same mix always gives the same
+    seed and the same type choices: ``clean: 1`` and ``clean: 1.0``, or any key order, are one mix.
+
+    This is the form the recorded runs (6 Nov) were seeded with: the config's int weights, in
+    ``STYLES`` order. Keep it, or their question sets change."""
+    unknown = set(styles) - set(STYLES)
+    if unknown:
+        raise ValueError(f"unknown question types {sorted(unknown)}; choose from {STYLES}")
+    out: dict[str, float] = {}
+    for name in STYLES:
+        if name in styles:
+            v = float(styles[name])
+            out[name] = int(v) if v.is_integer() else v
+    return out
+
+
+def questions(split: str, styles: Mapping[str, float] | None = None, per_customer: int = 3) -> list[dict]:
     """Question rows for ``split`` ("train" or "eval"); the same arguments give the same rows.
 
     Each row: ``qid``, ``customer_id``, ``level`` (the question type), ``field``,
@@ -201,10 +219,7 @@ def questions(split: str, styles: dict[str, float] | None = None, per_customer: 
     """
     if split not in ("train", "eval"):
         raise ValueError(f"split must be 'train' or 'eval', not {split!r}")
-    weights = styles or {s: 1.0 for s in STYLES}
-    unknown = set(weights) - set(STYLES)
-    if unknown:
-        raise ValueError(f"unknown question types {sorted(unknown)}; choose from {STYLES}")
+    weights = _canonical(styles or {s: 1 for s in STYLES})
     names, w = zip(*weights.items(), strict=True)
     held_out = eval_customer_ids()
     pool = [c for c in customers() if (c["customer_id"] in held_out) == (split == "eval")]
@@ -257,8 +272,12 @@ def tool_calls(conversation: list[dict]) -> list[tuple[str, dict]]:
     return calls
 
 
-# One *answer* (not **bold**). Whitespace inside is allowed: Tiny Aya writes "*45.1\n*".
-_STARRED = re.compile(r"(?<!\*)\*([^*]{1,80})\*(?!\*)")
+# One *answer* (not **bold**). The opening star is followed by the answer itself, so a
+# multiplication sign ("2 * 3 = *6*") never opens one; whitespace before the closing star is
+# allowed: Tiny Aya writes "*45.1\n*".
+_STARRED = re.compile(r"(?<!\*)\*(?=[^\s*])([^*]{1,80})\*(?!\*)")
+# A customer ID inside an answer ("*C1023: 45.10*"): not the value, so it's ignored when matching
+_ID_IN_ANSWER = re.compile(r"\b[Cc][- ]?\d{4}\b")
 
 
 def starred(text: str) -> str | None:
@@ -273,7 +292,8 @@ def _matches(predicted: str | None, expected: str, field: str) -> bool:
     tol = FIELDS[field][1]
     if tol is None:
         return predicted.strip(" .").lower() == expected.lower()
-    num = re.search(r"-?\d+(?:\.\d+)?", predicted.replace(",", ""))
+    # The first number once customer IDs are dropped: an answer without an ID scores as before
+    num = re.search(r"-?\d+(?:\.\d+)?", _ID_IN_ANSWER.sub(" ", predicted).replace(",", ""))
     return num is not None and abs(float(num.group()) - float(expected)) <= tol
 
 
@@ -356,6 +376,11 @@ def make_reward_fn(
     """
     w = {**DEFAULT_WEIGHTS, **(weights or {})}
     log_path = Path(log_path) if log_path else None
+    if log_path and log_path.exists() and log_path.stat().st_size:
+        # A run that stopped before run_summary.json left rows here: keep them apart, or the
+        # re-run's curves would average both runs' step 1, 2, ...
+        old = log_path.with_name(f"{log_path.stem}.stopped-{int(time.time())}{log_path.suffix}")
+        log_path.rename(old)
     lock = threading.Lock()
     state = {"calls": 0}
 

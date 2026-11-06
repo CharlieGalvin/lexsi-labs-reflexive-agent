@@ -162,3 +162,54 @@ def test_reward_fn_logs_rows_and_debug(tmp_path):
     assert r == pytest.approx([1.7, 0.0])
     assert len((tmp_path / "rewards.jsonl").read_text().splitlines()) == 2
     assert (tmp_path / "reward_inputs_debug.json").exists()
+
+
+# --- Review of #47 (Chiara, 6 Nov) -------------------------------------------------------------
+
+CONFIG_STYLES = {s: 1 for s in ml.STYLES}  # configs/train/messy_grpo.yaml
+
+
+def _fingerprint(rows):
+    import hashlib
+    import json
+
+    return hashlib.sha256(json.dumps(rows).encode()).hexdigest()[:16]
+
+
+def test_the_recorded_runs_question_sets_are_unchanged():
+    """results/base and messy-grpo (6 Nov) were evaluated and trained on exactly these rows."""
+    assert _fingerprint(ml.questions("eval", styles=CONFIG_STYLES)) == "fccf90bc4bf08e53"
+    assert _fingerprint(ml.questions("train", styles=CONFIG_STYLES)) == "5c59f491bf6f6360"
+
+
+def test_the_same_mix_gives_the_same_questions_however_its_written():
+    want = ml.questions("eval", styles=CONFIG_STYLES)
+    assert ml.questions("eval") == want  # the default: equal weights
+    assert ml.questions("eval", styles={s: 1.0 for s in ml.STYLES}) == want  # floats
+    assert ml.questions("eval", styles=dict(reversed(list(CONFIG_STYLES.items())))) == want  # key order
+
+
+def test_an_id_in_the_answer_isnt_taken_for_the_value():
+    assert ml._matches("C1023: 45.10", "45.10", "balance")
+    assert ml._matches("c-1023 has 45.10", "45.10", "balance")
+    assert not ml._matches("C1023: 45.20", "45.10", "balance")
+    assert ml._matches("45.1 (45.1 GB)", "45.1", "data_left_gb")  # no ID: the first number, as before
+
+
+def test_a_multiplication_sign_doesnt_open_an_answer():
+    assert ml.starred("2 * 3 = *6*") == "6"
+    assert ml.starred("*45.1\n*") == "45.1"  # whitespace before the closing star is still fine
+    c = ml.customers()[0]
+    s = ml.score([], "2 * 3 = *6*", "6", "balance", c["customer_id"])
+    assert s["correct"] == 1.0 and s["format"] == 1.0
+
+
+def test_a_stopped_runs_rewards_are_kept_apart_from_the_re_run(tmp_path):
+    log = tmp_path / "rewards.jsonl"
+    log.write_text('{"step": 1, "reward": 0.5}\n' * 3)  # a run that died before run_summary.json
+    fn = ml.make_reward_fn(log_path=log)
+    c = ml.customers()[0]
+    fn(["x"], answer=[c["plan"]], field=["plan"], conversations=[[]], responses=["no idea"])
+    assert len(log.read_text().splitlines()) == 1  # only the re-run's row
+    (old,) = tmp_path.glob("rewards.stopped-*.jsonl")
+    assert len(old.read_text().splitlines()) == 3  # the stopped run's rows, kept
