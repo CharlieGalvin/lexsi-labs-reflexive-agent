@@ -18,6 +18,7 @@ Refuses to overwrite a finished run without ``--force``. Never reads dev or test
 from __future__ import annotations
 
 import argparse
+import inspect
 import json
 import os
 import time
@@ -55,6 +56,66 @@ def examples(cfg: dict[str, Any]) -> tuple[list[dict], list[dict]]:
     return train, held
 
 
+def trainer_args(cfg: dict[str, Any], out: Path, has_held_out: bool, bf16: bool) -> dict[str, Any]:
+    """TrainingArguments' keywords: the config's ``trainer`` section plus the fixed ones.
+
+    transformers 5 dropped ``warmup_ratio``: ``warmup_steps`` below 1 is now the ratio."""
+    from transformers import TrainingArguments
+
+    t = dict(cfg["trainer"])
+    eval_steps = t.pop("eval_steps", None)
+    known = inspect.signature(TrainingArguments.__init__).parameters
+    if "warmup_ratio" in t and "warmup_ratio" not in known:
+        t["warmup_steps"] = t.pop("warmup_ratio")
+    return {
+        "output_dir": str(out / "checkpoints"),
+        "bf16": bf16,
+        "gradient_checkpointing": True,
+        "gradient_checkpointing_kwargs": {"use_reentrant": False},
+        "eval_strategy": "steps" if has_held_out and eval_steps else "no",
+        "eval_steps": eval_steps,
+        "per_device_eval_batch_size": 1,
+        "save_strategy": "no",
+        "remove_unused_columns": False,
+        "report_to": ["wandb"] if os.environ.get("WANDB_API_KEY") else [],
+        "run_name": cfg["name"],
+        **t,
+    }
+
+
+def build_trainer(  # noqa: PLR0913 - the pieces a Trainer is made of
+    model: Any,
+    pad_id: int,
+    train_enc: list[dict[str, list[int]]],
+    held_enc: list[dict[str, list[int]]],
+    cfg: dict[str, Any],
+    out: Path,
+    log: Any,
+    bf16: bool,
+) -> Any:
+    """A Hugging Face Trainer over the tokenised examples; logs every step to ``log`` (JSON Lines)."""
+    import torch
+    from transformers import Trainer, TrainerCallback, TrainingArguments
+
+    def collate(batch: list[dict[str, list[int]]]) -> dict[str, Any]:
+        return {k: torch.tensor(v) for k, v in pad_batch(batch, pad_id).items()}
+
+    class Log(TrainerCallback):
+        def on_log(self, args, state, control, logs=None, **kw) -> None:  # noqa: ANN001, ANN003
+            if logs:
+                log.write(json.dumps({"step": state.global_step, **logs}) + "\n")
+                log.flush()
+
+    return Trainer(
+        model=model,
+        args=TrainingArguments(**trainer_args(cfg, out, bool(held_enc), bf16)),
+        train_dataset=train_enc,
+        eval_dataset=held_enc or None,
+        data_collator=collate,
+        callbacks=[Log()],
+    )
+
+
 def main() -> int:  # noqa: C901, PLR0915 - one linear script: load, tokenise, train, save
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("config", type=Path, nargs="?", default=CONFIG, help=f"default: {shown(CONFIG)}")
@@ -89,18 +150,12 @@ def main() -> int:  # noqa: C901, PLR0915 - one linear script: load, tokenise, t
 
     import torch
     from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
-    from transformers import (
-        AutoModelForCausalLM,
-        BitsAndBytesConfig,
-        Trainer,
-        TrainerCallback,
-        TrainingArguments,
-    )
+    from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 
     q = cfg.get("quantization", {})
     model = AutoModelForCausalLM.from_pretrained(
         cfg["model"],
-        torch_dtype=torch.bfloat16,
+        dtype=torch.bfloat16,
         attn_implementation="sdpa",
         quantization_config=BitsAndBytesConfig(
             load_in_4bit=q.get("load_in_4bit", True),
@@ -125,44 +180,9 @@ def main() -> int:  # noqa: C901, PLR0915 - one linear script: load, tokenise, t
     model.print_trainable_parameters()
 
     pad_id = tok.pad_token_id if tok.pad_token_id is not None else tok.eos_token_id
-
-    def collate(batch: list[dict[str, list[int]]]) -> dict[str, Any]:
-        return {k: torch.tensor(v) for k, v in pad_batch(batch, pad_id).items()}
-
     out.mkdir(parents=True, exist_ok=True)
     log = (out / "log.jsonl").open("w")
-
-    class Log(TrainerCallback):
-        def on_log(self, args, state, control, logs=None, **kw) -> None:  # noqa: ANN001, ANN003
-            if logs:
-                log.write(json.dumps({"step": state.global_step, **logs}) + "\n")
-                log.flush()
-
-    t = dict(cfg["trainer"])
-    eval_steps = t.pop("eval_steps", None)
-    wandb = bool(os.environ.get("WANDB_API_KEY"))
-    args = TrainingArguments(
-        output_dir=str(out / "checkpoints"),
-        bf16=True,
-        gradient_checkpointing=True,
-        gradient_checkpointing_kwargs={"use_reentrant": False},
-        eval_strategy="steps" if held_enc and eval_steps else "no",
-        eval_steps=eval_steps,
-        per_device_eval_batch_size=1,
-        save_strategy="no",
-        remove_unused_columns=False,
-        report_to=["wandb"] if wandb else [],
-        run_name=cfg["name"],
-        **t,
-    )
-    trainer = Trainer(
-        model=model,
-        args=args,
-        train_dataset=train_enc,
-        eval_dataset=held_enc or None,
-        data_collator=collate,
-        callbacks=[Log()],
-    )
+    trainer = build_trainer(model, pad_id, train_enc, held_enc, cfg, out, log, bf16=True)
     torch.cuda.reset_peak_memory_stats()
     start = time.time()
     first_eval = trainer.evaluate() if held_enc else {}
