@@ -1,0 +1,26 @@
+# Arm S: Aya Expanse 32B + the indicative SFT adapter (SEL-65).
+# Same harness, prompt, decoding and customer as configs/arms.yaml; only the student differs:
+# it's served by vLLM on the pod (scripts/pod/serve.sh), on localhost:8000, no API key.
+# Run on the pod:  just rollout S <domain> --split dev --config configs/sft/arms.sft.yaml
+# Never on test: these are indicative dev runs (SEL-65).
+
+student:
+  name: aya32-sft-r16
+  model: sft
+  api_base: http://localhost:8000/v1
+  api_key_env: null
+  mode: prompted          # the data contract (SEL-35): don't change these two
+  style: cohere
+  temperature: 0.0
+  max_tokens: 1024
+  max_context: 32768      # = serve.sh MAX_LEN (the GPU's limit; Cohere's API allows 128K)
+  reserve: 4096
+  rpm: 0
+
+customer: null            # GPT-4.1, as for every arm
+
+arms:
+  S:
+    name: sft-indicative
+    description: "Arm A plus the QLoRA SFT adapter trained on the 112 healable golden fixes (indicative, not Arm B)"
+    prompt_variant: default

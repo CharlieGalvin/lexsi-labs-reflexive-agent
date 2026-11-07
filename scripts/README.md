@@ -19,6 +19,13 @@ prints. **Cost** is the API spend of one run; "none" means no API calls.
 | Script | Command | What it does | Cost |
 |---|---|---|---|
 | `setup.sh` | `bash scripts/pod/setup.sh` (on the pod) | Checks the GPU and disk, installs the training and vLLM environments, downloads Aya Expanse 32B and golden v1.1, builds the training examples. Safe to re-run | the pod's time (~$2–3/hour) |
+| `serve.sh` | `just sft-serve` (on the pod) | Serves Aya Expanse 32B with vLLM, OpenAI-compatible on :8000, with the SFT adapter as `sft`; arms P (base) and S (adapter) in `configs/sft/` | the pod's time |
+
+## sft/: the indicative SFT run (SEL-65)
+
+| Script | `just` command | What it does | Cost |
+|---|---|---|---|
+| `train_sft.py` | `just sft-train` (`--dry-run` first) | QLoRA on Aya Expanse 32B: trains on the healable fixes (the agent's turns only), held-out loss on the 15 fixes Aya already solves → `runs/<name>/` | the pod's time (~1 hour) |
 
 ## arms/: the experiment arms
 

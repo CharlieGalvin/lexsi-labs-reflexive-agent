@@ -134,14 +134,15 @@ repo, rev, out = sys.argv[1:]
 print("   ✓", snapshot_download(repo, repo_type="dataset", revision=rev, local_dir=out))
 PY
 
-step "Training examples (just train-data)"
+step "Training examples (just train-data: healable to train on, all for the held-out check)"
 just train-data --dataset "data/golden/hub-$DATASET_REV" --force
+just train-data --dataset "data/golden/hub-$DATASET_REV" --select all --force
 
 step "Done"
 cat <<EOF
    Training environment: $REPO_DIR/.venv   (source .venv/bin/activate)
    vLLM:                 $VLLM_ENV/bin/vllm
    Model cache:          $HF_HOME
-   Training examples:    $REPO_DIR/data/train/sft-healable.jsonl
-   Next: the SFT run (SEL-65).
+   Training examples:    $REPO_DIR/data/train/sft-healable.jsonl, sft-all.jsonl
+   Next (SEL-65):        just sft-train --dry-run, then just sft-train, then just sft-serve
 EOF

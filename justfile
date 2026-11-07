@@ -90,6 +90,14 @@ hard-subset *args:
 train-data *args:
     python scripts/data/build_train_data.py {{args}}
 
+# Indicative SFT run on the GPU pod (SEL-65): QLoRA on Aya 32B, the agent's turns as targets → runs/
+sft-train *args:
+    python scripts/sft/train_sft.py {{args}}
+
+# Serve Aya 32B (+ the SFT adapter) with vLLM on the pod, OpenAI-compatible on :8000 (SEL-65)
+sft-serve:
+    bash scripts/pod/serve.sh
+
 # Confirm configs/splits.json matches a rebuild from its seed (SEL-36)
 splits-check:
     python scripts/data/make_splits.py --check

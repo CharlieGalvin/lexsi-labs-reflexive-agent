@@ -13,14 +13,31 @@ from reflexive.files import ROOT
 SCRIPT = ROOT / "scripts" / "pod" / "setup.sh"
 
 
-def test_the_script_is_valid_bash_and_stops_on_the_first_error():
-    subprocess.run(["bash", "-n", str(SCRIPT)], check=True)
-    assert "set -euo pipefail" in SCRIPT.read_text()
+SCRIPTS = [SCRIPT, ROOT / "scripts" / "pod" / "serve.sh"]
+
+
+@pytest.mark.parametrize("script", SCRIPTS, ids=lambda s: s.name)
+def test_the_scripts_are_valid_bash_and_stop_on_the_first_error(script):
+    subprocess.run(["bash", "-n", str(script)], check=True)
+    assert "set -euo pipefail" in script.read_text()
 
 
 @pytest.mark.skipif(shutil.which("shellcheck") is None, reason="shellcheck isn't installed")
-def test_shellcheck_finds_nothing():
-    subprocess.run(["shellcheck", str(SCRIPT)], check=True)
+@pytest.mark.parametrize("script", SCRIPTS, ids=lambda s: s.name)
+def test_shellcheck_finds_nothing(script):
+    subprocess.run(["shellcheck", str(script)], check=True)
+
+
+def test_serve_uses_the_context_the_pod_arms_expect():
+    import yaml
+
+    text = (ROOT / "scripts" / "pod" / "serve.sh").read_text()
+    found = re.search(r'MAX_LEN="\$\{MAX_LEN:-(\d+)\}"', text)
+    assert found, "serve.sh sets no default MAX_LEN"
+    default = int(found.group(1))
+    for f in ("arms.base.yaml", "arms.sft.yaml"):
+        cfg = yaml.safe_load((ROOT / "configs" / "sft" / f).read_text())
+        assert cfg["student"]["max_context"] == default
 
 
 def test_the_just_recipes_and_extras_it_uses_exist():
