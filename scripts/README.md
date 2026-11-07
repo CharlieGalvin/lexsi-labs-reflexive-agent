@@ -10,7 +10,8 @@ prints. **Cost** is the API spend of one run; "none" means no API calls.
 |---|---|---|---|
 | `make_splits.py` | `just splits-check` | Froze `configs/splits.json` (train / dev / test); `--check` re-draws it from its seed and compares | none |
 | `build_golden.py` | `just golden` | Golden trajectories v1 from the teacher's fix run → `data/golden/v1/`, every record checked | none |
-| `publish_golden.py` | `just golden-publish` | Checks `data/golden/v1/`, writes the data card, uploads it **private** to Hugging Face and tags it (`--dry-run` first) | none |
+| `build_hard_subset.py` | `just hard-subset` | The hard subset: every train task grouped as healable / teacher-unsolved / solved by Aya, with Arm A's failure labels → `data/golden/hard/` | none |
+| `publish_golden.py` | `just golden-publish --tag v1.1` | Checks `data/golden/v1/` (and, for any tag but `v1`, the hard subset), writes the data card, uploads it **private** to Hugging Face in one commit and tags it (`--dry-run` first) | none |
 
 ## arms/: the experiment arms
 

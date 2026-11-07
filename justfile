@@ -78,9 +78,13 @@ quality: types
 golden *args:
     python scripts/data/build_golden.py {{args}}
 
-# Check data/golden/v1/, write the data card and upload it PRIVATE to the team HF org, tag v1 (SEL-48; --dry-run first)
+# Check data/golden/v1/ (+ the hard subset unless --tag v1), write the card, upload PRIVATE to the team HF org and tag it (SEL-48, SEL-60; --dry-run first)
 golden-publish *args:
     python scripts/data/publish_golden.py {{args}}
+
+# Build the hard subset from Arm A's train runs and golden v1 → data/golden/hard/ (SEL-7; no API calls)
+hard-subset *args:
+    python scripts/data/build_hard_subset.py {{args}}
 
 # Confirm configs/splits.json matches a rebuild from its seed (SEL-36)
 splits-check:
@@ -163,3 +167,39 @@ rollout arm domain *args:
     python scripts/arms/rollout.py {{arm}} {{domain}} {{args}}
 
 # Experiment commands (train, evaluate…) are added by the Architect and Trainer.
+
+# --- Training (Trainer, GPU box; docs/experiments/MESSY_LOOKUP.md) --------------
+
+# Run 1 (SEL-34): 10-step Tiny Aya GRPO smoke run with one tool, ~10 min
+train-smoke *args:
+    python scripts/train_grpo.py configs/train/smoke_add.yaml {{args}}
+
+# GRPO from a config, e.g. `just train configs/train/messy_grpo.yaml --max-steps 3`
+train config *args:
+    python scripts/train_grpo.py {{config}} {{args}}
+
+# Messy-ID Lookup eval (base model; add `--adapter runs/messy-grpo` for the trained one)
+eval-lookup *args:
+    python scripts/eval_lookup.py {{args}}
+
+# --- Starter task: Arm A vs one GRPO run (docs/experiments/MESSY_LOOKUP.md) ------
+
+# Arm A: eval the untuned student -> results/base.metrics.json + docs/EXPERIMENTS.md row
+baseline *args:
+    python scripts/eval_lookup.py --record base --arm A {{args}}
+
+# One GRPO run on the starter task -> runs/<run> (W&B on), e.g. `just after messy-grpo-2`
+after run="messy-grpo" *args:
+    python scripts/train_grpo.py configs/train/messy_grpo.yaml --output-dir runs/{{run}} {{args}}
+
+# Eval the trained adapter -> results/<run>.metrics.json + docs/EXPERIMENTS.md row
+evaluate run="messy-grpo" *args:
+    python scripts/eval_lookup.py --adapter runs/{{run}} --record {{run}} {{args}}
+
+# Markdown table of two recorded runs, to post on the ticket (saved to results/<a>-vs-<b>.compare.md)
+compare a="base" b="messy-grpo":
+    python scripts/experiment_log.py compare {{a}} {{b}}
+
+# Record an eval that already ran, e.g. `just record runs/base-messy/eval_eval.csv base --arm A`
+record csv run *args:
+    python scripts/experiment_log.py record {{csv}} {{run}} {{args}}

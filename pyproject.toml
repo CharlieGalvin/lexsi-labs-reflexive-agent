@@ -15,7 +15,7 @@ dependencies = [
 
 [project.optional-dependencies]
 # AgentTune is installed from source by `just setup`; it pins torch + transformers.
-train = ["datasets", "peft", "wandb"]
+train = ["datasets", "peft", "wandb", "pandas"]   # pandas: scripts/eval_lookup.py
 dev = ["pytest>=8", "pytest-bdd>=7", "ruff>=0.6", "ty==0.0.97", "huggingface_hub>=0.24"]
 # pytest-bdd: tests/features; ty: type checks (beta, so pinned exactly); huggingface_hub: just golden-publish
 # τ²-bench itself is NOT installed from here: a pip install from git leaves out its data/ folder
@@ -60,7 +60,11 @@ exclude = ["scripts/archive"]
 [tool.ty.analysis]
 # Optional extras: CI installs only `.[dev]`, so these aren't there. Locally they're checked.
 allowed-unresolved-imports = ["tau2", "tau2.**", "litellm", "litellm.**", "loguru", "httpx",
-                              "matplotlib", "matplotlib.**"]
+                              "matplotlib", "matplotlib.**",
+                              # the [train] extra and AgentTune (GPU box only): scripts/train_grpo.py,
+                              # scripts/eval_lookup.py, the W&B charts in reflexive.messy_lookup
+                              "torch", "transformers", "peft", "datasets", "wandb", "pandas",
+                              "agenttune", "agenttune.**"]
 
 # Chiara's classifier and arms: typing them is a follow-up for her (warnings, not failures).
 [[tool.ty.overrides]]
