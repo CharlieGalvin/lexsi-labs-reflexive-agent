@@ -77,10 +77,41 @@ def trainer_args(cfg: dict[str, Any], out: Path, has_held_out: bool, bf16: bool)
         "per_device_eval_batch_size": 1,
         "save_strategy": "no",
         "remove_unused_columns": False,
+        "prediction_loss_only": True,  # evaluation keeps the loss only, never the logits
         "report_to": ["wandb"] if os.environ.get("WANDB_API_KEY") else [],
         "run_name": cfg["name"],
         **t,
     }
+
+
+CE_CHUNK = 1024  # target positions scored at a time: float32 logits of 1024 x 256K ~ 1 GB
+
+
+def target_loss(model: Any, inputs: dict[str, Any], num_items_in_batch: Any = None) -> Any:
+    """Cross-entropy over the target tokens only, scoring just the positions that predict them.
+
+    Position ``p`` predicts token ``p + 1``, so the model is asked for the logits at the
+    positions just before each target (``logits_to_keep``, a tensor of indices). Batches of one
+    conversation (the config's batch size). Summed and divided by ``num_items_in_batch`` (the
+    targets across the accumulated batch) when the Trainer gives it, else averaged."""
+    import torch
+    import torch.nn.functional as F  # noqa: N812
+
+    labels = inputs["labels"]
+    if labels.shape[0] != 1:
+        raise ValueError("target_loss handles one conversation per batch (per_device_train_batch_size: 1)")
+    nxt = labels[0, 1:]
+    keep = torch.nonzero(nxt != -100).squeeze(-1)  # positions whose next token is a target
+    out = model(input_ids=inputs["input_ids"], attention_mask=inputs["attention_mask"], logits_to_keep=keep)
+    logits, targets = out.logits[0], nxt[keep]
+    total = logits.new_zeros((), dtype=torch.float32)
+    for i in range(0, len(keep), CE_CHUNK):
+        total = total + F.cross_entropy(
+            logits[i : i + CE_CHUNK].float(), targets[i : i + CE_CHUNK], reduction="sum"
+        )
+    if num_items_in_batch is not None:
+        return total / num_items_in_batch
+    return total / max(len(keep), 1)
 
 
 def build_trainer(  # noqa: PLR0913 - the pieces a Trainer is made of
@@ -93,9 +124,18 @@ def build_trainer(  # noqa: PLR0913 - the pieces a Trainer is made of
     log: Any,
     bf16: bool,
 ) -> Any:
-    """A Hugging Face Trainer over the tokenised examples; logs every step to ``log`` (JSON Lines)."""
+    """A Hugging Face Trainer over the tokenised examples; logs every step to ``log`` (JSON Lines).
+
+    The loss is computed on the target positions only (`target_loss`): Aya's vocabulary is
+    ~256K tokens, so the full logits of a 13K-token conversation are ~3.5 billion numbers, and
+    the cross-entropy's float32 copy of them alone ran the H100 out of memory."""
     import torch
     from transformers import Trainer, TrainerCallback, TrainingArguments
+
+    class TargetsOnly(Trainer):
+        def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):  # noqa: ANN001, ANN202
+            loss = target_loss(model, inputs, num_items_in_batch)
+            return (loss, {"loss": loss}) if return_outputs else loss
 
     def collate(batch: list[dict[str, list[int]]]) -> dict[str, Any]:
         return {k: torch.tensor(v) for k, v in pad_batch(batch, pad_id).items()}
@@ -106,7 +146,7 @@ def build_trainer(  # noqa: PLR0913 - the pieces a Trainer is made of
                 log.write(json.dumps({"step": state.global_step, **logs}) + "\n")
                 log.flush()
 
-    return Trainer(
+    return TargetsOnly(
         model=model,
         args=TrainingArguments(**trainer_args(cfg, out, bool(held_enc), bf16)),
         train_dataset=train_enc,
@@ -123,6 +163,7 @@ def main() -> int:  # noqa: C901, PLR0915 - one linear script: load, tokenise, t
     p.add_argument("--force", action="store_true", help="replace a finished run")
     p.add_argument("--push", action="store_true", help=f"upload the adapter to {HUB_ORG}/<name>, private")
     a = p.parse_args()
+    os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")  # less fragmentation
 
     cfg = load(a.config)
     out = ROOT / "runs" / cfg["name"]

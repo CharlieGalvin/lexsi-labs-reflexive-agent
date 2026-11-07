@@ -74,3 +74,52 @@ def test_warmup_ratio_becomes_warmup_steps_where_transformers_dropped_it(tmp_pat
     kw = ts.trainer_args(cfg, tmp_path, has_held_out=True, bf16=False)
     transformers.TrainingArguments(**{**kw, "optim": "adamw_torch"})  # every keyword is accepted
     assert kw.get("warmup_ratio", kw.get("warmup_steps")) == 0.05
+
+
+def _tiny_cohere() -> object:
+    cfg = transformers.CohereConfig(
+        vocab_size=97,
+        hidden_size=32,
+        intermediate_size=64,
+        num_hidden_layers=2,
+        num_attention_heads=4,
+        num_key_value_heads=2,
+        logit_scale=0.0625,
+    )
+    torch.manual_seed(0)
+    return transformers.AutoModelForCausalLM.from_config(cfg)
+
+
+def test_the_target_only_loss_equals_transformers_own_loss_on_aya_s_architecture() -> None:
+    """Scoring only the positions before each target gives exactly the full-logits loss."""
+    model = _tiny_cohere().eval()
+    ids = torch.tensor([[(i * 13) % 90 + 3 for i in range(60)]])
+    labels = torch.full_like(ids, -100)
+    labels[0, 10:18], labels[0, 30:41], labels[0, 55:60] = ids[0, 10:18], ids[0, 30:41], ids[0, 55:60]
+    inputs = {"input_ids": ids, "attention_mask": torch.ones_like(ids), "labels": labels}
+    with torch.no_grad():
+        full = model(input_ids=ids, attention_mask=inputs["attention_mask"], labels=labels).loss
+        ours = ts.target_loss(model, inputs)
+        summed = ts.target_loss(model, inputs, num_items_in_batch=torch.tensor(48))
+    assert torch.allclose(ours, full, atol=1e-5)
+    n = int((labels[0, 1:] != -100).sum())  # 24 targets: the token at position 0 is never one
+    assert torch.allclose(summed * 48 / n, full, atol=1e-5)
+
+
+def test_the_target_only_loss_is_chunked_without_changing_it(monkeypatch: pytest.MonkeyPatch) -> None:
+    model = _tiny_cohere().eval()
+    ids = torch.tensor([[(i * 5) % 90 + 3 for i in range(80)]])
+    labels = ids.clone()
+    labels[0, :5] = -100
+    inputs = {"input_ids": ids, "attention_mask": torch.ones_like(ids), "labels": labels}
+    with torch.no_grad():
+        whole = ts.target_loss(model, inputs)
+        monkeypatch.setattr(ts, "CE_CHUNK", 7)
+        chunked = ts.target_loss(model, inputs)
+    assert torch.allclose(whole, chunked, atol=1e-5)
+
+
+def test_a_batch_of_two_conversations_is_refused() -> None:
+    ids = torch.ones((2, 5), dtype=torch.long)
+    with pytest.raises(ValueError, match="one conversation per batch"):
+        ts.target_loss(_tiny_cohere(), {"input_ids": ids, "attention_mask": ids, "labels": ids})
