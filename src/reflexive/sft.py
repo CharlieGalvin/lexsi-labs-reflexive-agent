@@ -15,11 +15,13 @@ It relies on the template being **prefix-stable**: rendering the first ``i`` tur
 first tokens of rendering ``i + 1``. Aya's (Cohere's) template is; `encode` checks it on every
 turn and refuses an example otherwise, rather than training on misaligned labels.
 
-No torch here: a tokenizer is anything with Hugging Face's ``apply_chat_template``.
+No torch here: a tokenizer is anything with Hugging Face's ``apply_chat_template``. Set its
+``chat_template`` to `relax_chat_template` of the original first (`scripts/sft/train_sft.py` does).
 """
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from typing import Any, Protocol
 
@@ -32,6 +34,52 @@ class ChatTokenizer(Protocol):
     def apply_chat_template(
         self, conversation: list[dict[str, str]], *, tokenize: bool, add_generation_prompt: bool
     ) -> list[int]: ...
+
+
+# Aya's (Cohere's) chat template refuses any conversation whose turns don't alternate user /
+# assistant after the system prompt. Every τ²-bench conversation starts with the agent's fixed
+# greeting ("Hi! How can I help you today?"), so as written it can't render one: not for
+# training, and not in vLLM either. Cohere's own API accepts it (Arm A ran on it). So both
+# training and serving use the template with only that check removed: every turn is rendered
+# exactly as before.
+_ALTERNATION_CHECK = re.compile(
+    r"\{%-?\s*if\s[^{}]*?loop\.index0\s*%\s*2[^{}]*?-?%\}\s*"
+    r"\{\{-?\s*raise_exception\(\s*(['\"])Conversation roles must alternate.*?\1\s*\)\s*-?\}\}\s*"
+    r"\{%-?\s*endif\s*-?%\}",
+    re.DOTALL,
+)
+
+
+def relaxed_template(template: str) -> str:
+    """The chat template without its "roles must alternate" check, and nothing else changed."""
+    found = len(_ALTERNATION_CHECK.findall(template))
+    if found != 1:
+        raise ValueError(
+            f"expected one 'roles must alternate' check in the chat template, found {found}: "
+            "the template isn't the one this was written for, so check it before training"
+        )
+    return _ALTERNATION_CHECK.sub("", template)
+
+
+def relax_chat_template(template: str | dict[str, str] | list[dict[str, str]]) -> Any:
+    """`relaxed_template` for a tokenizer's ``chat_template``: one string, or named templates
+    (a dict, or a list of ``{"name", "template"}``), where every one that has the check loses it."""
+    if isinstance(template, str):
+        return relaxed_template(template)
+    if isinstance(template, dict):
+        return {k: relaxed_template(v) if _ALTERNATION_CHECK.search(v) else v for k, v in template.items()}
+    return [
+        {**t, "template": relaxed_template(t["template"])} if _ALTERNATION_CHECK.search(t["template"]) else t
+        for t in template
+    ]
+
+
+def default_template(template: str | dict[str, str] | list[dict[str, str]]) -> str:
+    """The template vLLM uses by default: the only one, or the one named ``default``."""
+    if isinstance(template, str):
+        return template
+    named = template if isinstance(template, dict) else {t["name"]: t["template"] for t in template}
+    return named["default"]
 
 
 class NotPrefixStable(ValueError):

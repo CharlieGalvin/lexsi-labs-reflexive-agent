@@ -30,6 +30,11 @@ REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 [[ -x "$VLLM" ]] || { echo "⛔ no vLLM at $VLLM: run scripts/pod/setup.sh first" >&2; exit 1; }
 cd "$REPO_DIR"
 
+# Aya's template refuses a conversation that starts with the agent's greeting, as every τ²-bench
+# one does; serve the same template training used, without that one check (reflexive.sft)
+TEMPLATE="$WORKSPACE/chat_template.$(basename "$MODEL").jinja"
+"$REPO_DIR/.venv/bin/python" scripts/sft/chat_template.py "$MODEL" "$TEMPLATE"
+
 lora=()
 if [[ -n "$ADAPTER" ]]; then
   [[ -f "$ADAPTER/adapter_config.json" ]] || { echo "⛔ no adapter in $ADAPTER: train it first (just sft-train)" >&2; exit 1; }
@@ -46,4 +51,5 @@ exec "$VLLM" serve "$MODEL" \
   --max-model-len "$MAX_LEN" \
   --gpu-memory-utilization "$GPU_UTIL" \
   --generation-config vllm \
+  --chat-template "$TEMPLATE" \
   "${lora[@]}"

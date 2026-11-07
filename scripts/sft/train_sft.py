@@ -28,7 +28,7 @@ import yaml
 
 from reflexive import splits
 from reflexive.files import ROOT, read_jsonl, sha256, shown
-from reflexive.sft import encode_all, pad_batch
+from reflexive.sft import encode_all, pad_batch, relax_chat_template
 
 HUB_ORG = "reagent-lexsi"
 CONFIG = ROOT / "configs" / "train" / "sft_aya32b.yaml"
@@ -73,6 +73,7 @@ def main() -> int:  # noqa: C901, PLR0915 - one linear script: load, tokenise, t
     from transformers import AutoTokenizer
 
     tok = AutoTokenizer.from_pretrained(cfg["model"])
+    tok.chat_template = relax_chat_template(tok.chat_template)  # the agent speaks first: see reflexive.sft
     train_enc, train_stats = encode_all(train_rows, tok, cfg["max_len"])
     held_enc, held_stats = encode_all(held_rows, tok, cfg["max_len"])
     print(

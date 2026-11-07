@@ -4,11 +4,14 @@ and the pod arm configs. No GPU, no model: a fake tokenizer renders turns like A
 from __future__ import annotations
 
 import json
+import re
 import sys
 import types
 from pathlib import Path
 from typing import Any
 
+import jinja2
+import jinja2.sandbox
 import pytest
 import yaml
 from _scripts import load_script
@@ -16,7 +19,16 @@ from _scripts import load_script
 from reflexive import splits
 from reflexive.arms import get_arm
 from reflexive.files import ROOT
-from reflexive.sft import IGNORE, NotPrefixStable, encode, encode_all, pad_batch
+from reflexive.sft import (
+    IGNORE,
+    NotPrefixStable,
+    default_template,
+    encode,
+    encode_all,
+    pad_batch,
+    relax_chat_template,
+    relaxed_template,
+)
 
 ts = load_script("sft/train_sft")
 
@@ -29,6 +41,10 @@ class FakeTokenizer:
 
     pad_token_id = 0
     eos_token_id = 1
+    chat_template = (  # carries the check, so the training script's relaxing has something to remove
+        "{% if (m == 1) != (loop.index0 % 2 == 0) %}"
+        "{{ raise_exception('Conversation roles must alternate') }}{% endif %}"
+    )
 
     def __init__(self) -> None:
         self.vocab: dict[str, int] = {}
@@ -197,3 +213,106 @@ def test_the_pod_arms_match_arm_a_except_for_the_student_endpoint(key, file, mod
     assert pod.student["api_key_env"] is None and pod.prompt_variant == a.prompt_variant == "default"
     same = ("mode", "style", "temperature", "max_tokens", "reserve")
     assert {k: pod.student[k] for k in same} == {k: a.student[k] for k in same} and pod.customer == a.customer
+
+
+# --- Aya's chat template: the agent speaks first --------------------------------------------------
+
+
+# Cohere's chat template as it ships with Aya Expanse (tokenizer_config.json): system prompt, then
+# turns that must alternate user / assistant
+COHERE = (
+    "{{ bos_token }}{% if messages[0]['role'] == 'system' %}{% set loop_messages = messages[1:] %}"
+    "{% set system_message = messages[0]['content'] %}{% elif false == true %}"
+    "{% set loop_messages = messages %}"
+    "{% set system_message = 'You are Aya.' %}{% else %}{% set loop_messages = messages %}"
+    "{% set system_message = false %}{% endif %}{% if system_message != false %}"
+    "{{ '<|START_OF_TURN_TOKEN|><|SYSTEM_TOKEN|>' + system_message + '<|END_OF_TURN_TOKEN|>' }}{% endif %}"
+    "{% for message in loop_messages %}{% if (message['role'] == 'user') != (loop.index0 % 2 == 0) %}"
+    "{{ raise_exception('Conversation roles must alternate user/assistant/user/assistant/...') }}{% endif %}"
+    "{% set content = message['content'] %}{% if message['role'] == 'user' %}"
+    "{{ '<|START_OF_TURN_TOKEN|><|USER_TOKEN|>' + content.strip() + '<|END_OF_TURN_TOKEN|>' }}"
+    "{% elif message['role'] == 'assistant' %}"
+    "{{ '<|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>'  + content.strip() + '<|END_OF_TURN_TOKEN|>' }}"
+    "{% endif %}{% endfor %}"
+    "{% if add_generation_prompt %}{{ '<|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>' }}{% endif %}"
+)
+
+
+def _raise(msg: str) -> None:
+    raise jinja2.exceptions.TemplateError(msg)
+
+
+def render(template: str, messages: list[dict[str, str]], gen: bool = False) -> str:
+    env = jinja2.sandbox.ImmutableSandboxedEnvironment()
+    return env.from_string(template).render(
+        messages=messages, bos_token="<BOS_TOKEN>", add_generation_prompt=gen, raise_exception=_raise
+    )
+
+
+class JinjaTokenizer:
+    """Renders with a real chat template; one token per special token or word."""
+
+    def __init__(self, template: str) -> None:
+        self.chat_template = template
+        self.vocab: dict[str, int] = {}
+
+    def apply_chat_template(self, conversation, *, tokenize, add_generation_prompt):  # noqa: ANN001, ANN201
+        text = render(self.chat_template, conversation, add_generation_prompt)
+        pieces = re.findall(r"<\|[A-Z_]+\|>|<[A-Z_]+>|[^\s<]+", text)  # special tokens split out first
+        return [self.vocab.setdefault(w, len(self.vocab)) for w in pieces]
+
+
+AGENT_FIRST = example()["messages"]  # system, then the agent's greeting: as every τ²-bench conversation
+
+
+def test_the_shipped_template_refuses_a_conversation_that_starts_with_the_agent():
+    with pytest.raises(jinja2.exceptions.TemplateError, match="must alternate"):
+        render(COHERE, AGENT_FIRST)
+
+
+def test_the_relaxed_template_renders_it_and_changes_nothing_else():
+    relaxed = relaxed_template(COHERE)
+    text = render(relaxed, AGENT_FIRST)
+    assert text.startswith(
+        "<BOS_TOKEN><|START_OF_TURN_TOKEN|><|SYSTEM_TOKEN|>the policy<|END_OF_TURN_TOKEN|>"
+    )
+    assert (
+        "<|CHATBOT_TOKEN|>hi there<|END_OF_TURN_TOKEN|><|START_OF_TURN_TOKEN|><|USER_TOKEN|>change my order"
+        in text
+    )
+    alternating = [AGENT_FIRST[0], *AGENT_FIRST[2:]]  # user first: the shipped template accepts it
+    for gen in (False, True):
+        assert render(relaxed, alternating, gen) == render(COHERE, alternating, gen)
+    assert "raise_exception" not in relaxed and len(COHERE) - len(relaxed) < 200
+
+
+def test_masking_works_with_the_relaxed_cohere_template():
+    tok = JinjaTokenizer(relaxed_template(COHERE))
+    enc = encode(example(), tok)
+    back = {v: k for k, v in tok.vocab.items()}
+    words = [back[i] for i, lab in zip(enc["input_ids"], enc["labels"], strict=True) if lab != IGNORE]
+    assert words == [
+        "hi",
+        "there",
+        "<|END_OF_TURN_TOKEN|>",
+        "Action:",
+        "get_order",
+        "<|END_OF_TURN_TOKEN|>",
+        "done",
+        "<|END_OF_TURN_TOKEN|>",
+    ]
+
+
+def test_a_template_without_the_check_or_with_two_is_refused():
+    with pytest.raises(ValueError, match="found 0"):
+        relaxed_template("{{ bos_token }}{% for m in messages %}{{ m['content'] }}{% endfor %}")
+    with pytest.raises(ValueError, match="found 2"):
+        relaxed_template(COHERE + COHERE)
+
+
+def test_named_templates_are_relaxed_where_they_have_the_check():
+    named = {"default": COHERE, "tool_use": "{{ bos_token }}tools"}
+    out = relax_chat_template(named)
+    assert out["tool_use"] == named["tool_use"] and "raise_exception" not in out["default"]
+    listed = relax_chat_template([{"name": "default", "template": COHERE}])
+    assert default_template(listed) == relaxed_template(COHERE) == default_template(relaxed_template(COHERE))
