@@ -86,6 +86,10 @@ golden-publish *args:
 hard-subset *args:
     python scripts/data/build_hard_subset.py {{args}}
 
+# Training examples from golden v1.1: the healable fixes as Aya reads them → data/train/ (SEL-66)
+train-data *args:
+    python scripts/data/build_train_data.py {{args}}
+
 # Confirm configs/splits.json matches a rebuild from its seed (SEL-36)
 splits-check:
     python scripts/data/make_splits.py --check
