@@ -1,0 +1,42 @@
+# Indicative SFT run (SEL-65): QLoRA on Aya Expanse 32B, learning the healable golden fixes.
+# Run on the GPU pod after scripts/pod/setup.sh:  just sft-train --dry-run, then just sft-train
+#
+# Why these settings (112 conversations, ~1.07M tokens, the longest ~12.7K):
+# - QLoRA: the 32B base in 4-bit (~18 GB) leaves room on one 80 GB card for 12K-token
+#   conversations; in 16-bit the weights alone are ~64 GB. The adapter serves on the 16-bit base.
+# - Loss on the agent's turns only (train_on): never on the system prompt or the customer.
+# - Small data, so a small, gentle update: rank 16, lr 1e-4, 2 epochs (~56 optimiser steps).
+# - Held-out loss on the 15 fixes for tasks Aya already solves (not trained on): if it rises
+#   while the training loss falls, the adapter is memorising. Dev stays for the real score.
+
+name: sft-aya32b-r16
+model: CohereLabs/aya-expanse-32b
+data: data/train/sft-all.jsonl        # `just train-data --select all`
+train_group: healable                 # 112 examples
+eval_group: solved_by_aya             # 15 held-out examples (never trained on)
+max_len: 16384                        # every example fits (longest ~12.7K); none is cut
+
+lora:
+  r: 16
+  alpha: 32
+  dropout: 0.05
+  target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+
+quantization:
+  load_in_4bit: true
+  quant_type: nf4
+  double_quant: true
+
+trainer:
+  num_train_epochs: 2
+  learning_rate: 1.0e-4
+  lr_scheduler_type: cosine
+  warmup_ratio: 0.05
+  per_device_train_batch_size: 1
+  gradient_accumulation_steps: 4       # 112 / 4 = 28 steps an epoch
+  max_grad_norm: 1.0
+  weight_decay: 0.0
+  optim: paged_adamw_8bit
+  logging_steps: 1
+  eval_steps: 7                        # 8 held-out checks over the run
+  seed: 0
