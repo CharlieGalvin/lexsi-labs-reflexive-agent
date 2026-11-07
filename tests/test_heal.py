@@ -237,3 +237,29 @@ def test_a_skipped_cycle_still_has_an_audit_record():
     rec = audit_record(agent.run_cycle(TRAIN, DEV), cycle=2)
     assert rec["skipped"] == "no failures to heal" and rec["gate"] is None and rec["training"] is None
     assert rec["adapter"]["swapped"] is False and rec["heal"]["passed"] == 3
+
+
+def test_near_duplicate_fixes_are_capped_per_lesson(tmp_path):
+    from reflexive.heal import dedupe, lesson
+
+    asks = {"role": "assistant", "content": "Could you give me your phone number?"}
+    fixes = []
+    for task in TRAIN:
+        ex = PrefixTeacher(make_agent=FakeModel([asks])).fix(failure(task))
+        assert ex is not None
+        fixes.append(ex)
+    good = PrefixTeacher(make_agent=FakeModel([GOOD])).fix(failure())
+    assert good is not None
+    fixes.append(good)
+
+    assert lesson(fixes[0]) == "telecom:TOOL/customer_tool/check_apn_settings -> message"
+    assert lesson(good).endswith("-> get_customer_by_phone")
+    kept, dropped = dedupe(fixes, 2)
+    assert kept == [fixes[0], fixes[1], good] and dropped == [fixes[2]]
+    assert dedupe(fixes, None) == (fixes, [])
+
+    trainer = CommandTrainer(tmp_path)
+    trainer.train(fixes, None)
+    call = trainer.calls[0]
+    assert call["examples"] == 3 and call["dropped_duplicates"] == [fixes[2]["id"]]
+    assert sorted(call["lessons"].values()) == [1, 2]

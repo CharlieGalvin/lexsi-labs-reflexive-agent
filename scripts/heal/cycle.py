@@ -131,6 +131,8 @@ def print_cycle(n: int, rec: Record) -> None:
     print(f"\n== cycle {n}: adapter {rec['adapter']['before'] or 'base'}")
     print(f"   heal: {h['passed']}/{len(h['tasks'])} passed, {len(h['broken'])} broken; failures {types}")
     print(f"   fixes: {fx['accepted']}/{fx['of']} accepted")
+    for les, k in sorted(fx.get("lessons", {}).items(), key=lambda kv: -kv[1]):
+        print(f"      {k} × {les}")
     if g is not None:
         print(f"   gate: {'PASS' if g.get('passed') else 'no'}: {g.get('reason')}")
     if rec["skipped"]:
@@ -153,6 +155,13 @@ def main() -> int:
     ap.add_argument("--load-adapter", action="store_true", help="register each new adapter with vLLM")
     ap.add_argument("--adapter", help="the adapter the student starts with (default: the base student)")
     ap.add_argument("--workers", type=int, default=4, help="conversations at once (default 4)")
+    ap.add_argument(
+        "--judges",
+        default="auto",
+        choices=["auto", "on", "off"],
+        help="τ²-bench's LLM judges for the heal rollouts (auto: on if OPENAI_API_KEY is set); "
+        "a full cycle needs them on",
+    )
     ap.add_argument("--attempts", type=int, default=3, help="teacher attempts per failure (default 3)")
     ap.add_argument("--out", type=Path, help="default results/heal/<time>")
     ap.add_argument("--gate-history", type=Path, default=Path("results/heal/gate_history.jsonl"))
@@ -164,8 +173,11 @@ def main() -> int:
         ap.error("--load-adapter needs a full cycle")
     if not os.environ.get("OPENROUTER_API_KEY"):
         ap.error("the teacher needs OPENROUTER_API_KEY in .env")
-    if not a.fixes_only and not os.environ.get("OPENAI_API_KEY"):
-        ap.error("the gate scores with judges on: set OPENAI_API_KEY in .env")
+    judges = {"on": True, "off": False}.get(a.judges, bool(os.environ.get("OPENAI_API_KEY")))
+    if not a.fixes_only and not (judges and os.environ.get("OPENAI_API_KEY")):
+        ap.error("the gate scores with judges on: set OPENAI_API_KEY in .env (and don't pass --judges off)")
+    if judges and not os.environ.get("OPENAI_API_KEY"):
+        ap.error("--judges on needs OPENAI_API_KEY in .env")
 
     arm = get_arm(a.arm, a.config)
     if not a.fixes_only and COHERE in str(arm.student.get("api_base")):
@@ -199,7 +211,7 @@ def main() -> int:
         gate = DevGate.load(history_file=a.gate_history)
 
     agent = ReflexiveAgent(
-        arm_rollout(arm, student_factory(arm)),
+        arm_rollout(arm, student_factory(arm), judges=judges),
         teacher=teacher,
         trainer=trainer,
         gate=gate,
@@ -210,6 +222,8 @@ def main() -> int:
     print(f"== heal {len(heal)} train tasks ({', '.join(a.domains)}); gate on {len(dev)} dev tasks → {out}")
     if a.fixes_only:
         print("   --fixes-only: nothing will be trained or gated")
+    if not judges:
+        print("   judges off: retail and airline are scored on their deterministic checks only")
 
     for n in range(1, a.cycles + 1):
         report = agent.run_cycle(heal, dev, stop_after_fixes=a.fixes_only)

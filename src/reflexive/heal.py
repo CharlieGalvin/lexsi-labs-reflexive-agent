@@ -39,6 +39,7 @@ from __future__ import annotations
 import json
 import subprocess
 import time
+from collections import Counter
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -228,6 +229,7 @@ class PrefixTeacher:
                     "attempt": i,
                     "temperature": temperature,
                     "failed_turn": _clean_turn(failed),
+                    "fixed_turn_message": fixed,
                 }
                 return to_sft_example(failure, prefix, fixed, meta)
         return None
@@ -252,6 +254,7 @@ class CommandTrainer:
     root: Path | str = "runs/heal"
     command: Sequence[str] | None = None
     prefix: str = "heal"
+    per_lesson: int | None = 2  # most fixes kept per `lesson` (None: keep all)
     calls: list[dict[str, Any]] = field(default_factory=list)
 
     def train(self, fixes: Sequence[Record], base: Adapter) -> Adapter:
@@ -260,13 +263,22 @@ class CommandTrainer:
         bad = [f.get("id") for f in fixes if f.get("format") != SFT_FORMAT]
         if bad:
             raise ValueError(f"not {SFT_FORMAT} examples: {bad[:5]}")
+        fixes, dropped = dedupe(fixes, self.per_lesson)
         n = len(self.calls) + 1
         name = f"{self.prefix}-{time.strftime('%Y%m%d-%H%M%S')}-c{n}"
         out = Path(self.root) / name
         out.mkdir(parents=True, exist_ok=False)
         data = out / "fixes.jsonl"
         data.write_text("".join(json.dumps(f) + "\n" for f in fixes))
-        call: dict[str, Any] = {"name": name, "base": base, "data": str(data), "examples": len(fixes)}
+        call: dict[str, Any] = {
+            "name": name,
+            "base": base,
+            "data": str(data),
+            "examples": len(fixes),
+            "per_lesson": self.per_lesson,
+            "dropped_duplicates": [f.get("id") for f in dropped],
+            "lessons": dict(Counter(lesson(f) for f in fixes)),
+        }
         if self.command:
             subs = {"data": str(data), "base": base or "", "name": name, "out": str(out)}
             argv = [_fill(a, subs) for a in self.command]
@@ -280,6 +292,35 @@ class CommandTrainer:
                 raise RuntimeError(f"training failed (exit {done.returncode}); see {out / 'train.log'}")
         self.calls.append(call)
         return name
+
+
+def lesson(example: Record) -> str:
+    """What a fix teaches: the mistake it corrects and what the fixed turn does instead.
+
+    ``ARG/placeholder/get_customer_by_phone -> message`` is "don't invent the phone number: ask
+    for it", whichever conversation it came from. Fixes with the same lesson are near-duplicates.
+    """
+    src = example.get("source") or {}
+    f = src.get("finding") or {}
+    turn = src.get("fixed_turn_message") or {}
+    calls = sorted({tc["function"]["name"] for tc in turn.get("tool_calls") or []})
+    does = "+".join(calls) if calls else "message"
+    return f"{example.get('domain')}:{f.get('type')}/{f.get('kind')}/{f.get('tool')} -> {does}"
+
+
+def dedupe(fixes: Sequence[Record], per_lesson: int | None) -> tuple[list[Record], list[Record]]:
+    """At most ``per_lesson`` fixes per `lesson`, the first ones in order; and the ones dropped."""
+    if per_lesson is None:
+        return list(fixes), []
+    if per_lesson < 1:
+        raise ValueError("per_lesson must be at least 1 (or None to keep every fix)")
+    seen: Counter[str] = Counter()
+    kept, dropped = [], []
+    for f in fixes:
+        key = lesson(f)
+        seen[key] += 1
+        (kept if seen[key] <= per_lesson else dropped).append(f)
+    return kept, dropped
 
 
 def _fill(arg: str, subs: dict[str, str]) -> str:
@@ -342,6 +383,7 @@ def audit_record(report: CycleReport, *, cycle: int, teacher: Any = None, traine
             "accepted": len(report.fixes),
             "of": len(report.failures),
             "ids": [f.get("id") for f in report.fixes],
+            "lessons": dict(Counter(lesson(f) for f in report.fixes)),
         },
         "training": train,
         "gate": None if report.gate is None else _gate_json(report),
