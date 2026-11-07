@@ -19,8 +19,10 @@
     - ``repeated_call``: the same call ``loop_threshold`` times, even if it worked.
     - ``repeated_message``: the same reply to the customer ``loop_threshold`` times.
     - ``step_limit``: τ²-bench stopped the conversation at its step limit.
-    Neither of the last two counts after a successful ``transfer_to_human_agents``: the agent's
-    job is over, and a conversation that runs on is the customer simulator's doing.
+    These count after a hand-off too (SEL-62): the old exemption after a successful
+    ``transfer_to_human_agents`` relied on one dataset's tool name, and it hid a loop that ran to
+    the step limit (Arm A telecom, A56). The runtime monitor (`reflexive.monitor`) catches such
+    loops while they run.
 
 The **primary** failure is the earliest finding, because later ones usually follow from it
 (an invented ID gets an error, the agent retries it, and the retry is a loop). Within one
@@ -28,8 +30,11 @@ turn, an earlier call comes first; findings on the same call go TOOL, then ARG, 
 ``NONE`` means no structural failure: a conversation can still fail τ²-bench for reasoning or
 policy reasons, which this classifier doesn't judge.
 
-It is deterministic and cheap, so it runs on every conversation. It needs no τ²-bench install:
-the tool schemas come from ``configs/tool_schemas.json`` (``scripts/tau2/dump_tool_schemas.py``).
+It is deterministic and cheap, so it runs on every conversation. It needs no τ²-bench install.
+**Tools:** ``classify_hallucination`` takes the agent's tools as given, so at runtime they come
+from the live request and nothing about the dataset is assumed. Customer-only tool names are
+an optional extra label (``customer_tool`` rather than ``unknown_tool``). For saved records,
+`classify_record` falls back to ``configs/tool_schemas.json`` (``scripts/tau2/dump_tool_schemas.py``).
 """
 
 from __future__ import annotations
@@ -335,7 +340,6 @@ def classify_hallucination(
     failed: dict[str, int] = {}  # call -> the turn where it first failed
     call_counts: Counter = Counter()
     said: Counter = Counter()
-    handed_off = False  # after a successful hand-off the agent has no more work: don't count its chat
 
     for i, m in enumerate(messages):
         role = m.get("role")
@@ -348,7 +352,7 @@ def classify_hallucination(
             findings.append(
                 Finding(FailureType.ARG, "malformed", i, None, "an Action: block the parser couldn't read")
             )
-        if not calls and len(text.strip()) > 20 and not handed_off:
+        if not calls and len(text.strip()) > 20:
             said[" ".join(text.split())] += 1
             if said[" ".join(text.split())] == loop_threshold:
                 findings.append(
@@ -407,12 +411,10 @@ def classify_hallucination(
                 )
             if results.get(cid, "").startswith("Error"):
                 failed_now.setdefault(key, i)
-            elif name == "transfer_to_human_agents" and cid in results:
-                handed_off = True
         for key, turn in failed_now.items():  # the agent sees these results only after its turn
             failed.setdefault(key, turn)
 
-    if termination == "max_steps" and not handed_off:
+    if termination == "max_steps":
         last = max(
             (i for i, m in enumerate(messages) if m.get("role") == "assistant"), default=len(messages) - 1
         )
@@ -445,9 +447,24 @@ def agent_view_of(rec: dict) -> list[dict]:
     ]
 
 
-def classify_record(rec: dict, **kw: Any) -> Diagnosis:
-    """Classify a saved episode record (``reagent.tau2.episode``): its agent's view, domain and ending."""
-    tools, customer = domain_tools(rec["domain"])
+def classify_record(
+    rec: dict,
+    *,
+    tools: list[dict] | None = None,
+    customer_tools: list[str] | set[str] | None = None,
+    **kw: Any,
+) -> Diagnosis:
+    """Classify a saved episode record (``reagent.tau2.episode``): its agent's view, domain and ending.
+
+    ``tools``: the tools the agent was given in the request, when known; otherwise the domain's
+    from ``configs/tool_schemas.json``. ``customer_tools`` is an optional label: by default the
+    config's list for the record's domain, or none when ``tools`` came from the request.
+    """
+    if tools is None:
+        tools, config_customer = domain_tools(rec["domain"])
+        customer = config_customer if customer_tools is None else customer_tools
+    else:
+        customer = customer_tools or ()
     return classify_hallucination(
         agent_view_of(rec), tools, customer_tools=customer, termination=rec.get("termination"), **kw
     )

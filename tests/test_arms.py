@@ -287,3 +287,49 @@ def test_rollout_runs_the_frozen_dev_split(tmp_path, monkeypatch, capsys):
     assert mod.main() == 0
     dev = splits.task_ids("telecom", "dev")
     assert sorted(calls) == sorted(dev) and not set(dev) & set(splits.task_ids("telecom", "train"))
+
+
+# --- The runtime monitor in the harness (SEL-62) -----------------------------------------------
+
+
+class Goodbyes:
+    """Says the same goodbye forever: the text-only loop the monitor is for. Records each prompt."""
+
+    def __init__(self):
+        self.prompts: list[list[dict]] = []
+
+    def turn(self, messages, tool_schemas):
+        self.prompts.append(messages)
+        return {"role": "assistant", "content": "Glad I could help! Have a great day."}
+
+
+def test_act_mode_nudges_a_loop_then_stops_it(tau2, tmp_path):
+    from reflexive.arms import run_episode
+    from reflexive.monitor import NUDGE, view_from_audit
+
+    agent, log = Goodbyes(), tmp_path / "audit.jsonl"
+    rec = run_episode(
+        get_arm("A"), agent, "retail", "0", judges=False, monitor="act", audit_log=log, **CUSTOMER
+    )
+    m = rec["monitor"]
+    # agent turn 1 is τ²-bench's own greeting ("Hi! How can I help you today?"), so the student's
+    # 4th goodbye (the 3rd repeat in a row) is agent turn 5: nudged there, stopped 3 repeats later
+    assert (m["mode"], m["nudged_at"], m["stopped_at"]) == ("act", 5, 8) and m["error"] is None
+    nudged = [i for i, p in enumerate(agent.prompts) if p[-1]["content"] == NUDGE]
+    assert nudged == [4]  # only the prompt right after the alarm
+    assert len(agent.prompts) == 7 and rec["termination"] == "agent_stop"
+    assert [a["kind"] for a in m["alarms"]].count("no_progress") == 2
+    (view,) = view_from_audit([json.loads(line) for line in log.read_text().splitlines()]).values()
+    assert view == rec["agent_view"]  # the audit log holds the whole conversation
+
+
+def test_log_mode_records_the_loop_but_leaves_the_conversation_alone(tau2):
+    from reflexive.arms import run_episode
+    from reflexive.monitor import NUDGE
+
+    agent = Goodbyes()
+    rec = run_episode(get_arm("A"), agent, "retail", "0", judges=False, max_steps=24, **CUSTOMER)
+    m = rec["monitor"]
+    assert m["mode"] == "log" and (m["nudged_at"], m["stopped_at"]) == (None, None)
+    assert any(a["kind"] == "no_progress" for a in m["alarms"])
+    assert all(p[-1]["content"] != NUDGE for p in agent.prompts) and rec["termination"] == "max_steps"

@@ -252,7 +252,9 @@ def test_classify_record_uses_the_agents_view():
     assert classify_record(rec).to_dict()["kinds"] == {"TOOL/customer_tool": 1}
 
 
-def test_chat_after_a_real_hand_off_is_not_a_loop():
+def test_chat_after_a_hand_off_is_a_loop_too():
+    # SEL-62: no exemption after transfer_to_human_agents (one dataset's tool name). Chatting on
+    # after a hand-off until the step limit is a loop either way, as in Arm A's A56.
     chat = [
         SYS,
         user("help"),
@@ -264,9 +266,25 @@ def test_chat_after_a_real_hand_off_is_not_a_loop():
         for _ in range(3)
         for m in (user("ok, waiting"), {"role": "assistant", "content": "You're welcome. Have a good day!"})
     ]
-    assert classify(chat, termination="max_steps").failure is FailureType.NONE
-    claimed = [SYS] + chat[4:]  # says a human is coming, but never handed off
+    assert {"repeated_message", "step_limit"} <= kinds(classify(chat, termination="max_steps"))
+    claimed = [SYS] + chat[4:]  # says a human is coming, but never handed off: the same
     assert {"repeated_message", "step_limit"} <= kinds(classify(claimed, termination="max_steps"))
+    ended = chat[:4] + [{"role": "assistant", "content": "You're welcome. Have a good day!"}]
+    assert classify(ended, termination="user_stop").failure is FailureType.NONE  # a clean hand-off
+
+
+def test_classify_record_takes_the_requests_tools_and_an_optional_customer_label():
+    rec = {
+        "domain": "telecom",
+        "termination": "user_stop",
+        "agent_view": [SYS, user("hi"), call("check_apn_settings", {})],
+    }
+    assert kinds(classify_record(rec)) == {"customer_tool"}  # saved record: the config's lists
+    live = [
+        {"type": "function", "function": {"name": "get_customer_by_id", "parameters": {"type": "object"}}}
+    ]
+    assert kinds(classify_record(rec, tools=live)) == {"unknown_tool"}  # the request's tools, no label
+    assert kinds(classify_record(rec, tools=live, customer_tools=["check_apn_settings"])) == {"customer_tool"}
 
 
 def test_example_dot_com_email_is_not_a_placeholder():
