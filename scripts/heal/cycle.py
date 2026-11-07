@@ -6,6 +6,8 @@
         --train-cmd "<your training command> {data} {out} {base}" --load-adapter
     python scripts/heal/cycle.py ... --cycles 3                              # SEL-23
 
+Run it with ``just heal ...``, which loads the API keys from ``.env``.
+
 **What it runs.** The student from ``--config``'s arm (default Arm A, `configs/arms.yaml`) on the
 train tasks of ``--domains``: all of them, the first ``--limit`` per domain, or a random
 ``--sample`` per domain (seed ``--seed``, default 0, so a rerun picks the same tasks; the first
@@ -263,7 +265,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    from dotenv import load_dotenv
-
-    load_dotenv(Path(".env"))
     sys.exit(main())
