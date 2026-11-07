@@ -10,6 +10,7 @@ Read these in order. Each page says at the top whether it's final, and what supe
 | 3b | [`STUDENT_REVIEW_AYA.md`](STUDENT_REVIEW_AYA.md) ([log page](reports/aya_student_review.html)) | 4 Nov | Where does the student, Aya Expanse 32B, go wrong? Is it the format? | 7/30 passed; 0 unreadable calls. It's behaviour: phone tools, batching, invented IDs, retries | Final (30-task sample) |
 | 4 | [`GOLDEN_TRAJECTORIES_V1.md`](GOLDEN_TRAJECTORIES_V1.md) | 4 Nov | What exactly does the Trainer get? | **127 training + 31 dev reference records**, checked end to end | Final; **published 5 Nov** ([private HF dataset](https://huggingface.co/datasets/reagent-lexsi/tau2-golden-trajectories), tag `v1`) |
 | 5 | [`HALLUCINATION_CLASSIFIER.md`](HALLUCINATION_CLASSIFIER.md) | 5 Nov | How do we label *how* a conversation went wrong (Tool / Arg / Loop)? | A deterministic classifier (SEL-12, Chiara): 100% of failed telecom runs call the customer's tools; 0 false alarms on the 158 golden records; precision checked on 13 + 30 findings | Final; retail/airline checked on `aya.jsonl` |
+| 6 | [`HEAL_FIXES_ONLY.md`](HEAL_FIXES_ONLY.md) | 7 Nov | Can the teacher fix a failure at runtime, from the agent's view up to the failing turn? What would a first heal cycle train on? | Yes: 6/6 failures with a finding fixed first try (~$0.001 each). But all at turn 3, all "identify the customer first"; 2/8 failures had no finding to fix | Final for 9 tasks; nothing trained yet (needs SEL-63) |
 
 **Decisions along the way**, and where each is recorded:
 

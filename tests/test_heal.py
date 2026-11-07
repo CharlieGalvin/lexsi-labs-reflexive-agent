@@ -263,3 +263,36 @@ def test_near_duplicate_fixes_are_capped_per_lesson(tmp_path):
     call = trainer.calls[0]
     assert call["examples"] == 3 and call["dropped_duplicates"] == [fixes[2]["id"]]
     assert sorted(call["lessons"].values()) == [1, 2]
+
+
+def test_run_metrics_sum_up_a_cycle_from_its_audit_and_conversations(tmp_path):
+    from reflexive.heal import METRICS_FORMAT, run_metrics
+
+    def rollout(adapter, domain, task_id):
+        rec = failed_record(domain, task_id, adapter)
+        rec["agent_usage"], rec["user_cost"] = {"est_cost": 0.10}, 0.05
+        return rec
+
+    # task 1 fixed at once, task 2 never, task 3 at once; the fake has no usage: a cost is set below
+    teacher = PrefixTeacher(make_agent=FakeModel([GOOD, INVENTED, INVENTED, INVENTED, GOOD]))
+    agent = ReflexiveAgent(rollout, teacher=teacher, trainer=CommandTrainer(tmp_path), gate=PassRateGate())
+    report = agent.run_cycle(TRAIN, DEV, stop_after_fixes=True)
+    audit = audit_record(report, cycle=1, teacher=teacher)
+    audit["failures"][0]["attempts"][0]["usage"] = {"billed_cost": 0.001}
+    episodes = [{**r, "heal_role": "heal", "cycle": 1} for r in report.rollouts]
+
+    m = run_metrics([audit], episodes, {"sample": 3})
+
+    assert m["format"] == METRICS_FORMAT and m["run"] == {"sample": 3} and m["conversations"] == 3
+    (c,) = m["cycles"]
+    assert (c["passed"], c["conversations"], c["failures"], c["fixable"], c["fixed"]) == (0, 3, 3, 3, 2)
+    assert c["first_try"] == 2 and c["fixed_at_turn"] == {"2": 2}
+    assert c["failure_types"] == {"TOOL": 3, "ARG": 0, "LOOP": 0, "NONE": 0}
+    assert [t["attempts"] for t in c["tasks"]] == [1, 3, 1] and c["tasks"][0]["termination"] == "user_stop"
+    assert m["cost_usd"] == {
+        "student": 0.3,
+        "customer": 0.15,
+        "teacher": 0.001,
+        "total": 0.451,
+        "note": "judge calls not included",
+    }

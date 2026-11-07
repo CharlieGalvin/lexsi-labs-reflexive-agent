@@ -5,6 +5,7 @@
     python scripts/heal/cycle.py --config configs/sft/arms.base.yaml \\
         --train-cmd "<your training command> {data} {out} {base}" --load-adapter
     python scripts/heal/cycle.py ... --cycles 3                              # SEL-23
+    python scripts/heal/cycle.py --report results/heal/<run>                 # metrics, no API calls
 
 Run it with ``just heal ...``, which loads the API keys from ``.env``.
 
@@ -36,7 +37,11 @@ to `heal.CommandTrainer` and the candidate adapter to the agreed gate (`gate.Dev
   fixes accepted, training, gate decision, adapter before / candidate / after;
 * ``cycle-<n>.episodes.jsonl``: every conversation of the cycle, tagged ``heal_role`` =
   ``heal``, ``gate_baseline`` or ``gate_candidate``;
-* ``runs/``: one folder per candidate adapter, with its ``fixes.jsonl`` and ``train.log``.
+* ``runs/``: one folder per candidate adapter, with its ``fixes.jsonl`` and ``train.log``;
+* ``run.json``: the command, commit and settings.
+
+``--report <folder>`` sums a finished run up as ``results/heal-<name>.metrics.json``
+(`heal.run_metrics`): the small file that is committed, as the arms' metrics are.
 
 The gate's decisions are also appended to ``--gate-history`` (default
 ``results/heal/gate_history.jsonl``), so its budget of ``max_cycles`` holds across runs.
@@ -63,7 +68,8 @@ from typing import Any
 from reflexive import splits
 from reflexive.agent import Adapter, CycleReport, Record, ReflexiveAgent, Task, arm_rollout
 from reflexive.arms import get_arm, make_student
-from reflexive.heal import CommandTrainer, PrefixTeacher, write_audit
+from reflexive.files import read_jsonl
+from reflexive.heal import TEACHER, CommandTrainer, PrefixTeacher, run_metrics, write_audit
 
 DOMAINS = ("retail", "airline", "telecom")
 COHERE = "api.cohere.ai"
@@ -162,6 +168,62 @@ def print_cycle(n: int, rec: Record) -> None:
     print(f"   adapter now: {a['after'] or 'base'}" + (" (swapped)" if a["swapped"] else ""))
 
 
+def git_commit() -> str | None:
+    import subprocess
+
+    try:
+        sha = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"], check=True, capture_output=True, text=True
+        )
+        dirty = subprocess.run(
+            ["git", "status", "--porcelain", "--untracked-files=no"], capture_output=True, text=True
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    return sha.stdout.strip() + ("+dirty" if dirty.stdout.strip() else "")
+
+
+def report_run(folder: Path, name: str | None = None) -> Path:
+    """``results/heal-<name>.metrics.json`` from a run folder's audit, conversations and run.json."""
+    audits = read_jsonl(folder / "audit.jsonl")
+    episodes = []
+    for a in audits:
+        path = folder / f"cycle-{a['cycle']}.episodes.jsonl"
+        episodes += [{**e, "cycle": a["cycle"]} for e in read_jsonl(path)] if path.exists() else []
+    run_file = folder / "run.json"
+    run = json.loads(run_file.read_text()) if run_file.exists() else {}
+    m = run_metrics(audits, episodes, {**run, "folder": str(folder)})
+    out = Path("results") / f"heal-{name or folder.name}.metrics.json"
+    out.write_text(json.dumps(m, indent=1, ensure_ascii=False) + "\n")
+    for c in m["cycles"]:
+        lo, hi = c["task_success_wilson95"]
+        print(
+            f"cycle {c['cycle']}: {c['passed']}/{c['conversations']} passed ({lo:.0%}–{hi:.0%}); "
+            f"failures {c['failure_types']}; fixed {c['fixed']}/{c['failures']} "
+            f"({c['fixable']} had a turn to fix)"
+        )
+    print(f"cost ${m['cost_usd']['total']:.2f} (judges not included) → {out}")
+    return out
+
+
+def check_args(ap: argparse.ArgumentParser, a: argparse.Namespace) -> bool:
+    """Refuse settings that can't work, before anything is spent. Returns whether judges are on."""
+    if a.limit is not None and a.sample is not None:
+        ap.error("pass --limit or --sample, not both")
+    if not a.fixes_only and not a.train_cmd:
+        ap.error("a full cycle needs --train-cmd (or pass --fixes-only)")
+    if a.load_adapter and a.fixes_only:
+        ap.error("--load-adapter needs a full cycle")
+    if not os.environ.get("OPENROUTER_API_KEY"):
+        ap.error("the teacher needs OPENROUTER_API_KEY in .env")
+    judges = {"on": True, "off": False}.get(a.judges, bool(os.environ.get("OPENAI_API_KEY")))
+    if not a.fixes_only and not (judges and os.environ.get("OPENAI_API_KEY")):
+        ap.error("the gate scores with judges on: set OPENAI_API_KEY in .env (and don't pass --judges off)")
+    if judges and not os.environ.get("OPENAI_API_KEY"):
+        ap.error("--judges on needs OPENAI_API_KEY in .env")
+    return judges
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--arm", default="A", help="the arm whose student heals (default A)")
@@ -188,21 +250,20 @@ def main() -> int:
     ap.add_argument("--attempts", type=int, default=3, help="teacher attempts per failure (default 3)")
     ap.add_argument("--out", type=Path, help="default results/heal/<time>")
     ap.add_argument("--gate-history", type=Path, default=Path("results/heal/gate_history.jsonl"))
+    ap.add_argument(
+        "--report",
+        type=Path,
+        metavar="RUN_FOLDER",
+        help="no run: write results/heal-<folder name>.metrics.json from a finished run (no API calls)",
+    )
+    ap.add_argument("--name", help="with --report: the metrics file's name (default: the folder's)")
     a = ap.parse_args()
-    if a.limit is not None and a.sample is not None:
-        ap.error("pass --limit or --sample, not both")
-
-    if not a.fixes_only and not a.train_cmd:
-        ap.error("a full cycle needs --train-cmd (or pass --fixes-only)")
-    if a.load_adapter and a.fixes_only:
-        ap.error("--load-adapter needs a full cycle")
-    if not os.environ.get("OPENROUTER_API_KEY"):
-        ap.error("the teacher needs OPENROUTER_API_KEY in .env")
-    judges = {"on": True, "off": False}.get(a.judges, bool(os.environ.get("OPENAI_API_KEY")))
-    if not a.fixes_only and not (judges and os.environ.get("OPENAI_API_KEY")):
-        ap.error("the gate scores with judges on: set OPENAI_API_KEY in .env (and don't pass --judges off)")
-    if judges and not os.environ.get("OPENAI_API_KEY"):
-        ap.error("--judges on needs OPENAI_API_KEY in .env")
+    if a.report:
+        if not (a.report / "audit.jsonl").exists():
+            ap.error(f"no audit.jsonl in {a.report}")
+        report_run(a.report, a.name)
+        return 0
+    judges = check_args(ap, a)
 
     arm = get_arm(a.arm, a.config)
     if not a.fixes_only and COHERE in str(arm.student.get("api_base")):
@@ -217,6 +278,24 @@ def main() -> int:
 
     out = a.out or Path("results/heal") / time.strftime("%Y%m%d-%H%M%S")
     out.mkdir(parents=True, exist_ok=True)
+    run = {
+        "command": "python scripts/heal/cycle.py " + " ".join(shlex.quote(x) for x in sys.argv[1:]),
+        "started": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+        "commit": git_commit(),
+        "arm": a.arm,
+        "config": a.config or "configs/arms.yaml",
+        "student": arm.student.get("model"),
+        "customer": arm.customer,
+        "teacher": TEACHER,
+        "domains": a.domains,
+        "limit": a.limit,
+        "sample": a.sample,
+        "seed": a.seed,
+        "judges": judges,
+        "fixes_only": a.fixes_only,
+        "attempts": a.attempts,
+    }
+    (out / "run.json").write_text(json.dumps(run, indent=1) + "\n")
     teacher = PrefixTeacher(attempts=a.attempts)
     command = shlex.split(a.train_cmd) if a.train_cmd else None
     if a.load_adapter:
@@ -260,7 +339,7 @@ def main() -> int:
         if report.skipped and n < a.cycles:
             print("   (the next cycle would see the same student: stopping)")
             break
-    print(f"\naudit: {out / 'audit.jsonl'}")
+    print(f"\naudit: {out / 'audit.jsonl'}; metrics: just heal --report {out}")
     return 0
 
 

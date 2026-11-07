@@ -408,3 +408,91 @@ def write_audit(report: CycleReport, path: Path | str, **kw: Any) -> Record:
     with path.open("a") as f:
         f.write(json.dumps(rec, default=str) + "\n")
     return rec
+
+
+# --- A run's metrics (the committed evidence) ---------------------------------------------------
+
+METRICS_FORMAT = "reagent.heal.metrics/v1"
+
+
+def run_metrics(audits: Sequence[Record], episodes: Sequence[Record], run: Record | None = None) -> Record:
+    """One heal run summed up from its audit records and conversations: small enough to commit
+    as ``results/heal-<name>.metrics.json`` (raw ``results/`` files are gitignored).
+
+    Costs are the student's and the customer's (from each conversation) and the teacher's (from
+    each attempt). τ²-bench's judge calls aren't priced in the records, so they're not included.
+    """
+    from reflexive.stats import wilson
+
+    heal = [e for e in episodes if e.get("heal_role", "heal") == "heal"]
+    by_task = {(e["domain"], str(e["task_id"]), e.get("cycle", 1)): e for e in heal}
+    cycles = []
+    for a in audits:
+        n, k = len(a["heal"]["tasks"]), a["heal"]["passed"]
+        lo, hi = wilson(k, n)
+        fails = a["failures"]
+        fixable = [f for f in fails if f["first"] is not None]
+        tasks = []
+        for f in fails:
+            e = by_task.get((f["domain"], str(f["task_id"]), a["cycle"])) or {}
+            o = e.get("outcome") or {}
+            tasks.append(
+                {
+                    "domain": f["domain"],
+                    "task_id": f["task_id"],
+                    "termination": e.get("termination"),
+                    "checks": o.get("checks"),
+                    "failure": f["failure"],
+                    "first": None
+                    if f["first"] is None
+                    else {k: f["first"].get(k) for k in ("type", "kind", "tool", "turn", "detail")},
+                    "fixed": f["fixed"],
+                    "attempts": len([t for t in f["attempts"] if t.get("attempt")]),
+                }
+            )
+        types: Counter[str] = Counter(f["failure"] for f in fails)
+        cycles.append(
+            {
+                "cycle": a["cycle"],
+                "adapter": a["adapter"],
+                "skipped": a["skipped"],
+                "conversations": n,
+                "passed": k,
+                "task_success": round(k / n, 4) if n else None,
+                "task_success_wilson95": [round(lo, 4), round(hi, 4)],
+                "broken": len(a["heal"]["broken"]),
+                "failures": len(fails),
+                "failure_types": {t: types.get(t, 0) for t in ("TOOL", "ARG", "LOOP", "NONE")},
+                "fixable": len(fixable),
+                "fixed": sum(f["fixed"] for f in fails),
+                "first_try": sum(
+                    f["fixed"] and len([t for t in f["attempts"] if t.get("attempt")]) == 1 for f in fails
+                ),
+                "fixed_at_turn": dict(Counter(str(f["first"]["turn"]) for f in fixable if f["fixed"])),
+                "lessons": a["fixes"].get("lessons", {}),
+                "training": a.get("training"),
+                "gate": a.get("gate"),
+                "tasks": tasks,
+            }
+        )
+    student = sum(((e.get("agent_usage") or {}).get("est_cost") or 0) for e in episodes)
+    customer = sum((e.get("user_cost") or 0) for e in episodes)
+    teacher = sum(
+        ((t.get("usage") or {}).get("billed_cost") or 0)
+        for a in audits
+        for f in a["failures"]
+        for t in f["attempts"]
+    )
+    return {
+        "format": METRICS_FORMAT,
+        "run": run or {},
+        "conversations": len(episodes),
+        "cycles": cycles,
+        "cost_usd": {
+            "student": round(student, 4),
+            "customer": round(customer, 4),
+            "teacher": round(teacher, 4),
+            "total": round(student + customer + teacher, 4),
+            "note": "judge calls not included",
+        },
+    }
