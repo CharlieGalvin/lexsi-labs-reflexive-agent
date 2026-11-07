@@ -21,6 +21,21 @@ def test_the_gate_gets_every_dev_task_and_healing_only_train_tasks():
     assert len(heal) == 4 and {split_of(*t) for t in heal} == {"train"}
 
 
+def test_a_sample_is_random_per_domain_but_the_same_for_a_seed():
+    from reflexive.splits import task_ids
+
+    a = cycle.heal_tasks(["telecom", "retail"], sample=3)
+    assert a == cycle.heal_tasks(["telecom", "retail"], sample=3, seed=0)
+    assert [d for d, _ in a] == ["telecom"] * 3 + ["retail"] * 3
+    tel = [t for d, t in a if d == "telecom"]
+    assert tel != task_ids("telecom", "train")[:3]  # not just the first ones
+    assert tel == [t for t in task_ids("telecom", "train") if t in tel]  # the split's order
+    assert a != cycle.heal_tasks(["telecom", "retail"], sample=3, seed=1)
+    assert len(cycle.heal_tasks(["airline"], sample=500)) == len(task_ids("airline", "train"))
+    with pytest.raises(ValueError, match="not both"):
+        cycle.heal_tasks(["airline"], limit=2, sample=2)
+
+
 def test_the_cohere_student_refuses_an_adapter(monkeypatch):
     made = []
     monkeypatch.setattr(cycle, "make_student", lambda s: made.append(s) or s)

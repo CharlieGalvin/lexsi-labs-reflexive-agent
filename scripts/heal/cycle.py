@@ -1,12 +1,15 @@
 """Run heal cycles end to end: rollout → classify → teacher fix → retrain → gate → swap (SEL-47).
 
     python scripts/heal/cycle.py --fixes-only --domains telecom --limit 5   # today: Cohere's Aya
+    python scripts/heal/cycle.py --fixes-only --sample 3                     # 3 random per domain
     python scripts/heal/cycle.py --config configs/sft/arms.base.yaml \\
         --train-cmd "<your training command> {data} {out} {base}" --load-adapter
     python scripts/heal/cycle.py ... --cycles 3                              # SEL-23
 
 **What it runs.** The student from ``--config``'s arm (default Arm A, `configs/arms.yaml`) on the
-train tasks of ``--domains`` (``--limit`` per domain). Failures go to `heal.PrefixTeacher`
+train tasks of ``--domains``: all of them, the first ``--limit`` per domain, or a random
+``--sample`` per domain (seed ``--seed``, default 0, so a rerun picks the same tasks; the first
+tasks of a split are often one family, e.g. telecom's MMS issue). Failures go to `heal.PrefixTeacher`
 (GLM-5.3-Flash via OpenRouter, fixing the failing turn from the agent's view), the accepted fixes
 to `heal.CommandTrainer` and the candidate adapter to the agreed gate (`gate.DevGate`,
 `configs/gate.yaml`): both adapters on **every dev task** (36), oracle-scored with judges on.
@@ -46,6 +49,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import random
 import shlex
 import sys
 import time
@@ -63,8 +67,23 @@ DOMAINS = ("retail", "airline", "telecom")
 COHERE = "api.cohere.ai"
 
 
-def heal_tasks(domains: list[str], limit: int | None) -> list[Task]:
-    return [(d, t) for d in domains for t in splits.task_ids(d, "train")[:limit]]
+def heal_tasks(
+    domains: list[str], limit: int | None = None, sample: int | None = None, seed: int = 0
+) -> list[Task]:
+    """The train tasks to heal on: all, the first ``limit``, or a random ``sample`` per domain.
+
+    A sample keeps the split's order and is the same for the same seed.
+    """
+    if limit is not None and sample is not None:
+        raise ValueError("pass --limit or --sample, not both")
+    out = []
+    for d in domains:
+        ids = splits.task_ids(d, "train")
+        if sample is not None:
+            picked = set(random.Random(f"{seed}:{d}").sample(ids, min(sample, len(ids))))
+            ids = [t for t in ids if t in picked]
+        out += [(d, t) for t in ids[:limit]]
+    return out
 
 
 def gate_tasks() -> list[Task]:
@@ -149,6 +168,8 @@ def main() -> int:
     )
     ap.add_argument("--domains", nargs="+", choices=DOMAINS, default=list(DOMAINS), help="heal on these")
     ap.add_argument("--limit", type=int, help="the first N train tasks per domain (default all)")
+    ap.add_argument("--sample", type=int, help="a random N train tasks per domain (see --seed)")
+    ap.add_argument("--seed", type=int, default=0, help="the --sample seed (default 0)")
     ap.add_argument("--cycles", type=int, default=1)
     ap.add_argument("--fixes-only", action="store_true", help="stop after the fixes: no training, no gate")
     ap.add_argument("--train-cmd", help="training command; {data} {out} {name} {base} are filled in")
@@ -166,6 +187,8 @@ def main() -> int:
     ap.add_argument("--out", type=Path, help="default results/heal/<time>")
     ap.add_argument("--gate-history", type=Path, default=Path("results/heal/gate_history.jsonl"))
     a = ap.parse_args()
+    if a.limit is not None and a.sample is not None:
+        ap.error("pass --limit or --sample, not both")
 
     if not a.fixes_only and not a.train_cmd:
         ap.error("a full cycle needs --train-cmd (or pass --fixes-only)")
@@ -218,7 +241,7 @@ def main() -> int:
         adapter=a.adapter,
         workers=a.workers,
     )
-    heal, dev = heal_tasks(a.domains, a.limit), gate_tasks()
+    heal, dev = heal_tasks(a.domains, a.limit, a.sample, a.seed), gate_tasks()
     print(f"== heal {len(heal)} train tasks ({', '.join(a.domains)}); gate on {len(dev)} dev tasks → {out}")
     if a.fixes_only:
         print("   --fixes-only: nothing will be trained or gated")
