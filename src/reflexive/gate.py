@@ -11,14 +11,18 @@ state. The oracle's ``error`` (the run broke) is a crash; its ``unknown`` (a pas
 judged checks) can't be decided on. The checks run in order, and the first that fails decides:
 
 1. **Complete run**: at least ``min_tasks`` tasks, the same tasks for both adapters, one record
-   per task, at most ``max_crashed`` crashed conversations each, and no ``unknown``. Otherwise
+   per task, at most ``max_crashed`` crashed conversations each, and no ``unknown``. Every task
+   must be a **dev** task: a train or test task is refused outright (gating on test would spend
+   the final evaluation). Otherwise
    **no decision**: re-run the gate, don't reject. Tasks that crashed for either adapter are left
    out of both sides (``details["dropped"]``), so the comparison stays paired.
 2. **Pass rate**: tasks only the candidate passed, minus tasks only the current adapter passed,
    is at least ``margin``.
 3. **Hallucination**: findings per conversation (``classify_record``, of ``finding_types``) rise
-   by at most ``findings_tolerance`` (relative). A conversation already has about a dozen
-   findings (Arm A telecom dev: 11.7), so a strict "no rise" would reject on noise.
+   by at most ``findings_tolerance`` (relative), and always by at least one finding over the
+   whole run. A conversation already has about a dozen findings (Arm A telecom dev: 11.7), so a
+   strict "no rise" would reject on noise; the one-finding slack only matters near zero, where a
+   relative tolerance would reject a single extra finding.
 4. **Domains**: no domain loses ``domain_loss`` tasks or more (net, as in check 2).
 
 Each decision also records the McNemar p-value and the paired bootstrap range of the gain, but
@@ -28,7 +32,9 @@ from the test split.
 **Budget**: at most ``max_cycles`` promote-or-reject decisions on the same dev tasks; after that,
 ``decide`` gives no decision ("run the test split"), so the dev set isn't fitted to by repeated
 gating. A no-decision doesn't use up a cycle. ``history`` keeps every decision, for the audit
-record.
+record. Heal cycles run as separate jobs, days apart, so pass ``history_file`` (a JSON Lines
+file) to keep the budget across them: every decision is appended to it, and ``load`` reads it
+back, so a new gate knows how many cycles were already used.
 
 The rule was agreed in SEL-51 by Chiara, Charlie and Katie (5-6 Nov). Its thresholds live in
 ``configs/gate.yaml``.
@@ -37,6 +43,8 @@ The rule was agreed in SEL-51 by Chiara, Charlie and Katie (5-6 Nov). Its thresh
 from __future__ import annotations
 
 import collections
+import datetime as dt
+import json
 from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, fields
@@ -45,6 +53,7 @@ from typing import Any
 
 import yaml
 
+from reflexive import splits
 from reflexive.hallucination import FailureType, classify_record
 from reflexive.stats import mcnemar, paired_bootstrap
 
@@ -110,16 +119,22 @@ class DevGate:
     bootstrap_reps: int = 10_000
     workers: int = 4  # conversations scored at once (the judges are API calls)
     score: Score | None = None
+    history_file: Path | None = None  # JSON Lines: keeps the budget across separate runs
     history: list[GateDecision] = field(default_factory=list)
 
     @classmethod
     def load(cls, path: Path | str | None = None, **override: Any) -> DevGate:
         cfg = yaml.safe_load(Path(path or CONFIG_PATH).read_text())
-        allowed = {f.name for f in fields(cls)} - {"history", "score", "workers"}
-        if unknown := set(cfg) - allowed:
+        settings = {f.name for f in fields(cls)} - {"history", "score", "workers", "history_file"}
+        if unknown := set(cfg) - settings:
             raise ValueError(f"unknown gate settings in {path or CONFIG_PATH}: {', '.join(sorted(unknown))}")
+        if unknown := set(override) - settings - {"score", "workers", "history_file"}:
+            raise ValueError(f"unknown gate settings passed to DevGate.load: {', '.join(sorted(unknown))}")
         gate = cls(**{**cfg, **override})
         gate.finding_types = tuple(FailureType(t).value for t in gate.finding_types)  # a typo fails here
+        if gate.history_file is not None:
+            gate.history_file = Path(gate.history_file)
+            gate.history = read_history(gate.history_file)
         return gate
 
     @property
@@ -131,6 +146,10 @@ class DevGate:
         """Promote, reject or no decision, for the candidate's runs against the current one's."""
         decision = self._decide(list(baseline), list(candidate))
         self.history.append(decision)
+        if self.history_file is not None:
+            self.history_file.parent.mkdir(parents=True, exist_ok=True)
+            with self.history_file.open("a") as f:
+                f.write(json.dumps(_to_json(decision)) + "\n")
         return decision
 
     # --- The checks -------------------------------------------------------------------------------
@@ -202,7 +221,7 @@ class DevGate:
             )
             return out(REJECT, "pass_rate", why, details, rates)
         fb, fc = findings["baseline"]["total"], findings["candidate"]["total"]
-        allowed = fb * (1 + self.findings_tolerance)
+        allowed = round(max(fb * (1 + self.findings_tolerance), fb + 1 / n), 4)  # >= 1 finding of slack
         if fc > allowed:
             why = (
                 f"{'+'.join(self.finding_types)} findings per conversation rose {fb:.2f} -> {fc:.2f}, "
@@ -220,8 +239,20 @@ class DevGate:
         return out(PROMOTE, "all", why, details, rates)
 
     def _shape(self, baseline: list[Record], candidate: list[Record]) -> str | None:
-        """Why the runs can't be compared at all (checked before scoring), or None."""
+        """Why the runs can't be compared at all (checked before scoring), or None.
+
+        Raises on what is a mistake rather than a bad run: a task that isn't dev, or a task twice."""
         for name, recs in (("current adapter", baseline), ("candidate", candidate)):
+            for t in sorted(set(map(_task, recs))):
+                try:
+                    splits.assert_not_test(*t)  # the test split is never gated on
+                    split = splits.split_of(*t)
+                except KeyError as e:
+                    raise ValueError(f"{name}: {t[0]} task {t[1]!r} is in no split") from e
+                if split != "dev":
+                    raise ValueError(
+                        f"{name}: {t[0]} task {t[1]!r} is a {split} task; the gate takes dev tasks only"
+                    )
             per_task = collections.Counter(map(_task, recs))
             if dup := [t for t, k in per_task.items() if k > self.samples_per_task]:
                 raise ValueError(
@@ -257,3 +288,16 @@ class DevGate:
         for t in scored:
             net[t[0]] += int(c[t]) - int(b[t])
         return {d: net[d] for d in sorted({t[0] for t in scored})}
+
+
+def _to_json(d: GateDecision) -> dict[str, Any]:
+    return {"decided_at": dt.datetime.now(dt.UTC).isoformat(timespec="seconds"), **vars(d)}
+
+
+def read_history(path: Path) -> list[GateDecision]:
+    """The decisions saved in a history file (none if it doesn't exist yet)."""
+    if not path.exists():
+        return []
+    names = {f.name for f in fields(GateDecision)}
+    rows = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    return [GateDecision(**{k: v for k, v in r.items() if k in names}) for r in rows]

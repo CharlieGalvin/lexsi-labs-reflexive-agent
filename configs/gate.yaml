@@ -21,14 +21,16 @@ margin: 2
 #    types may rise by at most findings_tolerance (relative: 0.10 lets 11.7 go up to 12.9). A
 #    conversation has about a dozen findings (Arm A telecom dev: 11.7), so "no rise at all"
 #    would reject on noise. Each type is recorded separately too. Revisit once the 3-sample
-#    telecom run shows how much the count moves between runs.
+#    telecom run shows how much the count moves between runs. One extra finding over the whole
+#    run is always allowed, so a baseline at or near 0 isn't rejected for a single finding.
 finding_types: [TOOL, ARG, LOOP]
 findings_tolerance: 0.10
 
 # 4. Domains: no domain may lose this many tasks or more (net, as in check 2).
 domain_loss: 2
 
-# Heal cycles that may be gated on the same dev tasks; after that, run the test split.
+# Heal cycles that may be gated on the same dev tasks; after that, run the test split. To keep
+# the count across separate runs, pass DevGate.load(history_file=...): decisions are appended there.
 max_cycles: 3
 
 # Recorded with every decision but not required: on 36 tasks McNemar is underpowered, and the

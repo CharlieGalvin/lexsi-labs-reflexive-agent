@@ -7,6 +7,7 @@ the real classifier.
 
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 from typing import Any
 
@@ -190,8 +191,9 @@ def test_three_crashes_is_no_decision(broken: dict[str, Any]) -> None:
 def test_missing_or_different_tasks_is_no_decision() -> None:
     d = gate().decide(run(BASE), run(BASE)[:-1])
     assert d.verdict == NO_DECISION and "35 tasks, fewer than 36" in d.reason
-    other = run(BASE)[:-1] + [rec(("retail", "not-a-dev-task"), False)]
-    assert "different tasks" in gate().decide(run(BASE), other).reason
+    # Each adapter left out a different dev task (a made-up or non-dev task is refused outright)
+    b, c = run(BASE)[:-1], run(BASE)[:-2] + run(BASE)[-1:]
+    assert "different tasks" in gate(min_tasks=len(DEV) - 1).decide(b, c).reason
 
 
 def test_scores_with_judged_checks_skipped_are_no_decision() -> None:
@@ -260,3 +262,67 @@ def test_the_oracle_scorer_turns_a_record_that_isnt_a_conversation_into_an_error
     score = oracle_score(judges=False)
     assert score({"domain": "telecom"}).verdict == "error"
     assert score.identity["type"] == "tau2_score"  # ty: ignore[unresolved-attribute]
+
+
+# --- Review of #46 (7 Nov) -----------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("split", "message"), [("test", "TEST task"), ("train", "is a train task; the gate takes dev tasks only")]
+)
+def test_the_gate_refuses_anything_but_dev_tasks(split: str, message: str) -> None:
+    """Another split's tasks are refused, even with a clear gain: gating on test spends the final eval."""
+    tasks = [(d, t) for d in splits.DOMAINS for t in splits.task_ids(d, split)][: len(DEV)]
+    base = [rec(t, False) for t in tasks]
+    cand = [rec(t, i < 4) for i, t in enumerate(tasks)]
+    g = gate()
+    with pytest.raises(ValueError, match=message):
+        g.decide(base, cand)
+    assert g.history == []  # nothing decided, no cycle used
+
+
+def test_a_task_in_no_split_is_refused() -> None:
+    odd = [*run(BASE)[:-1], rec(("retail", "no-such-task"), False)]
+    with pytest.raises(ValueError, match="in no split"):
+        gate().decide(odd, odd)
+
+
+def test_the_budget_is_kept_across_gates_through_the_history_file(tmp_path) -> None:
+    """Heal cycles run as separate jobs: a new gate reading the same file knows the cycles used."""
+    path = tmp_path / "gate" / "history.jsonl"
+    first = gate(history_file=path)
+    first.decide(run(BASE), run(BASE)[:-1])  # no decision: doesn't use a cycle
+    for _ in range(2):
+        first.decide(run(BASE), run(BASE))  # two rejects
+    later = gate(history_file=path)  # e.g. the next day, in a new process
+    assert later.cycles_used == 2 and [d.verdict for d in later.history] == [NO_DECISION, REJECT, REJECT]
+    assert later.decide(run(BASE), run(BASE)).verdict == REJECT  # the third cycle
+    d = gate(history_file=path).decide(run(BASE), run(BASE | set(DEV[2:8])))
+    assert d.verdict == NO_DECISION and d.check == "budget"
+    rows = [json.loads(x) for x in path.read_text().splitlines()]
+    assert len(rows) == 5 and all("decided_at" in r and "verdict" in r for r in rows)
+
+
+def test_without_a_history_file_a_new_gate_starts_fresh() -> None:
+    g = gate()
+    g.decide(run(BASE), run(BASE))
+    assert g.cycles_used == 1 and gate().cycles_used == 0
+
+
+def test_one_extra_finding_over_a_clean_baseline_isnt_a_rejection() -> None:
+    """A relative tolerance on 0 findings would reject a single finding; one is always allowed."""
+    clean = [rec(t, True) for t in DEV]  # all pass, 0 findings
+    better = [rec(t, True) for t in DEV]
+    better[5] = rec(DEV[5], True, agent_view=[*better[5]["agent_view"][:2], wrong_tool(0), DONE])
+    g = gate(margin=0)
+    assert g.decide(clean, better).verdict == PROMOTE
+    worse = [rec(t, True) for t in DEV]
+    for i in (5, 6):
+        worse[i] = rec(DEV[i], True, agent_view=[*worse[i]["agent_view"][:2], wrong_tool(0), DONE])
+    d = gate(margin=0).decide(clean, worse)
+    assert d.verdict == REJECT and d.check == "hallucination"
+
+
+def test_a_misspelt_keyword_override_is_refused_like_a_misspelt_setting() -> None:
+    with pytest.raises(ValueError, match="unknown gate settings passed to DevGate.load: margn"):
+        DevGate.load(margn=2)
