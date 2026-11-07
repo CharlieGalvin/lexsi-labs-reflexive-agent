@@ -14,16 +14,19 @@ One cycle:
 
 A conversation that broke (an API error, a crash: `reflexive.metrics.is_broken`) says nothing
 about the student, so it is never treated as a failure: a broken heal run isn't sent to the
-teacher, and a gate task that broke for either adapter is left out on both sides, so the
-comparison stays paired. Both are kept in the report.
+teacher. The gate gets every gate run and leaves out a task that broke for either adapter on
+both sides, so the comparison stays paired; how many may break is part of its rule. Both are
+kept in the report.
 
-Classify is the real classifier. Rollout is whatever callable it's given: `arm_rollout` wraps
-`reflexive.arms.run_episode`, and the tests pass a fake. Fix, retrain and gate are stubs for now,
-behind small protocols, so the real ones drop in without changing the loop:
+Classify is the real classifier, and the gate is the agreed deployment rule
+(`reflexive.gate.DevGate`, SEL-51: oracle-scored, thresholds in `configs/gate.yaml`). The
+current adapter is re-run on the gate tasks at every cycle, never reused from an earlier one.
+`PassRateGate` is a simple stand-in for tests. Rollout is whatever callable it's given:
+`arm_rollout` wraps `reflexive.arms.run_episode`, and the tests pass a fake. Fix and retrain are
+stubs for now, behind small protocols, so the real ones drop in without changing the loop:
 
 - teacher: SEL-47 (the real GLM-5.3-Flash fix run)
 - trainer: the Trainer's AgentTune GRPO / BCO step
-- gate: SEL-51 (the agreed deployment rule)
 
 Heal tasks come from **train**, gate tasks from **dev**; a test task anywhere is refused
 (`reflexive.splits.assert_not_test`), as is a task in no split, a task listed twice, or no gate
@@ -36,6 +39,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
+from reflexive.gate import GateDecision
 from reflexive.hallucination import Diagnosis, FailureType, classify_record
 from reflexive.metrics import is_broken
 from reflexive.splits import assert_not_test, split_of
@@ -79,17 +83,10 @@ class Trainer(Protocol):
         """A new adapter trained from ``base`` on ``fixes``."""
 
 
-@dataclass(frozen=True)
-class GateDecision:
-    passed: bool
-    baseline_rate: float
-    candidate_rate: float
-    reason: str = ""
-
-
 class Gate(Protocol):
     def decide(self, baseline: Sequence[Record], candidate: Sequence[Record]) -> GateDecision:
-        """Whether the candidate adapter should replace the current one."""
+        """Whether the candidate should replace the current adapter, from every gate run of both
+        (broken ones too). ``details["dropped"]`` lists the tasks it left out."""
 
 
 @dataclass
@@ -125,17 +122,24 @@ class StubTrainer:
 
 @dataclass(frozen=True)
 class PassRateGate:
-    """Placeholder rule until SEL-51: promote if the candidate's dev pass rate beats the baseline's
-    by more than ``min_gain``."""
+    """A stand-in for tests (the real rule is ``reflexive.gate.DevGate``): promote if the
+    candidate's dev pass rate beats the baseline's by more than ``min_gain``, on the tasks that
+    broke for neither adapter. Reads the records' saved outcomes; no oracle."""
 
     min_gain: float = 0.0
 
     def decide(self, baseline: Sequence[Record], candidate: Sequence[Record]) -> GateDecision:
-        b, c = pass_rate(baseline), pass_rate(candidate)
+        pairs = list(zip(baseline, candidate, strict=True))
+        kept = [(b, c) for b, c in pairs if not (is_broken(b) or is_broken(c))]
+        dropped = [[b["domain"], str(b["task_id"])] for b, c in pairs if (b, c) not in kept]
+        if not kept:
+            return GateDecision(
+                False, 0.0, 0.0, "every gate task broke for one adapter or both", details={"dropped": dropped}
+            )
+        b, c = pass_rate([b for b, _ in kept]), pass_rate([c for _, c in kept])
         ok = c - b > self.min_gain
-        return GateDecision(
-            ok, b, c, f"dev pass rate {b:.2f} -> {c:.2f}, needs a gain over {self.min_gain:.2f}"
-        )
+        why = f"dev pass rate {b:.2f} -> {c:.2f}, needs a gain over {self.min_gain:.2f}"
+        return GateDecision(ok, b, c, why, details={"dropped": dropped})
 
 
 # --- The loop -------------------------------------------------------------------------------
@@ -240,22 +244,15 @@ class ReflexiveAgent:
             return done(skipped="the teacher fixed none of the failures")
 
         candidate = self.trainer.train(fixes, before)
+        # The current adapter is re-run here every cycle, never reused (agreed in SEL-51)
         base_runs, cand_runs = self._run(before, gate_tasks), self._run(candidate, gate_tasks)
-        # Paired: a task that broke for either adapter is left out of both sides
-        keep = [
-            i
-            for i, (b, c) in enumerate(zip(base_runs, cand_runs, strict=True))
-            if not (is_broken(b) or is_broken(c))
-        ]
+        # Every run goes to the gate: pairing, and how many may break, are part of its rule
+        decision = self.gate.decide(base_runs, cand_runs)
         gate_runs = {
             "gate_baseline": base_runs,
             "gate_candidate": cand_runs,
-            "gate_dropped": [tuple(gate_tasks[i]) for i in range(len(gate_tasks)) if i not in keep],
+            "gate_dropped": [tuple(t) for t in decision.details.get("dropped", [])],
         }
-        if not keep:
-            decision = GateDecision(False, 0.0, 0.0, "every gate task broke for one adapter or both")
-        else:
-            decision = self.gate.decide([base_runs[i] for i in keep], [cand_runs[i] for i in keep])
         if decision.passed:
             self.adapter = candidate
         return done(candidate, decision)

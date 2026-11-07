@@ -1,0 +1,38 @@
+# The deployment gate (SEL-51): when a healed adapter replaces the current one.
+# Agreed by Chiara, Charlie and Katie in SEL-51 (5-6 Nov). reflexive.gate.DevGate reads this
+# file; change a threshold here, not in code.
+#
+# Both adapters run the same dev tasks (configs/splits.json: 36 tasks) with the same customer,
+# temperature 0, and the current adapter is re-run at every gate (not reused). Every run is
+# re-scored by the AuditKIT oracle (reflexive.oracle, judges on); a crash is its "error" verdict.
+# The checks run in order; the first that fails decides, and its reason is recorded.
+
+# 1. Complete run. Fewer tasks, or more crashed conversations than this per adapter, is
+#    "no decision": re-run the gate, don't reject. So is any "unknown" (a pass that skipped
+#    LLM-judged checks). Tasks that crashed for either adapter are left out of both sides.
+min_tasks: 36
+max_crashed: 2
+samples_per_task: 1  # a second record for the same task is refused
+
+# 2. Pass rate: tasks only the candidate passed, minus tasks only the current adapter passed.
+margin: 2
+
+# 3. Hallucination: findings per conversation (reflexive.hallucination.classify_record) of these
+#    types may rise by at most findings_tolerance (relative: 0.10 lets 11.7 go up to 12.9). A
+#    conversation has about a dozen findings (Arm A telecom dev: 11.7), so "no rise at all"
+#    would reject on noise. Each type is recorded separately too. Revisit once the 3-sample
+#    telecom run shows how much the count moves between runs. One extra finding over the whole
+#    run is always allowed, so a baseline at or near 0 isn't rejected for a single finding.
+finding_types: [TOOL, ARG, LOOP]
+findings_tolerance: 0.10
+
+# 4. Domains: no domain may lose this many tasks or more (net, as in check 2).
+domain_loss: 2
+
+# Heal cycles that may be gated on the same dev tasks; after that, run the test split. To keep
+# the count across separate runs, pass DevGate.load(history_file=...): decisions are appended there.
+max_cycles: 3
+
+# Recorded with every decision but not required: on 36 tasks McNemar is underpowered, and the
+# statistical claim comes from the 100 test tasks.
+bootstrap_reps: 10000

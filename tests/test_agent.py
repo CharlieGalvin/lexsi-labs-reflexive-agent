@@ -216,3 +216,19 @@ def test_arm_rollout_runs_the_arm_with_the_agent_for_the_adapter(monkeypatch):
     rec = rollout("adapter-1", *DEV[0])
     assert calls == [("arm-A", "agent for adapter-1", *DEV[0], {"judges": False})]
     assert rec == {"domain": DEV[0][0], "task_id": DEV[0][1], "adapter": "adapter-1"}
+
+
+def test_the_agreed_gate_runs_in_the_loop_and_reports_what_it_dropped():
+    """DevGate on 4 dev tasks: the candidate's run of DEV[3] broke, so it's left out of both sides."""
+    from test_gate import saved
+
+    from reflexive.gate import DevGate
+
+    rollout = BreakingRollout({("stub-adapter-1", *DEV[3])}, heals=set(DEV[:2]))
+    gate = DevGate.load(min_tasks=len(DEV), score=saved)
+    agent = ReflexiveAgent(rollout, teacher=StubTeacher(), trainer=StubTrainer(), gate=gate)
+    report = agent.run_cycle(TRAIN, DEV)
+    decision = report.gate
+    assert decision is not None and decision.verdict == "promote" and agent.adapter == "stub-adapter-1"
+    assert report.gate_dropped == [DEV[3]] and decision.details["net_gain"] == 2
+    assert json.loads(json.dumps(report.summary()))["gate"]["check"] == "all"
