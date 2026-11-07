@@ -26,6 +26,7 @@ from collections.abc import Sequence
 from typing import Any, Protocol
 
 IGNORE = -100  # PyTorch's cross-entropy ignore index
+MIN_TOKENS = 64  # a real conversation (system prompt + tools + turns) is thousands of tokens
 
 Record = dict[str, Any]
 
@@ -87,9 +88,19 @@ class NotPrefixStable(ValueError):
 
 
 def _ids(tok: ChatTokenizer, msgs: Sequence[dict[str, str]], gen: bool) -> list[int]:
-    out = tok.apply_chat_template(list(msgs), tokenize=True, add_generation_prompt=gen)
-    if isinstance(out, dict):  # newer transformers can return a BatchEncoding
+    out: Any = tok.apply_chat_template(list(msgs), tokenize=True, add_generation_prompt=gen)
+    # transformers 5 returns a BatchEncoding ({"input_ids", "attention_mask"}), which is a
+    # mapping but not a dict; older versions return the ids. Either may be nested one level.
+    if hasattr(out, "keys"):
         out = out["input_ids"]
+    if hasattr(out, "tolist"):  # a tensor or an array
+        out = out.tolist()
+    if out and isinstance(out[0], list | tuple):
+        if len(out) != 1:
+            raise ValueError(f"expected one conversation's token ids, got a batch of {len(out)}")
+        out = out[0]
+    if not all(isinstance(i, int) for i in out):
+        raise TypeError(f"apply_chat_template returned {type(out).__name__}, not token ids")
     return list(out)
 
 
@@ -118,19 +129,26 @@ def encode(example: Record, tok: ChatTokenizer) -> dict[str, list[int]]:
 
 
 def encode_all(
-    examples: Sequence[Record], tok: ChatTokenizer, max_len: int
+    examples: Sequence[Record], tok: ChatTokenizer, max_len: int, min_tokens: int = MIN_TOKENS
 ) -> tuple[list[dict[str, list[int]]], dict[str, Any]]:
     """Every example that fits in ``max_len`` tokens, and what was left out and why.
 
     A conversation is never cut: a cut one would end mid-task, and teach the model to stop there."""
-    kept, too_long = [], []
+    kept, too_long, tiny = [], [], []
     for e in examples:
         enc = encode(e, tok)
+        if len(enc["input_ids"]) < min_tokens:
+            tiny.append(e.get("id"))
         if len(enc["input_ids"]) > max_len:
             too_long.append({"id": e.get("id"), "tokens": len(enc["input_ids"])})
             continue
         kept.append(enc)
     lengths = [len(k["input_ids"]) for k in kept]
+    if tiny or (kept and not any(lab != IGNORE for k in kept for lab in k["labels"])):
+        raise ValueError(
+            f"implausible tokenising: {len(tiny)} conversations under {min_tokens} tokens "
+            f"(e.g. {tiny[:2]}), or no targets at all; the tokenizer's output isn't being read right"
+        )
     targets = [sum(t != IGNORE for t in k["labels"]) for k in kept]
     stats = {
         "examples": len(kept),

@@ -74,8 +74,9 @@ def main() -> int:  # noqa: C901, PLR0915 - one linear script: load, tokenise, t
 
     tok = AutoTokenizer.from_pretrained(cfg["model"])
     tok.chat_template = relax_chat_template(tok.chat_template)  # the agent speaks first: see reflexive.sft
-    train_enc, train_stats = encode_all(train_rows, tok, cfg["max_len"])
-    held_enc, held_stats = encode_all(held_rows, tok, cfg["max_len"])
+    lo = cfg.get("min_tokens", 64)  # fewer means the tokenizer's output isn't being read right
+    train_enc, train_stats = encode_all(train_rows, tok, cfg["max_len"], lo)
+    held_enc, held_stats = encode_all(held_rows, tok, cfg["max_len"], lo)
     print(
         f"train: {train_stats['examples']} conversations, {train_stats['tokens']['total']:,} tokens "
         f"({train_stats['target_share']:.0%} targets), longest {train_stats['tokens']['max']:,}; "

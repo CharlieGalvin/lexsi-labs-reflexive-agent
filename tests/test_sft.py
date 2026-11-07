@@ -120,7 +120,7 @@ def test_a_conversation_over_the_limit_is_left_out_whole_not_cut():
     tok = FakeTokenizer()
     short = example()
     long = example(id="long", messages=[*example()["messages"][:-1], {"role": "user", "content": "x " * 50}])
-    kept, stats = encode_all([short, long], tok, max_len=40)
+    kept, stats = encode_all([short, long], tok, max_len=40, min_tokens=1)
     assert stats["examples"] == 1 and [t["id"] for t in stats["too_long"]] == ["long"]
     assert len(kept[0]["input_ids"]) <= 40 and 0 < stats["target_share"] < 1
 
@@ -158,7 +158,7 @@ def _rows() -> list[dict[str, Any]]:
 def _run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, rows: list[dict[str, Any]], *args: str) -> int:
     data = _data(tmp_path, rows)
     cfg = yaml.safe_load((ROOT / "configs" / "train" / "sft_aya32b.yaml").read_text())
-    cfg.update(data=str(data), name="test-run")
+    cfg.update(data=str(data), name="test-run", min_tokens=1)
     path = tmp_path / "cfg.yaml"
     path.write_text(yaml.safe_dump(cfg))
     fake = types.SimpleNamespace(
@@ -316,3 +316,39 @@ def test_named_templates_are_relaxed_where_they_have_the_check():
     assert out["tool_use"] == named["tool_use"] and "raise_exception" not in out["default"]
     listed = relax_chat_template([{"name": "default", "template": COHERE}])
     assert default_template(listed) == relaxed_template(COHERE) == default_template(relaxed_template(COHERE))
+
+
+# --- What apply_chat_template returns, by transformers version -----------------------------------
+
+from collections import UserDict  # noqa: E402
+
+
+class BatchEncodingTokenizer(FakeTokenizer):
+    """transformers 5: a BatchEncoding (a mapping, not a dict) of a batch of one."""
+
+    def apply_chat_template(self, conversation, *, tokenize, add_generation_prompt):  # noqa: ANN001, ANN201
+        ids = super().apply_chat_template(
+            conversation, tokenize=tokenize, add_generation_prompt=add_generation_prompt
+        )
+        return UserDict({"input_ids": [ids], "attention_mask": [[1] * len(ids)]})
+
+
+def test_a_batch_encoding_is_read_as_the_token_ids_not_its_keys():
+    plain, batch = encode(example(), FakeTokenizer()), encode(example(), BatchEncodingTokenizer())
+    assert batch == plain and len(batch["input_ids"]) > 20
+
+
+def test_a_batch_of_more_than_one_conversation_is_refused():
+    class Two(FakeTokenizer):
+        def apply_chat_template(self, conversation, *, tokenize, add_generation_prompt):  # noqa: ANN001, ANN201
+            return {"input_ids": [[1, 2], [3, 4]]}
+
+    with pytest.raises(ValueError, match="batch of 2"):
+        encode(example(), Two())
+
+
+def test_implausibly_short_conversations_or_no_targets_stop_the_run():
+    """What the pod's first dry run showed (2 tokens a conversation): now refused, not reported."""
+    with pytest.raises(ValueError, match="implausible tokenising"):
+        encode_all([example()], FakeTokenizer(), max_len=10_000, min_tokens=64)
+    assert encode_all([example()], FakeTokenizer(), max_len=10_000, min_tokens=8)[1]["examples"] == 1
