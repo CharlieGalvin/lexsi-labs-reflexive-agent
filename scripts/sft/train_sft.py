@@ -95,7 +95,6 @@ def target_loss(model: Any, inputs: dict[str, Any], num_items_in_batch: Any = No
     conversation (the config's batch size). Summed and divided by ``num_items_in_batch`` (the
     targets across the accumulated batch) when the Trainer gives it, else averaged."""
     import torch
-    import torch.nn.functional as F  # noqa: N812
 
     labels = inputs["labels"]
     if labels.shape[0] != 1:
@@ -106,7 +105,7 @@ def target_loss(model: Any, inputs: dict[str, Any], num_items_in_batch: Any = No
     logits, targets = out.logits[0], nxt[keep]
     total = logits.new_zeros((), dtype=torch.float32)
     for i in range(0, len(keep), CE_CHUNK):
-        total = total + F.cross_entropy(
+        total = total + torch.nn.functional.cross_entropy(
             logits[i : i + CE_CHUNK].float(), targets[i : i + CE_CHUNK], reduction="sum"
         )
     if num_items_in_batch is not None:

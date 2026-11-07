@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 import yaml
@@ -76,7 +77,7 @@ def test_warmup_ratio_becomes_warmup_steps_where_transformers_dropped_it(tmp_pat
     assert kw.get("warmup_ratio", kw.get("warmup_steps")) == 0.05
 
 
-def _tiny_cohere() -> object:
+def _tiny_cohere() -> Any:
     cfg = transformers.CohereConfig(
         vocab_size=97,
         hidden_size=32,
