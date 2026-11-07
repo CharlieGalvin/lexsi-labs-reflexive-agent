@@ -40,25 +40,33 @@ Hence the **200 GB volume**: about 100 GB used, plus room for checkpoints and a 
    account behind your `HF_TOKEN`. The token's account must be in the `reagent-lexsi` org.
 2. **RunPod secrets** (Settings → Secrets): `HF_TOKEN`, `OPENAI_API_KEY` (the customer and the
    judges in dev rollouts), optionally `WANDB_API_KEY` (training charts).
-3. **Create the pod:** an **H100 80 GB, a full GPU (not a MIG slice)**, the RunPod PyTorch
-   template, a **200 GB volume disk** at `/workspace`. In the pod's environment variables, map the
-   secrets: `HF_TOKEN={{ RUNPOD_SECRET_HF_TOKEN }}`, `OPENAI_API_KEY={{ RUNPOD_SECRET_OPENAI_API_KEY }}`
-   (and `WANDB_API_KEY` the same way).
+3. **Create the pod:** an **80 GB GPU, a full one (not a MIG slice)**: A100 or H100. Use the
+   RunPod **PyTorch** template, not the vLLM one: `setup.sh` installs vLLM in its own environment
+   beside the training one. Attach a volume of at least 150 GB at `/workspace`. **Before
+   deploying,** add the environment variables `HF_TOKEN` (a *Write* token: `--push` uploads to the
+   org) and `OPENAI_API_KEY`, as values or as `{{ RUNPOD_SECRET_<name> }}`. Forgot? Edit Pod →
+   Environment Variables restarts the pod; only the temporary container disk is lost.
 
 ## On the pod
 
-Open a terminal (web terminal or SSH) and **work inside tmux**, so a dropped connection doesn't
-stop a long job: `tmux new -s sft` (reattach later with `tmux attach -t sft`).
+Connect with **SSH over exposed TCP** (the Connect tab; it also supports `scp`), check the keys
+are there (`echo ${HF_TOKEN:+set} ${OPENAI_API_KEY:+set}` prints `set set`), and **work inside
+tmux**, so a dropped connection doesn't stop a long job: `tmux new -s sft` (reattach with
+`tmux attach -t sft`; scroll with `Ctrl-b [` then the arrow keys, `q` to leave, or
+`tmux set -g mouse on` once to scroll with the trackpad). If tmux is missing:
+`apt-get update -qq && apt-get install -y -qq tmux`.
 
 ### 1. Setup (30–45 min, mostly the download)
 
 ```bash
 cd /workspace && git clone https://github.com/CharlieGalvin/lexsi-labs-reflexive-agent.git
-BRANCH=charliegalvin/sel-66-train-data bash lexsi-labs-reflexive-agent/scripts/pod/setup.sh
-cd /workspace/lexsi-labs-reflexive-agent && source .venv/bin/activate
+cd lexsi-labs-reflexive-agent
+git checkout charliegalvin/sel-66-train-data      # only until #49 merges: setup.sh isn't on main yet
+bash scripts/pod/setup.sh
+source .venv/bin/activate
 ```
 
-(`BRANCH=` only until #49 merges; then leave it out.) It stops early, before installing anything,
+The script stays on the branch the repo is on (set `BRANCH=` to switch). It stops early, before installing anything,
 on a MIG slice, a card under 80 GB, too little disk, or a token without access to the model. It's
 safe to re-run: it skips what's done. It ends by building the training examples.
 

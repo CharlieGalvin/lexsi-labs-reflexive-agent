@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Set up a RunPod GPU pod for the SFT run (SEL-65, SEL-67), and for serving Aya with vLLM (SEL-63).
 #
-# On a fresh pod (add HF_TOKEN, and WANDB_API_KEY if you log to W&B, as RunPod secrets first):
+# On a fresh pod (set HF_TOKEN and OPENAI_API_KEY as the pod's environment variables first):
 #
 #   cd /workspace && git clone https://github.com/CharlieGalvin/lexsi-labs-reflexive-agent.git
-#   bash lexsi-labs-reflexive-agent/scripts/pod/setup.sh
+#   cd lexsi-labs-reflexive-agent && git checkout <branch>     # only if it isn't on main yet
+#   bash scripts/pod/setup.sh
 #
 # It checks the GPU (a full 80 GB card, not a MIG slice) and the disk; keeps every cache under
 # /workspace, so a pod restart doesn't lose them (docs/experiments/MESSY_LOOKUP.md); installs uv
@@ -14,11 +15,11 @@
 # trajectories at tag v1.1, and builds the training examples (`just train-data`).
 #
 # Safe to re-run: every step skips what's already done. Settings (environment variables):
-#   BRANCH=main  MODEL=CohereLabs/aya-expanse-32b  DATASET_REV=v1.1  SKIP_VLLM=0  SKIP_MODEL=0
+#   BRANCH (default: the branch the repo is on)  MODEL=CohereLabs/aya-expanse-32b  DATASET_REV=v1.1
+#   SKIP_VLLM=0  SKIP_MODEL=0
 
 set -euo pipefail
 
-BRANCH="${BRANCH:-main}"
 MODEL="${MODEL:-CohereLabs/aya-expanse-32b}"
 DATASET="${DATASET:-reagent-lexsi/tau2-golden-trajectories}"
 DATASET_REV="${DATASET_REV:-v1.1}"
@@ -28,6 +29,9 @@ MIN_GPU_GB="${MIN_GPU_GB:-75}"
 MIN_DISK_GB="${MIN_DISK_GB:-150}"
 WORKSPACE="${WORKSPACE:-/workspace}"
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# Stay on the branch the repo is on unless told otherwise: checking out another branch would swap
+# this very script (and its extras and recipes) out from under the running shell
+BRANCH="${BRANCH:-$(git -C "$REPO_DIR" branch --show-current)}"
 VLLM_ENV="$WORKSPACE/vllm-env"
 
 step() { printf '\n== %s\n' "$*"; }
