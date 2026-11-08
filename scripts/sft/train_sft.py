@@ -49,7 +49,8 @@ def examples(cfg: dict[str, Any]) -> tuple[list[dict], list[dict]]:
         splits.assert_not_test(r["domain"], r["task_id"])  # a test task is never trained on
         if splits.split_of(r["domain"], r["task_id"]) != "train":
             raise SystemExit(f"⛔ {r['id']} isn't a train task: rebuild with `just train-data`")
-    train = [r for r in rows if r["group"] == cfg["train_group"]]
+    groups = cfg["train_group"] if isinstance(cfg["train_group"], list) else [cfg["train_group"]]
+    train = [r for r in rows if r["group"] in groups]
     held = [r for r in rows if r["group"] == cfg["eval_group"]]
     if not train:
         raise SystemExit(f"⛔ no {cfg['train_group']} examples in {cfg['data']}")
