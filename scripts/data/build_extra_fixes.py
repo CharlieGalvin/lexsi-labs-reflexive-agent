@@ -40,8 +40,9 @@ def _build_golden() -> Any:
     spec = importlib.util.spec_from_file_location(
         "build_golden", ROOT / "scripts" / "data" / "build_golden.py"
     )
-    mod = importlib.util.module_from_spec(spec)  # ty: ignore[invalid-argument-type]
-    spec.loader.exec_module(mod)  # ty: ignore[possibly-missing-attribute]
+    assert spec is not None and spec.loader is not None
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
     return mod
 
 

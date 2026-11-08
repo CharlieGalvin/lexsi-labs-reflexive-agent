@@ -5,6 +5,7 @@ from pathlib import Path
 
 SCRIPT = Path(__file__).parents[1] / "scripts/data/build_extra_fixes.py"
 spec = importlib.util.spec_from_file_location("build_extra_fixes", SCRIPT)
+assert spec is not None and spec.loader is not None
 bx = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(bx)
 
