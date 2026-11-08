@@ -50,6 +50,11 @@ fi
 # max-model-len without this. Training examples reach 13.7K tokens, dev conversations more.
 export VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
 
+# FlashInfer compiles its top-k/top-p sampler on first use, which needs ninja and a CUDA
+# compiler; the pod has neither on PATH ("No such file or directory: 'ninja'" at engine start).
+# PyTorch's sampler is as correct, and temperature 0 doesn't sample anyway.
+export VLLM_USE_FLASHINFER_SAMPLER="${VLLM_USE_FLASHINFER_SAMPLER:-0}"
+
 exec "$VLLM" serve "$MODEL" \
   --port "$PORT" \
   --dtype bfloat16 \
