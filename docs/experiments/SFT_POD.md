@@ -198,21 +198,31 @@ Arm A's student, on the pod instead of Cohere's API. It should look broadly like
 tasks (mostly failures, the odd pass, no crashes). Many crashes or empty replies mean the serving
 doesn't match Cohere's: stop and check before step 6.
 
-## 6. The real run: the SFT adapter on the 36 dev tasks (~45 min)
+## 6. The real run: S (the adapter) and P (the control) on the 36 dev tasks (~1 hour each)
+
+Both arms, in one go, then the pod stops itself (don't press Ctrl+C in this window). P is the fair
+control: the same server, template and 32K context, without the adapter.
 
 ```bash
-just rollout S retail  --split dev --config configs/sft/arms.sft.yaml
-just rollout S airline --split dev --config configs/sft/arms.sft.yaml
-just rollout S telecom --split dev --config configs/sft/arms.sft.yaml
-just oracle-score results/episodes/arms/S-*-dev.jsonl
-just arm-metrics results/episodes/arms/S-retail-dev.jsonl --owner Charlie
-just arm-metrics results/episodes/arms/S-airline-dev.jsonl --owner Charlie
-just arm-metrics results/episodes/arms/S-telecom-dev.jsonl --owner Charlie
+for a in S P; do
+  cfg=$([ $a = S ] && echo configs/sft/arms.sft.yaml || echo configs/sft/arms.base.yaml)
+  for d in retail airline telecom; do
+    just rollout $a $d --split dev --config $cfg 2>&1 | tee -a /workspace/$a-dev.out
+  done
+done; runpodctl stop pod <pod id>
 ```
 
-If a command reports crashed conversations, run it again (it retries only those). Compare with
-**Arm A on dev: 2/36 (5.6%)**, and look at the Tool / Arg / Loop counts and how many
-conversations hit the 32K context (`cut_off` in the metrics).
+Progress, from another session: `grep -E "^\[[0-9]+/|^This run" /workspace/S-dev.out | tail -6`.
+A re-run of the same command retries only crashed conversations. Score on the Mac after step 7:
+`just oracle-score`, then `just arm-metrics` on each file, then `just arm-compare` P against S.
+
+**Leave a credit buffer.** When the balance runs out, RunPod stops the pod mid-run: finished
+conversations are safe on the volume, and the re-run picks up the rest. Plan for ~$3/hour for the
+H100 plus the 5-minute model load on every start.
+
+**Result (8 Nov, indicative; SEL-65):** S 16/36 (44%), P 5/36 (14%), Arm A 2/36 (6%). Paired by
+task, 14 tasks passed only with the adapter and 3 only without (exact McNemar p ≈ 0.013); the
+gain is in retail (2 → 8) and telecom (0 → 7), not airline (3 → 1 of 6).
 
 ## 7. Copy the results off the pod, then stop it
 
@@ -224,7 +234,7 @@ cd ~/path/to/lexsi-labs-reflexive-agent
 scp -P <port> -i ~/.ssh/id_ed25519 \
   "root@<ip>:/workspace/lexsi-labs-reflexive-agent/results/episodes/arms/{P,S}-*-dev.jsonl" results/episodes/arms/
 scp -P <port> -i ~/.ssh/id_ed25519 \
-  "root@<ip>:/workspace/lexsi-labs-reflexive-agent/results/arm-S-*.metrics.json" results/
+  "root@<ip>:/workspace/{S,P}-dev.out" results/
 ```
 
 Then **stop the pod** in the console. Terminating it is fine too: the network volume keeps
@@ -249,6 +259,8 @@ All fixed in the code now; listed so the symptoms are recognisable.
 | The SSH connection drops ("Operation timed out", "Broken pipe") and the server with it | Idle SSH timed out; the server ran outside tmux | `ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=8 -t … "tmux new -A -s sft"`: keep-alives, and straight into tmux |
 | `duplicate session: sft` (and the next commands run outside tmux) | A session of that name already exists | `tmux attach -t sft` (or `tmux new -A -s sft`, which attaches or creates) |
 | `CUDA out of memory … Tried to allocate 11.86 GiB` at step 2 | Logits over Aya's ~256K vocabulary at every position of a 13.7K-token conversation, plus their float32 copy | The loss scores only the positions before each target (`logits_to_keep`), in chunks: the same loss, ~20 GB less |
+| A telecom conversation ends `BROKEN ContextWindowExceededError … maximum context length is 32768` and every re-run retries it | Only Cohere's wording ("too many tokens") was recognised as an overflow | `reflexive.teacher` also recognises vLLM's; it's scored as a fail with `context_overflow`, as for Arm A |
+| The pod stops mid-run and a new one ("…-migration-2") appears after a top-up | The balance ran out | Start the new pod: the volume moves with it. Re-run the same commands; finished conversations are kept |
 | The pod stopped after Ctrl+C | The `;` ran the stop after the interrupted training | Don't press Ctrl+C in the training window |
 
 ## Other problems
