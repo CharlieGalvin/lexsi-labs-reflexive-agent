@@ -18,7 +18,11 @@ help here: it runs a shell command and passes if it exits 0 (by default ``sys.ex
 Instead a fix is accepted only if:
 
 1. it is a real turn (a message or at least one tool call), and differs from the failed one;
-2. our classifier, run on the prefix plus the fixed turn, finds **nothing in the fixed turn**:
+2. it doesn't give up: no ``###STOP###``, no ``transfer_to_human_agents`` hand-off, and a
+   text-only turn says something (at least ``MIN_TEXT`` characters). A turn that does nothing
+   can't hallucinate, so without this the cycle could train the student to stop rather than
+   repair. Asking the customer for what's missing (every fix so far) is still accepted;
+3. our classifier, run on the prefix plus the fixed turn, finds **nothing in the fixed turn**:
    no unknown or customer-only tool, no invented or ill-typed argument, no repeated failed call.
 
 That is weaker than a scorer: it says the turn is not a Tool / Arg / Loop failure, not that the
@@ -54,6 +58,9 @@ SFT_FORMAT = "reagent.sft/v1"  # as `reflexive.train_data.FORMAT` (SEL-66)
 AUDIT_FORMAT = "reagent.heal.audit/v1"
 TEACHER = "glm53f"  # the bake-off's choice (SEL-58): z-ai/glm-5.3-flash
 TEMPERATURES = (0.0, 0.7, 0.7)  # as the fix run: attempt 1 greedy, retries differ
+STOP = "###STOP###"  # τ²-bench's end-of-conversation marker
+HANDOFF = "transfer_to_human_agents"
+MIN_TEXT = 20  # a text-only fix shorter than this ("OK.", "Sure.") does nothing
 
 Message = dict[str, Any]
 TurnAgent = Any  # anything with .turn(messages, tools) -> an OpenAI-style assistant message
@@ -116,6 +123,14 @@ def check_fix(domain: str, prefix: list[Message], fixed: Message, failed: Messag
         problems.append("the fixed turn is empty")
     if failed is not None and _same_turn(fixed, failed):
         problems.append("the fixed turn is the failed turn again")
+    text = (fixed.get("content") or "").strip()
+    calls = [tc["function"]["name"] for tc in fixed.get("tool_calls") or []]
+    if STOP in text:
+        problems.append("the fixed turn ends the conversation")
+    if HANDOFF in calls:
+        problems.append("the fixed turn hands off to a human")
+    if not calls and text and len(text) < MIN_TEXT:
+        problems.append(f"the fixed turn is text only and too short to do anything: {text!r}")
     tools, customer = domain_tools(domain)
     at = len(prefix)
     found = classify_hallucination([*prefix, fixed], tools, customer_tools=customer).findings

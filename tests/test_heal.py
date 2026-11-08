@@ -106,6 +106,29 @@ def test_a_fix_is_accepted_only_if_the_classifier_finds_nothing_in_it():
     ]
 
 
+def say(text):
+    return {"role": "assistant", "content": text}
+
+
+ASK = say("I can help with that. First, could you confirm the phone number on your account?")
+
+
+def test_a_fix_that_gives_up_is_refused():
+    assert check_fix("telecom", [SYS, HI], ASK, WRONG_TOOL) == []  # asking for what's missing is a fix
+    assert "the fixed turn ends the conversation" in check_fix(
+        "telecom", [SYS, HI], say("I'm sorry, I can't help with that. ###STOP###")
+    )
+    assert "the fixed turn hands off to a human" in check_fix(
+        "telecom", [SYS, HI], call("transfer_to_human_agents", {"summary": "no data"})
+    )
+    for text in ("OK.", "Sure.", "###STOP###"):
+        assert any(
+            "too short" in p or "ends the conversation" in p
+            for p in check_fix("telecom", [SYS, HI], say(text))
+        )
+    assert check_fix("telecom", [SYS, HI], say("Could you please provide your email address?")) == []
+
+
 # --- The teacher -------------------------------------------------------------------------------
 
 
