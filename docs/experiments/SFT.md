@@ -1,8 +1,8 @@
 # SFT on the verified teacher fixes: v1 (done) and v2 (in progress)
 
-**Status (8 Nov):**
+**Status (8 Nov, late):**
 - **v1 is done: indicative, dev only.**
-- **v2 is planned before any result.** Its data is being generated; its hypothesis and decision rule are fixed below.
+- **v2 is done on dev and meets every condition of its decision rule, fixed before it ran.** Its validation run, the dev-independent check, is still to come.
 
 **Tickets and code:**
 - Tickets: [SEL-65](https://linear.app/self-healing-hallucination/issue/SEL-65) (v1) and [SEL-71](https://linear.app/self-healing-hallucination/issue/SEL-71) (v2).
@@ -144,14 +144,55 @@ done
 # Mac: just oracle-score …S2-*-dev.jsonl; just arm-samples S S2 P; just gate-check P S2
 ```
 
-**v2 results:** pending.
+**v2 results (8 Nov):**
+
+**Training:**
+- 146 conversations: v1's 112 plus 34 extra airline passes from 18 train tasks, so airline goes from 19 to 53.
+- 74 steps, 28 min.
+- Train loss 0.426. Held-out loss → **0.368**, levelling off without rising (v1: 0.393).
+- Adapter: `reagent-lexsi/sft-aya32b-r16-v2`.
+
+**Success on dev, two samples per task** (the runs' own verdicts; the gate re-scores sample 0 with the oracle and agrees, 24/36):
+
+| | Retail | Airline | Telecom | Total, per sample | Mean |
+|---|---|---|---|---|---|
+| P (base) | 2, 1 /15 | 3, 1 /6 | 0, 1 /15 | 5, 3 /36 | 4.0 |
+| S (v1) | 8, 5 /15 | 1, 1 /6 | 7, 5 /15 | 16, 11 /36 | 13.5 |
+| **S2 (v2)** | **8, 8 /15** | **4, 3 /6** | **12, 8 /15** | **24, 19 /36** | **21.5** |
+
+**The gate (`just gate-check P S2`, a check, not recorded): PROMOTE.**
+- Net gain +19 tasks: 21 passed only with v2, 2 only with P (McNemar p = 0.0001).
+- Domains: airline +1, retail +6, telecom +12.
+- Findings per conversation: 8.56 → 1.17.
+
+**The decision rule:**
+
+| Condition | Result | |
+|---|---|---|
+| The gate promotes v2 over P | Promote | ✓ |
+| Airline +2 or more against v1 | +2.5 per sample | ✓ |
+| Retail and telecom lose at most 1 | +1.5 and +4 per sample | ✓ |
+| Tool/Arg at or below 5% of conversations | 3/72 = 4.2% | ✓, just |
+| Overall change larger than v1's spread (about 5) | +8 per sample | ✓ |
+
+**Caveats:**
+- v2 was designed after reading v1's dev failures, so these are development numbers.
+- Known confound: 74 steps against 56. Telecom improved by +4 per sample with no new telecom data.
+- Tool/Arg crept up from v1's 0/36 to 3/72 (2 in retail).
+- Airline is 6 tasks.
+
+**Validation** (the 30 unseen train tasks, 2 samples, runs' own verdicts):
+- P: 9.0/30 on average.
+- v1 (S): retail 6, 6 /13; airline 3, 1 /5; telecom 6, 3 of 8 scored (8 crashed, to re-run).
+- On these unseen tasks, **v1 equalled the base model on airline** (2/5 on average each), confirming its airline weakness without using dev.
+- v2 on validation is still to run: it's the dev-independent test of the airline fix.
 
 ## Version log
 
 | Version | Date | Data | Change from the previous version | Dev success (mean of 2 samples) | Tool/Arg | Gate against P | Adapter |
 |---|---|---|---|---|---|---|---|
 | v1 | 8 Nov | 112 healable fixes (golden v1.1) | — | 13.5/36 (38%) | 0% | Reject (airline −2) | `reagent-lexsi/sft-aya32b-r16` |
-| v2 | pending | v1 + extra airline passes | Data only (airline) | | | | |
+| v2 | 8 Nov | v1 + 34 extra airline passes (airline 19 → 53) | Data only (airline); 74 steps against 56 | **21.5/36 (60%)** | 4.2% | **Promote** (airline +1) | `reagent-lexsi/sft-aya32b-r16-v2` |
 
 ## Next idea, beyond v2
 
