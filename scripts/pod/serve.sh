@@ -55,6 +55,9 @@ export VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
 # PyTorch's sampler is as correct, and temperature 0 doesn't sample anyway.
 export VLLM_USE_FLASHINFER_SAMPLER="${VLLM_USE_FLASHINFER_SAMPLER:-0}"
 
+# vLLM's compiled graphs, kept on the volume: a restarted pod reuses them instead of compiling again
+export VLLM_CACHE_ROOT="${VLLM_CACHE_ROOT:-$WORKSPACE/.cache/vllm}"
+
 exec "$VLLM" serve "$MODEL" \
   --port "$PORT" \
   --dtype bfloat16 \
