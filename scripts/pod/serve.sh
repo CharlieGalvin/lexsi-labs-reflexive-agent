@@ -10,7 +10,7 @@
 #   just rollout P retail --split dev --limit 5 --config configs/sft/arms.base.yaml
 #   just rollout S retail --split dev --config configs/sft/arms.sft.yaml
 #
-# The GPU can't train and serve at once: stop training first. The 16-bit weights take ~64 GB,
+# The GPU can't train and serve at once: stop training first. The 16-bit weights take ~60 GiB,
 # which leaves room for a MAX_LEN-token context (default 32768) on an 80 GB card. Conversations
 # longer than that are cut off; `just arm-metrics` counts them.
 
@@ -20,7 +20,7 @@ MODEL="${MODEL:-CohereLabs/aya-expanse-32b}"
 ADAPTER="${ADAPTER-runs/sft-aya32b-r16}"
 MAX_LEN="${MAX_LEN:-32768}"
 PORT="${PORT:-8000}"
-GPU_UTIL="${GPU_UTIL:-0.92}"
+GPU_UTIL="${GPU_UTIL:-0.95}"  # 0.92 left 4.9 GiB of KV cache: under one 32K conversation
 WORKSPACE="${WORKSPACE:-/workspace}"
 VLLM="${VLLM:-$WORKSPACE/vllm-env/bin/vllm}"
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
