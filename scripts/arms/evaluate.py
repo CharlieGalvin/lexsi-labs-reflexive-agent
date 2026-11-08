@@ -1,8 +1,8 @@
 """All the headline metrics for an arm on τ²-bench, from its rollout files (SEL-38).
 
-    just evaluate results/episodes/arms/A-*-test.jsonl
-    just evaluate results/episodes/arms/S-*-dev.jsonl --success saved          # no re-scoring
-    just evaluate <files> --tool-selection openai:gpt-4.1-mini                   # + the LLM judge
+    just arm-eval results/episodes/arms/A-*-test.jsonl
+    just arm-eval results/episodes/arms/S-*-dev.jsonl --success saved          # no re-scoring
+    just arm-eval <files> --tool-selection openai:gpt-4.1-mini                   # + the LLM judge
     python scripts/arms/evaluate.py <files> --json results/eval-A-test.json
 
 For each file (one arm, one domain, one split) and for all of them together: success from the

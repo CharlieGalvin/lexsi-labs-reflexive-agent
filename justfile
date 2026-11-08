@@ -162,7 +162,7 @@ oracle-score *files:
 arm-metrics file *args:
     python scripts/arms/metrics.py {{file}} {{args}}
 # All headline metrics for an arm (SEL-38): oracle success, AuditKIT agent scorers, TTC; any split
-evaluate +args:
+arm-eval +args:
     python scripts/arms/evaluate.py {{args}}
 
 # Run an arm on a domain's split, e.g. `just rollout A retail --limit 5` or `just rollout C telecom`
