@@ -178,8 +178,9 @@ arm-failures +args:
     python scripts/arms/failure_diff.py {{args}}
 
 # Run an arm on a domain's split, e.g. `just rollout A retail --limit 5` or `just rollout C telecom`
+[positional-arguments]  # quoted: telecom task IDs contain | and [ ], which a shell would split
 rollout arm domain *args:
-    python scripts/arms/rollout.py {{arm}} {{domain}} {{args}}
+    python scripts/arms/rollout.py "$@"
 
 # Experiment commands (train, evaluate…) are added by the Architect and Trainer.
 
