@@ -321,6 +321,10 @@ def test_act_mode_nudges_a_loop_then_stops_it(tau2, tmp_path):
     assert [a["kind"] for a in m["alarms"]].count("no_progress") == 2
     (view,) = view_from_audit([json.loads(line) for line in log.read_text().splitlines()]).values()
     assert view == rec["agent_view"]  # the audit log holds the whole conversation
+    assert json.loads(log.read_text().splitlines()[-1])["state_snapshot"] == {
+        "passed": rec["outcome"]["passed"],
+        "termination": "agent_stop",
+    }  # the last line: the outcome, so the detector knows whether it failed
 
 
 def test_log_mode_records_the_loop_but_leaves_the_conversation_alone(tau2):

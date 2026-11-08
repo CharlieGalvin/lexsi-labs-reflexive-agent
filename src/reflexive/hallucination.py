@@ -294,6 +294,7 @@ def _arg_findings(turn: int, pos: int, name: str, args: dict, schema: dict, ctx:
 # --- The classifier ------------------------------------------------------------------------
 
 _ACTION_TEXT = re.compile(r"(?:^|\n)\s*Action:\s*(?:```|\[)", re.I)
+ACTION_TEXT = _ACTION_TEXT  # a tool call written as text (prompted models); the monitor uses it too
 
 
 def _calls(msg: dict) -> list[tuple[str, Any, str | None]]:

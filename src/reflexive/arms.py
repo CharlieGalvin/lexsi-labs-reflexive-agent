@@ -161,8 +161,15 @@ def run_episode(
     error = None
     try:
         ep.reset()
-        # the live request's tools: the monitor knows no dataset rules
-        watch = Watcher(monitor, ep.tool_schemas, audit_log, f"{arm.key}/{domain}/{task_id}/{sample}")
+        # the live request's tools: the monitor knows no dataset rules. The customer's tool
+        # names, when the domain has them, only label a call (customer_tool, as classify_record).
+        watch = Watcher(
+            monitor,
+            ep.tool_schemas,
+            audit_log,
+            f"{arm.key}/{domain}/{task_id}/{sample}",
+            customer_tools=_customer_tools(domain),
+        )
         nudge = False
         while not ep.done:
             messages = ep.prompt()
@@ -233,5 +240,18 @@ def run_episode(
     raw = getattr(agent, "raw_turns", None)
     if raw:  # prompted models (Aya): the raw replies, to review how calls were written and read
         rec["raw_turns"] = raw
+    if watch is not None:  # the outcome line: the detector learns only from failed conversations
+        outcome = rec.get("outcome")
+        watch.finish(isinstance(outcome, dict) and bool(outcome.get("passed")), str(rec.get("termination")))
     rec["wall_s"] = round(time.monotonic() - start, 1)
     return rec
+
+
+def _customer_tools(domain: str) -> list[str]:
+    """The domain's customer-only tool names, or none if it isn't a known τ²-bench domain."""
+    from reflexive.hallucination import domain_tools
+
+    try:
+        return list(domain_tools(domain)[1])
+    except Exception:  # noqa: BLE001 - only a label: never stop a conversation over it
+        return []

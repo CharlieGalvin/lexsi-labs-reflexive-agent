@@ -9,15 +9,20 @@
 
 * ``no_progress`` (Loop, new): **3 agent turns in a row with no tool call, each repeating
   something the agent already said.** Text is compared after lowercasing and keeping letters
-  only. This catches the loops AgentTune's ``FailureDetector`` can't see, because they have no
-  tool calls: the agent and the customer swapping goodbyes until τ²-bench's step limit. On all
+  and digits only (so two different order numbers are different text). A tool call written as
+  text (a prompted model's ``Action:`` block, before the harness parses it) counts as a call.
+  This catches the loops AgentTune's ``FailureDetector`` can't see, because they have no tool
+  calls: the agent and the customer swapping goodbyes until τ²-bench's step limit. On all
   148 Arm A and C telecom conversations it fires on all 7 that ran to the limit (A56 at agent
   turn 44 of 100) and on none of the 7 that passed.
 * the classifier's Tool / Arg / Loop findings (`hallucination.classify_hallucination`), on the
   growing conversation, with the tools **from the live request**: the monitor knows no dataset.
   Customer-only tool names are an optional extra label.
 
-Each finding is reported once, on the turn it first appears. An `Alarm` converts to AgentTune's
+Each finding is reported once, on the turn it first appears. ``no_progress`` measures wasted
+turns, not failure: a conversation that passed can end in a goodbye loop too. So `MonitorDetector`
+only hands ``FullClosedLoop`` the alarms of conversations that **didn't pass**, read from the
+outcome line the harness writes at the end (`Watcher.finish`). An `Alarm` converts to AgentTune's
 ``Failure`` (`to_failure`), and a conversation to AgentTune's ``EventLog`` (`event_log`) and to
 the audit-log lines ``FullClosedLoop`` reads (`audit_records`); `MonitorDetector` stands in for
 ``FullClosedLoop.detector``. AgentTune itself isn't changed, and is imported only by those
@@ -53,7 +58,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-from reflexive.hallucination import TO_AGENTTUNE, FailureType, classify_hallucination
+from reflexive.hallucination import ACTION_TEXT, TO_AGENTTUNE, FailureType, classify_hallucination
 
 Message = dict[str, Any]
 NO_PROGRESS_RUN = 3  # agent turns in a row
@@ -65,8 +70,14 @@ MODES = ("off", "log", "act")
 
 
 def normalise(text: str | None) -> str:
-    """Lowercase, letters only: "Thank you!" and "thank you." are the same."""
-    return re.sub(r"[^a-z]+", "", (text or "").lower())
+    """Lowercase, letters and digits only: "Thank you!" and "thank you." are the same, but
+    "Order #W2378156 is cancelled" and "Order #W9911002 is cancelled" aren't."""
+    return re.sub(r"[^a-z0-9]+", "", (text or "").lower())
+
+
+def is_call(m: Message) -> bool:
+    """A turn that calls a tool: parsed ``tool_calls``, or a prompted ``Action:`` block still in text."""
+    return bool(m.get("tool_calls")) or bool(ACTION_TEXT.search(m.get("content") or ""))
 
 
 @dataclass(frozen=True)
@@ -97,7 +108,7 @@ def no_progress_turns(view: Sequence[Message], run: int = NO_PROGRESS_RUN) -> li
             continue
         agent_turn += 1
         text = normalise(m.get("content"))
-        if not m.get("tool_calls") and text and text in said:
+        if not is_call(m) and text and text in said:
             streak += 1
             if streak == run:
                 out.append((i, agent_turn))
@@ -318,6 +329,27 @@ class AuditWriter:
         """Write what's left at the end of the conversation, results or not."""
         return self.write(view, final=True)
 
+    def outcome(self, passed: bool, termination: str | None = None) -> None:
+        """The conversation's last line: whether it passed (its own stage, as the text lines)."""
+        line = {
+            "trajectory_id": self.trajectory_id,
+            "stage_name": "outcome",
+            "stage_type": "outcome",
+            "state_snapshot": {"passed": bool(passed), "termination": termination},
+            "status": "ok",
+        }
+        with _WRITE_LOCK, self.path.open("a") as f:
+            f.write(json.dumps(line) + "\n")
+
+
+def outcomes_from_audit(records: Sequence[dict]) -> dict[str, bool]:
+    """Each finished trajectory's pass, from its outcome line (a running one has none yet)."""
+    return {
+        r["trajectory_id"]: bool(r["state_snapshot"]["passed"])
+        for r in records
+        if r.get("stage_type") == "outcome"
+    }
+
 
 class Watcher:
     """What a harness runs after every turn: write the audit log, check, and decide the response.
@@ -327,10 +359,15 @@ class Watcher:
     """
 
     def __init__(
-        self, mode: str, tools: list[dict], audit_log: Path | str | None = None, trajectory_id: str = ""
+        self,
+        mode: str,
+        tools: list[dict],
+        audit_log: Path | str | None = None,
+        trajectory_id: str = "",
+        customer_tools: Sequence[str] = (),
     ) -> None:
         self.guard = Guard(mode)
-        self.monitor = RuntimeMonitor(tools) if mode != "off" else None
+        self.monitor = RuntimeMonitor(tools, customer_tools) if mode != "off" else None
         self.writer = AuditWriter(audit_log, trajectory_id) if audit_log else None
         self.error: str | None = None
 
@@ -351,6 +388,14 @@ class Watcher:
         if self.writer is not None:
             try:
                 self.writer.close(view)
+            except Exception as e:  # noqa: BLE001 - never break the run over the log
+                self.error = f"{type(e).__name__}: {str(e)[:200]}"
+
+    def finish(self, passed: bool, termination: str | None = None) -> None:
+        """Once the conversation is scored: log its outcome, so the detector knows whether it failed."""
+        if self.writer is not None:
+            try:
+                self.writer.outcome(passed, termination)
             except Exception as e:  # noqa: BLE001 - never break the run over the log
                 self.error = f"{type(e).__name__}: {str(e)[:200]}"
 
@@ -416,11 +461,22 @@ class MonitorDetector:
 
     Reads the whole log each time, rebuilds every trajectory's view, runs the monitor, and yields
     only failures it hasn't yielded before (so it can be polled as the log grows).
+
+    With ``failed_only`` (the default) it yields only for conversations whose outcome line says
+    they didn't pass: a passing conversation's goodbye loop or customer-tool call isn't a failure
+    to train on, and a conversation still running is held until its outcome is in.
     """
 
-    def __init__(self, tools_for: Any, customer_tools_for: Any = None, run: int = NO_PROGRESS_RUN) -> None:
+    def __init__(
+        self,
+        tools_for: Any,
+        customer_tools_for: Any = None,
+        run: int = NO_PROGRESS_RUN,
+        failed_only: bool = True,
+    ) -> None:
         # tools_for(trajectory_id) -> the tools that conversation's agent was given
         self.tools_for, self.customer_tools_for, self.run = tools_for, customer_tools_for, run
+        self.failed_only = failed_only
         self._yielded: set[tuple] = set()
 
     def scan_audit_log(self, file_path: str) -> Iterator[Any]:
@@ -428,7 +484,10 @@ class MonitorDetector:
         if not path.exists():
             return
         recs = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+        passed = outcomes_from_audit(recs)
         for traj, view in view_from_audit(recs).items():
+            if self.failed_only and passed.get(traj, True):  # passed, or not finished yet
+                continue
             customer = self.customer_tools_for(traj) if self.customer_tools_for else ()
             mon = RuntimeMonitor(self.tools_for(traj), customer, self.run)
             for a in mon.observe(view):
@@ -460,8 +519,8 @@ class MonitorClassifier:
         ]
 
 
-def plug_into(loop: Any, tools_for: Any, customer_tools_for: Any = None) -> Any:
+def plug_into(loop: Any, tools_for: Any, customer_tools_for: Any = None, failed_only: bool = True) -> Any:
     """Replace a ``FullClosedLoop``'s detector and classifier with ours (AgentTune is unchanged)."""
-    loop.detector = MonitorDetector(tools_for, customer_tools_for)
+    loop.detector = MonitorDetector(tools_for, customer_tools_for, failed_only=failed_only)
     loop.classifier = MonitorClassifier()
     return loop

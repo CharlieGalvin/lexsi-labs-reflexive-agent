@@ -19,8 +19,10 @@ from reflexive.monitor import (
     Guard,
     RuntimeMonitor,
     audit_records,
+    is_call,
     no_progress_turns,
     normalise,
+    outcomes_from_audit,
     view_from_audit,
 )
 
@@ -106,6 +108,23 @@ def test_the_rule_on_small_cases():
         say("New again"),
     ]
     assert no_progress_turns(spread) == []
+
+
+def test_digits_tell_messages_apart():
+    assert normalise("Order #W2378156 is cancelled.") != normalise("Order #W9911002 is cancelled!")
+    orders = [SYS, HI] + [
+        m
+        for n in ("2378156", "9911002", "4410023", "7731994")
+        for m in (say(f"Order #W{n} is cancelled."), BYE)
+    ]
+    assert no_progress_turns(orders) == []  # four different orders, not a loop
+
+
+def test_a_prompted_action_block_counts_as_a_tool_call():
+    action = 'Action: ```json\n{"name": "get_flight_status", "arguments": {"flight_number": "HAT001"}}\n```'
+    calls = [SYS, HI] + [m for _ in range(5) for m in (say(action), {"role": "user", "content": "ok"})]
+    assert no_progress_turns(calls) == []  # raw prompted records: calls, not repeated text
+    assert is_call(say(action)) and not is_call(say("Glad I could help!"))
 
 
 # --- The monitor, turn by turn ----------------------------------------------------------------
@@ -229,7 +248,9 @@ def test_alarms_become_agenttune_failures_and_the_detector_reads_the_log(tmp_pat
 
     a68 = view_of(next(c for c in CASES if c["id"] == "A68"))
     path = tmp_path / "audit.jsonl"
-    AuditWriter(path, "A68").write([SYS, *a68])
+    w = AuditWriter(path, "A68")
+    w.write([SYS, *a68])
+    w.outcome(False, "max_steps")  # it failed: its alarms go to FullClosedLoop
     det = MonitorDetector(lambda traj: TOOLS)
     found = list(det.scan_audit_log(str(path)))
     assert all(isinstance(f, Failure) for f in found)
@@ -241,6 +262,35 @@ def test_alarms_become_agenttune_failures_and_the_detector_reads_the_log(tmp_pat
     assert (f.failure_type, f.failed_stage_name) == ("wrong_tool", "check_apn_settings")
     log = record_event_log({"domain": "telecom", "task_id": "x", "agent_view": conversation()})
     assert log.id == "telecom/x/0" and len(log) > 0
+
+
+def test_the_outcome_line_says_which_conversations_failed(tmp_path):
+    path = tmp_path / "audit.jsonl"
+    for traj, passed in (("ok", True), ("bad", False), ("running", None)):
+        w = AuditWriter(path, traj)
+        w.write([SYS, HI, say("Bye!"), BYE])
+        if passed is not None:
+            w.outcome(passed, "user_stop")
+    recs = [json.loads(line) for line in path.read_text().splitlines()]
+    assert outcomes_from_audit(recs) == {"ok": True, "bad": False}  # running: not known yet
+    assert set(view_from_audit(recs)) == {"ok", "bad", "running"}  # the outcome isn't a message
+
+
+def test_the_detector_hands_on_only_conversations_that_failed(tmp_path):
+    pytest.importorskip("agenttune")
+    from reflexive.monitor import MonitorDetector
+
+    a68 = [SYS, *view_of(next(c for c in CASES if c["id"] == "A68"))]
+    path = tmp_path / "audit.jsonl"
+    for traj, passed in (("passed", True), ("failed", False), ("running", None)):
+        w = AuditWriter(path, traj)
+        w.write(a68)
+        if passed is not None:
+            w.outcome(passed, "user_stop")
+    found = {f.trajectory_id for f in MonitorDetector(lambda t: TOOLS).scan_audit_log(str(path))}
+    assert found == {"failed"}  # a pass's goodbye loop isn't a failure; a running one waits
+    everything = MonitorDetector(lambda t: TOOLS, failed_only=False).scan_audit_log(str(path))
+    assert {f.trajectory_id for f in everything} == {"passed", "failed", "running"}
 
 
 # --- The watcher a harness runs after every turn -----------------------------------------------
@@ -255,6 +305,20 @@ def test_the_watcher_logs_checks_and_reacts(tmp_path):
     assert acts == ["nudge", "stop"] and (tmp_path / "audit.jsonl").exists()
     d = w.to_dict()
     assert (d["mode"], d["nudged_at"], d["stopped_at"], d["error"]) == ("act", 22, 27, None) and d["alarms"]
+
+
+def test_the_watcher_labels_customer_tools_as_the_classifier_does(tmp_path):
+    from reflexive.hallucination import classify_hallucination
+    from reflexive.monitor import Watcher
+
+    view = [SYS, HI, call("check_apn_settings")]
+    w = Watcher("log", TOOLS, tmp_path / "audit.jsonl", "t", customer_tools=CUSTOMER)
+    w.after_turn(view)
+    (f,) = classify_hallucination(view, TOOLS, customer_tools=set(CUSTOMER)).findings
+    assert [a["kind"] for a in w.to_dict()["alarms"]] == [f.kind] == ["customer_tool"]
+    w.finish(False, "user_stop")
+    recs = [json.loads(line) for line in (tmp_path / "audit.jsonl").read_text().splitlines()]
+    assert outcomes_from_audit(recs) == {"t": False}
 
 
 def test_a_monitor_error_is_kept_and_never_raised():
@@ -299,6 +363,7 @@ def test_a_real_full_closed_loop_ingests_through_our_detector_and_classifier(tmp
     for end in range(1, len(a68) + 1):
         w.write(a68[:end])
     w.close(a68)
+    w.outcome(False, "max_steps")
     loop = FullClosedLoop(
         PathAConfig(audit_log_path=str(log)),
         retrain_job=lambda *a, **k: None,
