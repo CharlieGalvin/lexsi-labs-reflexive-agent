@@ -45,6 +45,11 @@ else
   echo "serving $MODEL (no adapter) on :$PORT, context $MAX_LEN"
 fi
 
+# Aya Expanse 32B's config.json says max_position_embeddings=8192, but the model serves 128K
+# (Cohere's API runs it at 128K, as for Arm A; RoPE, a large base): vLLM refuses a longer
+# max-model-len without this. Training examples reach 13.7K tokens, dev conversations more.
+export VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
+
 exec "$VLLM" serve "$MODEL" \
   --port "$PORT" \
   --dtype bfloat16 \

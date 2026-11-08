@@ -60,11 +60,15 @@ be enlarged while in use. `uv cache clean` frees the package-download copies onc
 ## Connecting
 
 Use **SSH over exposed TCP** from the Connect tab (it supports `scp`; the port changes after every
-restart, so copy it again):
+restart, so copy it again), with keep-alives, **straight into a tmux session** (`-A` attaches to it
+if it exists, or creates it):
 
 ```bash
-ssh root@<ip> -p <port> -i ~/.ssh/id_ed25519
+ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=8 -t root@<ip> -p <port> -i ~/.ssh/id_ed25519 "tmux new -A -s sft"
 ```
+
+For a second job (e.g. the rollouts while the server runs), open a new Mac terminal tab and
+connect the same way into another session, `"tmux new -A -s runs"`: no tmux shortcuts needed.
 
 Check the keys arrived: `echo ${HF_TOKEN:+set} ${OPENAI_API_KEY:+set}` prints `set set`.
 
@@ -177,8 +181,14 @@ pod yourself** when the dev runs are done.
 
 ## 5. Sanity check: the self-hosted base against Arm A (10 min)
 
-In a second tmux window (or a second SSH tab: `source /workspace/.pod_env`, then `cd` and
-`source .venv/bin/activate` as above):
+In a second session (a new Mac tab: `"tmux new -A -s runs"`, then `source /workspace/.pod_env`,
+`cd` and `source .venv/bin/activate` as above). Wait until the server answers:
+
+```bash
+until curl -sf localhost:8000/v1/models >/dev/null; do sleep 15; done; echo READY
+```
+
+Then:
 
 ```bash
 just rollout P retail --split dev --limit 5 --config configs/sft/arms.base.yaml
@@ -232,6 +242,9 @@ All fixed in the code now; listed so the symptoms are recognisable.
 | `Conversation roles must alternate` (dry run) | Aya's template refuses a conversation that starts with the agent's greeting, as every τ²-bench one does (Cohere's own API accepts it) | Training and serving use the template minus that one check (`reflexive.sft.relaxed_template`) |
 | `224 tokens … longest 2` (dry run) | transformers 5 returns a `BatchEncoding` from `apply_chat_template`; its two keys were read as tokens | Read as token ids; implausible counts now stop the run |
 | `unexpected keyword argument 'warmup_ratio'` | transformers 5 merged it into `warmup_steps` | Translated automatically |
+| vLLM: `max_model_len (32768) is greater than the derived max_model_len (… 8192 …)` | Aya Expanse 32B's `config.json` says 8192; the model serves 128K (Cohere's API runs it at 128K) | `serve.sh` sets `VLLM_ALLOW_LONG_MAX_MODEL_LEN=1` |
+| The SSH connection drops ("Operation timed out", "Broken pipe") and the server with it | Idle SSH timed out; the server ran outside tmux | `ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=8 -t … "tmux new -A -s sft"`: keep-alives, and straight into tmux |
+| `duplicate session: sft` (and the next commands run outside tmux) | A session of that name already exists | `tmux attach -t sft` (or `tmux new -A -s sft`, which attaches or creates) |
 | `CUDA out of memory … Tried to allocate 11.86 GiB` at step 2 | Logits over Aya's ~256K vocabulary at every position of a 13.7K-token conversation, plus their float32 copy | The loss scores only the positions before each target (`logits_to_keep`), in chunks: the same loss, ~20 GB less |
 | The pod stopped after Ctrl+C | The `;` ran the stop after the interrupted training | Don't press Ctrl+C in the training window |
 
