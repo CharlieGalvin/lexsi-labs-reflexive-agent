@@ -1,62 +1,94 @@
-# The indicative SFT run on a RunPod H100, end to end (SEL-65)
+# The indicative SFT run on a RunPod GPU, end to end (SEL-65)
 
 QLoRA on Aya Expanse 32B, trained on the 112 healable golden fixes, then scored on the 36 dev
-tasks next to Arm A. Allow **3–4 hours of pod time** (about $2–3 an hour on an H100), plus a few
-dollars of GPT-4.1 for the customer and the judges. **Never run anything here on the test split.**
+tasks next to Arm A. **Never run anything here on the test split.**
+
+Written from the first real run (7–8 Nov, H100 SXM): set-up about 45 minutes, training **23
+minutes**, peak GPU memory **54 GB**, held-out loss **0.854 → 0.393**. GPU time for the whole
+thing is about 2–3 hours (an H100 SXM is $3.99/hour; an A100 at $1.79 works too, just slower).
 
 ## Where things live on a pod
 
-A RunPod pod has three kinds of space. Only one of them survives the pod stopping:
+A RunPod pod has three kinds of space. Only the volume survives the pod stopping:
 
 | Space | Path | Survives a stop? | Survives terminating the pod? | What goes there |
 |---|---|---|---|---|
-| **Volume disk** (persistent) | `/workspace` | **Yes** | No | **Everything:** the repo, both environments, the model cache, the training data, the adapter, the dev results |
-| Container disk (temporary) | `/`, `/root`, `/tmp` | No | No | Nothing that matters. `setup.sh` points every cache at `/workspace` so nothing big lands here |
-| RAM and GPU memory | `/dev/shm`, running processes, tmux sessions | No | No | Only the model while it trains or serves: nothing to save |
-| **Off the pod** (permanent) | Hugging Face, your Mac, git | Yes | **Yes** | The adapter (`--push`), the dev results and summaries (copied back), code changes (git) |
+| **Network volume** (persistent) | `/workspace` | **Yes** | **Yes** (it's separate from the pod) | **Everything:** the repo, both environments, the model cache, the training data, the adapter, the dev results, the training output |
+| Container disk (temporary) | `/`, `/root`, `/tmp` | No | No | Nothing that matters. It's wiped on every stop, so **tmux** and `~/.bashrc` go with it (see "After every restart") |
+| RAM and GPU memory | running processes, tmux sessions | No | No | Only the model while it trains or serves: nothing to save |
+| **Off the pod** (permanent) | Hugging Face, your Mac, git | Yes | Yes | The adapter (`--push`), the dev results (copied back), code (git) |
 
-So: **work only under `/workspace`**, and **before terminating the pod, push the adapter and copy
-the results back**. "Stop" keeps `/workspace` (you pay a little for the disk), but the same GPU
-may not be free when you restart. "Terminate" deletes `/workspace` too.
+So: **work only under `/workspace`**. A *network* volume is tied to one data centre: you can only
+get the GPUs that centre has free, but it outlives the pod, so the 65 GB model downloads once.
+It costs about $0.07 per GB a month; delete it at the end of the project.
 
 What `setup.sh` puts where, all under `/workspace`:
 
 | What | Path | Size |
 |---|---|---|
+| Model cache (Aya Expanse 32B) | `/workspace/hf_cache` | ~65 GB |
 | The repo, with its training environment (`.venv`) | `/workspace/lexsi-labs-reflexive-agent` | ~15 GB |
 | vLLM's own environment | `/workspace/vllm-env` | ~10 GB |
-| Model cache (Aya Expanse 32B) | `/workspace/hf_cache` | ~65 GB |
-| uv's caches and Python | `/workspace/.uv`, `/workspace/.uv-cache` | ~10 GB |
-| Training examples | `<repo>/data/train/sft-{healable,all}.jsonl` | ~10 MB |
-| The adapter and its summary | `<repo>/runs/sft-aya32b-r16/` | ~0.5 GB |
-| Dev results | `<repo>/results/episodes/arms/{P,S}-*-dev.jsonl` | ~5 MB |
+| uv's Python and download cache | `/workspace/.uv`, `/workspace/.uv-cache` | ~5 GB + up to ~20 GB (clearable) |
+| The adapter, its summary and step log | `<repo>/runs/sft-aya32b-r16/` | ~0.4 GB |
+| Training output (everything printed) | `/workspace/sft-train.out` | small |
 
-Hence the **200 GB volume**: about 100 GB used, plus room for checkpoints and a second run.
+**The volume must be at least 150 GB.** At 100 GB the model download stopped with *"Disk quota
+exceeded"* (37 GB in). `df` shows RunPod's whole shared storage, not your volume's limit, so the
+setup's disk check can't catch it: check the size under **Storage** in the console. A volume can
+be enlarged while in use. `uv cache clean` frees the package-download copies once installed.
 
 ## Before you start (once)
 
 1. **Hugging Face:** accept the licence for
    [`CohereLabs/aya-expanse-32b`](https://huggingface.co/CohereLabs/aya-expanse-32b) with the
-   account behind your `HF_TOKEN`. The token's account must be in the `reagent-lexsi` org.
-2. **RunPod secrets** (Settings → Secrets): `HF_TOKEN`, `OPENAI_API_KEY` (the customer and the
-   judges in dev rollouts), optionally `WANDB_API_KEY` (training charts).
-3. **Create the pod:** an **80 GB GPU, a full one (not a MIG slice)**: A100 or H100. Use the
-   RunPod **PyTorch** template, not the vLLM one: `setup.sh` installs vLLM in its own environment
-   beside the training one. Attach a volume of at least 150 GB at `/workspace`. **Before
-   deploying,** add the environment variables `HF_TOKEN` (a *Write* token: `--push` uploads to the
-   org) and `OPENAI_API_KEY`, as values or as `{{ RUNPOD_SECRET_<name> }}`. Forgot? Edit Pod →
-   Environment Variables restarts the pod; only the temporary container disk is lost.
+   account behind your token, which must be in the `reagent-lexsi` org. Use a **Write** token
+   (`--push` uploads the adapter to the org). A token is shown only once when created; if you've
+   lost it, check `~/.cache/huggingface/token` or the repo's `.env` on your Mac, or create a new one.
+2. **Create the pod** (Pods → Deploy):
+   - **GPU:** a full 80 GB card, not a MIG slice: H100 (SXM or PCIe) or A100. Bigger cards
+     (H100 NVL, H200) don't help QLoRA.
+   - **Template: PyTorch** (e.g. `runpod/pytorch:…-torch280-…`), **not** the vLLM one: the vLLM
+     image starts a server on boot and pins torch for vLLM; `setup.sh` installs vLLM in its own
+     environment beside the training one.
+   - **Network volume** at `/workspace`, **150 GB or more**.
+   - **Environment variables, before deploying:** `HF_TOKEN` and `OPENAI_API_KEY` (the customer
+     and the judges in dev rollouts), as values or `{{ RUNPOD_SECRET_<name> }}`. Forgot? Pod → ⋮ →
+     Edit Pod → Environment Variables; saving restarts the pod (only the container disk is lost).
+   - Don't use "Subscribe" on an unavailable GPU: it deploys (and bills) whenever one frees up.
 
-## On the pod
+## Connecting
 
-Connect with **SSH over exposed TCP** (the Connect tab; it also supports `scp`), check the keys
-are there (`echo ${HF_TOKEN:+set} ${OPENAI_API_KEY:+set}` prints `set set`), and **work inside
-tmux**, so a dropped connection doesn't stop a long job: `tmux new -s sft` (reattach with
-`tmux attach -t sft`; scroll with `Ctrl-b [` then the arrow keys, `q` to leave, or
-`tmux set -g mouse on` once to scroll with the trackpad). If tmux is missing:
-`apt-get update -qq && apt-get install -y -qq tmux`.
+Use **SSH over exposed TCP** from the Connect tab (it supports `scp`; the port changes after every
+restart, so copy it again):
 
-### 1. Setup (30–45 min, mostly the download)
+```bash
+ssh root@<ip> -p <port> -i ~/.ssh/id_ed25519
+```
+
+Check the keys arrived: `echo ${HF_TOKEN:+set} ${OPENAI_API_KEY:+set}` prints `set set`.
+
+**Work inside tmux**, so a dropped connection or a closed laptop doesn't stop a long job:
+
+| | |
+|---|---|
+| Start / reattach | `tmux new -s sft` / `tmux attach -t sft` |
+| New window / switch | **Ctrl+b** together, release, then **c** / then **0**, **1**, … (or **n**, **p**) |
+| Scroll | **Ctrl+b**, then **[**, arrows or Page Up, **q** to leave; or `tmux set -g mouse on` once |
+| Check you're in it | `echo $TMUX` prints something |
+
+The status bar at the bottom (`[sft] 0:bash*`) means you're in tmux.
+
+## After every restart (the container disk was wiped)
+
+```bash
+apt-get update -qq && apt-get install -y -qq tmux
+tmux new -s sft
+source /workspace/.pod_env                       # the cache settings (lived in ~/.bashrc)
+cd /workspace/lexsi-labs-reflexive-agent && source .venv/bin/activate && git pull
+```
+
+## 1. Setup (first time only; 30–45 min, mostly the download)
 
 ```bash
 cd /workspace && git clone https://github.com/CharlieGalvin/lexsi-labs-reflexive-agent.git
@@ -66,55 +98,97 @@ bash scripts/pod/setup.sh
 source .venv/bin/activate
 ```
 
-The script stays on the branch the repo is on (set `BRANCH=` to switch). It stops early, before installing anything,
-on a MIG slice, a card under 80 GB, too little disk, or a token without access to the model. It's
-safe to re-run: it skips what's done. It ends by building the training examples.
+Check out the branch **before** running the script: a clone starts on `main`, where the script
+doesn't exist yet, and the script stays on whatever branch the repo is on (`BRANCH=` to switch).
+It stops early on a MIG slice, a small card, or a token without access to the model, and it's safe
+to re-run: it skips what's done (a re-run of a finished set-up takes a few minutes).
 
-### 2. Dry run (2 min, no GPU work)
+**If the model download fails with "Disk quota exceeded":** enlarge the volume (see above), run
+`uv cache clean`, then resume the download (it keeps what's done):
+
+```bash
+.venv/bin/python -c "
+from huggingface_hub import snapshot_download
+print(snapshot_download('CohereLabs/aya-expanse-32b', allow_patterns=['*.json','*.safetensors','*.model','*.txt','*.jinja'], max_workers=4))
+" 2>&1 | tail -3
+SKIP_VLLM=1 bash scripts/pod/setup.sh             # then finish the remaining steps
+```
+
+## 2. Dry run (2 min, no GPU)
 
 ```bash
 just sft-train --dry-run
 ```
 
-**Check:** `train: 112 conversations`, `held out: 15`, the longest about 12,700 tokens, and no
-"left out" line. If it stops with **"rewrote earlier tokens"**, Aya's chat template doesn't fit
-the masking: send the output to Charlie's Claude session before going further.
+**Expect exactly:** `train: 112 conversations, 1,044,425 tokens (14% targets), longest 13,703;
+held out: 15`. 14% targets is right: most of each conversation is context (the system prompt with
+the tools, the customer, tool results); only the agent's ~150K tokens are learned. If the counts
+are tiny (a few tokens a conversation) the script now stops with *"implausible tokenising"*.
 
-### 3. Train (~1 hour)
+## 3. Train (~25 min on an H100), with an automatic stop
 
 ```bash
-just sft-train --push
+(sleep 3h; runpodctl stop pod $RUNPOD_POD_ID) &
+just sft-train --push 2>&1 | tee /workspace/sft-train.out; runpodctl stop pod $RUNPOD_POD_ID
 ```
 
-`--push` uploads the adapter to `reagent-lexsi/sft-aya32b-r16` (private) when training ends, so
-it survives the pod. **Watch:** the training loss should fall; the held-out loss is printed
-before and after. If the held-out loss **rises** a lot while the training loss falls, the adapter
-is memorising: note it before using it. The run writes `runs/sft-aya32b-r16/run_summary.json`
-(losses, minutes, peak GPU memory).
+- The pod **stops itself** when training ends, whether it succeeds or fails (the `;`), and after
+  3 hours at the latest (the background backstop). Safe to go to bed once it's past step 3.
+- `tee` keeps everything printed, errors included, in `/workspace/sft-train.out`: tmux's
+  scrollback is lost when the pod stops.
+- **Don't press Ctrl+C in that window:** it stops training, and the `;` then stops the pod.
+- "Runpod config file not found" before `pod "…" stopped` is harmless: the stop works.
 
-### 4. Serve (5 min to start)
+**What a good run looks like** (the 8 Nov run):
+
+| | |
+|---|---|
+| Model load | ~30 s; `trainable params: 95,682,560 … trainable%: 0.2954` |
+| Steps | 56 (2 passes of 28), ~24 s each; the held-out check every 7 steps (~20 s) |
+| Training loss | jumps between steps (each step is a different batch of 4 conversations); ~0.7–0.9 at the start, ~0.28–0.36 by the end |
+| Held-out loss | 0.854 before → 0.586 → 0.515 → … → 0.3935 → **0.3932**: falling, then flat (not rising: no memorising) |
+| `grad_norm` | ~0.15–0.65, steady (worry if it reaches the tens or shows `nan`) |
+| End | the adapter uploads (383 MB) to `reagent-lexsi/sft-aya32b-r16`, then `done in 23 min: …; peak 54.0 GB` |
+
+The first 3 steps' losses can rise: the learning rate is still warming up (0 at step 1), so they
+measure the untrained model on different batches.
+
+**Checking the result without a GPU:** if `reagent-lexsi/sft-aya32b-r16` exists on Hugging Face,
+training finished. For the numbers, deploy a **CPU** pod (cents an hour) with the same network
+volume at `/workspace`, then:
+
+```bash
+cat /workspace/lexsi-labs-reflexive-agent/runs/sft-aya32b-r16/run_summary.json
+tail -5 /workspace/lexsi-labs-reflexive-agent/runs/sft-aya32b-r16/log.jsonl
+tail -30 /workspace/sft-train.out
+```
+
+## 4. Serve (5–15 min to start)
 
 ```bash
 just sft-serve
 ```
 
-Leave it running (its own tmux window: `Ctrl-b c`). Wait for **"Application startup complete"**.
-It serves the 16-bit base with the adapter as `sft`, at a 32K context. Training must be finished:
-the GPU can't do both.
+In its own tmux window (or SSH tab). It first writes the chat template (below), then vLLM loads
+the 16-bit model (slow from the network volume: 5–10 min) and prepares the GPU. Wait for
+**"Application startup complete"**. It serves the base model with the adapter as `sft`, at a 32K
+context. The GPU can't train and serve at once. There's no automatic stop from here: **stop the
+pod yourself** when the dev runs are done.
 
-### 5. Sanity check: the self-hosted base against Arm A (10 min)
+## 5. Sanity check: the self-hosted base against Arm A (10 min)
 
-In a second tmux window (`Ctrl-b c`, then `source .venv/bin/activate`):
+In a second tmux window (or a second SSH tab: `source /workspace/.pod_env`, then `cd` and
+`source .venv/bin/activate` as above):
 
 ```bash
 just rollout P retail --split dev --limit 5 --config configs/sft/arms.base.yaml
 ```
 
-This is Arm A's student on the pod instead of Cohere's API. It should look broadly like Arm A on
-the same tasks (mostly failures, the odd pass, no crashes). Many crashes or empty replies mean the
-serving doesn't match Cohere's: stop and check before step 6.
+Arm A's student, on the pod instead of Cohere's API. It should look broadly like Arm A on the same
+tasks (mostly failures, the odd pass, no crashes). Many crashes or empty replies mean the serving
+doesn't match Cohere's: stop and check before step 6.
 
-### 6. The real run: the SFT adapter on the 36 dev tasks (~45 min)
+## 6. The real run: the SFT adapter on the 36 dev tasks (~45 min)
 
 ```bash
 just rollout S retail  --split dev --config configs/sft/arms.sft.yaml
@@ -130,31 +204,45 @@ If a command reports crashed conversations, run it again (it retries only those)
 **Arm A on dev: 2/36 (5.6%)**, and look at the Tool / Arg / Loop counts and how many
 conversations hit the 32K context (`cut_off` in the metrics).
 
-### 7. Copy the results off the pod, then stop it
+## 7. Copy the results off the pod, then stop it
 
-The dev results and summaries live only on the pod's volume until you copy them. With RunPod's
-`runpodctl` (installed on pods; on the Mac: `brew install runpod/runpodctl/runpodctl`):
+The results live on the network volume, so they're safe, but copy them to your Mac to work with
+them. From the Mac (SSH over TCP supports `scp`; use the pod's current port):
 
 ```bash
-# on the pod
-tar czf /workspace/sft-results.tgz results/episodes/arms/P-*-dev.jsonl results/episodes/arms/S-*-dev.jsonl \
-    results/arm-S-*.metrics.json runs/sft-aya32b-r16/run_summary.json runs/sft-aya32b-r16/log.jsonl
-runpodctl send /workspace/sft-results.tgz        # prints a one-time code
-# on the Mac, in the repo
-runpodctl receive <code> && tar xzf sft-results.tgz
+cd ~/path/to/lexsi-labs-reflexive-agent
+scp -P <port> -i ~/.ssh/id_ed25519 \
+  "root@<ip>:/workspace/lexsi-labs-reflexive-agent/results/episodes/arms/{P,S}-*-dev.jsonl" results/episodes/arms/
+scp -P <port> -i ~/.ssh/id_ed25519 \
+  "root@<ip>:/workspace/lexsi-labs-reflexive-agent/results/arm-S-*.metrics.json" results/
 ```
 
-(Or `scp` over the pod's SSH connection.) Then **stop the pod** from the RunPod console. Terminate
-it only once the adapter is on Hugging Face and the results are on your Mac.
+Then **stop the pod** in the console. Terminating it is fine too: the network volume keeps
+everything.
 
-## If something goes wrong
+## What went wrong on the first run, and what fixed it
+
+All fixed in the code now; listed so the symptoms are recognisable.
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `setup.sh: No such file or directory` | The clone was on `main`; the script is on the branch | Check out the branch first (step 1) |
+| `does not have an extra named sft` | The script checked out `main` mid-run (it defaulted to `main`) | It now stays on the repo's branch |
+| `Disk quota exceeded` during the download | A 100 GB volume | 150 GB or more; `uv cache clean` |
+| `Conversation roles must alternate` (dry run) | Aya's template refuses a conversation that starts with the agent's greeting, as every τ²-bench one does (Cohere's own API accepts it) | Training and serving use the template minus that one check (`reflexive.sft.relaxed_template`) |
+| `224 tokens … longest 2` (dry run) | transformers 5 returns a `BatchEncoding` from `apply_chat_template`; its two keys were read as tokens | Read as token ids; implausible counts now stop the run |
+| `unexpected keyword argument 'warmup_ratio'` | transformers 5 merged it into `warmup_steps` | Translated automatically |
+| `CUDA out of memory … Tried to allocate 11.86 GiB` at step 2 | Logits over Aya's ~256K vocabulary at every position of a 13.7K-token conversation, plus their float32 copy | The loss scores only the positions before each target (`logits_to_keep`), in chunks: the same loss, ~20 GB less |
+| The pod stopped after Ctrl+C | The `;` ran the stop after the interrupted training | Don't press Ctrl+C in the training window |
+
+## Other problems
 
 | Symptom | What to do |
 |---|---|
 | `setup.sh` stops at the GPU check | Recreate the pod on a full 80 GB card (not MIG) |
-| "no access to CohereLabs/aya-expanse-32b" | Accept the licence on Hugging Face with the token's account, then re-run `setup.sh` |
-| Training runs out of GPU memory | Lower `max_len` in `configs/train/sft_aya32b.yaml` to 14000 (every example is under ~12,700 tokens) |
+| "no access to CohereLabs/aya-expanse-32b" | Accept the licence with the token's account, then re-run `setup.sh` |
+| Training still runs out of GPU memory | Lower `max_len` in `configs/train/sft_aya32b.yaml` to 14000 (the longest example is 13,703 tokens) |
 | vLLM runs out of memory at start-up | `MAX_LEN=16384 just sft-serve`, and set `max_context: 16384` in both `configs/sft/` files to match |
 | Rollouts can't connect | Is `sft-serve` still running, and did it print "Application startup complete"? |
 | Many crashed conversations | Run the same command again; if the same tasks crash every time, keep the output for review |
-| The pod restarted | Reattach (`tmux attach -t sft`), `cd /workspace/lexsi-labs-reflexive-agent && source .venv/bin/activate`, re-run the step: everything under `/workspace` is still there |
+| `du` prints nothing for minutes | It's walking tens of thousands of files on network storage; Ctrl+C, it isn't needed |
