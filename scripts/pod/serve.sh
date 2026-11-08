@@ -5,6 +5,7 @@
 #   bash scripts/pod/serve.sh                          # base model + runs/sft-aya32b-r16 as "sft"
 #   ADAPTER=runs/other bash scripts/pod/serve.sh       # another adapter
 #   ADAPTER= bash scripts/pod/serve.sh                 # the base model only
+#   EXTRA_ADAPTERS="sft2=runs/sft-aya32b-r16-v2" bash scripts/pod/serve.sh   # v1 as "sft" + v2 as "sft2"
 #
 # Then, in another terminal on the pod, the rollouts (configs/sft/: P = base, S = adapter):
 #   just rollout P retail --split dev --limit 5 --config configs/sft/arms.base.yaml
@@ -18,6 +19,7 @@ set -euo pipefail
 
 MODEL="${MODEL:-CohereLabs/aya-expanse-32b}"
 ADAPTER="${ADAPTER-runs/sft-aya32b-r16}"
+EXTRA_ADAPTERS="${EXTRA_ADAPTERS-}"   # more adapters on the same server: "name=path name=path"
 MAX_LEN="${MAX_LEN:-32768}"
 PORT="${PORT:-8000}"
 GPU_UTIL="${GPU_UTIL:-0.95}"  # 0.92 left 4.9 GiB of KV cache: under one 32K conversation
@@ -39,8 +41,13 @@ lora=()
 if [[ -n "$ADAPTER" ]]; then
   [[ -f "$ADAPTER/adapter_config.json" ]] || { echo "⛔ no adapter in $ADAPTER: train it first (just sft-train)" >&2; exit 1; }
   rank="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['r'])" "$ADAPTER/adapter_config.json")"
-  lora=(--enable-lora --lora-modules "sft=$ADAPTER" --max-lora-rank "$rank")
-  echo "serving $MODEL + adapter $ADAPTER (rank $rank) as \"sft\" on :$PORT, context $MAX_LEN"
+  mods=("sft=$ADAPTER")
+  for m in $EXTRA_ADAPTERS; do
+    [[ -f "${m#*=}/adapter_config.json" ]] || { echo "⛔ no adapter in ${m#*=}" >&2; exit 1; }
+    mods+=("$m")
+  done
+  lora=(--enable-lora --lora-modules "${mods[@]}" --max-lora-rank "$rank" --max-loras "${#mods[@]}")
+  echo "serving $MODEL + ${mods[*]} (rank $rank) on :$PORT, context $MAX_LEN"
 else
   echo "serving $MODEL (no adapter) on :$PORT, context $MAX_LEN"
 fi

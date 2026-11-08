@@ -1,0 +1,27 @@
+# Arm S2: Aya Expanse 32B + SFT v2 (SEL-71), served next to v1 as "sft2":
+#   EXTRA_ADAPTERS="sft2=runs/sft-aya32b-r16-v2" just sft-serve
+# Same harness, prompt, decoding and customer as configs/arms.yaml; only the student differs:
+# it's served by vLLM on the pod (scripts/pod/serve.sh), on localhost:8000, no API key.
+# Run on the pod:  just rollout S2 <domain> --split dev --config configs/sft/arms.sft2.yaml
+# Never on test (SEL-71). Everything but the adapter is as in arms.sft.yaml.
+
+student:
+  name: aya32-sft-r16-v2
+  model: sft2
+  api_base: http://localhost:8000/v1
+  api_key_env: null
+  mode: prompted          # the data contract (SEL-35): don't change these two
+  style: cohere
+  temperature: 0.0
+  max_tokens: 1024
+  max_context: 32768      # = serve.sh MAX_LEN (the GPU's limit; Cohere's API allows 128K)
+  reserve: 4096
+  rpm: 0
+
+customer: null            # GPT-4.1, as for every arm
+
+arms:
+  S2:
+    name: sft-v2-indicative
+    description: "SFT v2: v1's data plus the teacher's extra verified airline passes (SEL-71; indicative, not Arm B)"
+    prompt_variant: default

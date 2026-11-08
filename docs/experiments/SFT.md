@@ -137,8 +137,11 @@ python scripts/teacher/fixes.py --domains airline --tasks all --all-attempts
 just sft-v2-data                                        # → data/train/sft-v2.jsonl + .report.json
 just sft-train configs/train/sft_aya32b_v2.yaml --dry-run
 just sft-train configs/train/sft_aya32b_v2.yaml --push
-ADAPTER=runs/sft-aya32b-r16-v2 just sft-serve           # served as "sft"
-# then the dev rollouts as for v1 into S2-*-dev.jsonl (--out), and: just gate-check P S2
+EXTRA_ADAPTERS="sft2=runs/sft-aya32b-r16-v2" just sft-serve   # v1 as "sft", v2 as "sft2", one server
+for d in retail airline telecom; do
+  just rollout S2 $d --split dev --samples 2 --config configs/sft/arms.sft2.yaml   # → S2-<domain>-dev.jsonl
+done
+# Mac: just oracle-score …S2-*-dev.jsonl; just arm-samples S S2 P; just gate-check P S2
 ```
 
 **v2 results:** pending.
