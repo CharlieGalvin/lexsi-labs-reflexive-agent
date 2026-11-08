@@ -173,6 +173,9 @@ oracle-score *files:
 # Summarise a rollout file as results/arm-<arm>-<domain>-<split>.metrics.json (no API calls; `--only dev`)
 arm-metrics file *args:
     python scripts/arms/metrics.py {{file}} {{args}}
+# Failed conversations: the expected state-changing actions against what the agent did (`--all`, `--out`)
+arm-failures +args:
+    python scripts/arms/failure_diff.py {{args}}
 
 # Run an arm on a domain's split, e.g. `just rollout A retail --limit 5` or `just rollout C telecom`
 rollout arm domain *args:
