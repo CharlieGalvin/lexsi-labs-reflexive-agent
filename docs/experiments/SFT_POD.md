@@ -1,7 +1,8 @@
 # The indicative SFT run on a RunPod GPU, end to end (SEL-65)
 
 QLoRA on Aya Expanse 32B, trained on the 112 healable golden fixes, then scored on the 36 dev
-tasks next to Arm A. **Never run anything here on the test split.**
+tasks next to Arm A. **Never run anything here on the test split.** This page is *how to run it*;
+the question, the results, v1 against v2 and the decision rules are in [`SFT.md`](SFT.md).
 
 Written from the first real run (7–8 Nov, H100 SXM): set-up about 45 minutes, training **23
 minutes**, peak GPU memory **54 GB**, held-out loss **0.854 → 0.393**. GPU time for the whole

@@ -176,6 +176,15 @@ arm-metrics file *args:
 # Failed conversations: the expected state-changing actions against what the agent did (`--all`, `--out`)
 arm-failures +args:
     python scripts/arms/failure_diff.py {{args}}
+# Passes per arm, domain and sample: the run-to-run spread (`--split val`)
+arm-samples +args:
+    python scripts/arms/samples.py {{args}}
+# The agreed DevGate on saved dev runs: `just gate-check P S` (a check), `--record` (a heal cycle)
+gate-check baseline candidate *args:
+    python scripts/arms/gate_check.py {{baseline}} {{candidate}} {{args}}
+# SFT v2 data (SEL-71): v1's examples + the teacher's extra verified passes for these domains
+sft-v2-data *args="--domains airline":
+    python scripts/data/build_extra_fixes.py {{args}}
 
 # Run an arm on a domain's split, e.g. `just rollout A retail --limit 5` or `just rollout C telecom`
 [positional-arguments]  # quoted: telecom task IDs contain | and [ ], which a shell would split
