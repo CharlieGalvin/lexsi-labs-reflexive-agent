@@ -46,9 +46,10 @@ else
 fi
 
 # Aya Expanse 32B's config.json says max_position_embeddings=8192, but the model serves 128K
-# (Cohere's API runs it at 128K, as for Arm A; RoPE, a large base): vLLM refuses a longer
-# max-model-len without this. Training examples reach 13.7K tokens, dev conversations more.
-export VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
+# (Cohere's API runs it at 128K, as for Arm A; RoPE with a large base). vLLM sizes its RoPE table
+# from that number, so VLLM_ALLOW_LONG_MAX_MODEL_LEN alone let conversations past 8,192 tokens index
+# off the end of it: "CUDA error: device-side assert triggered", and the server died mid-run.
+# Telling vLLM the real length builds the table to MAX_LEN instead.
 
 # FlashInfer compiles its top-k/top-p sampler on first use, which needs ninja and a CUDA
 # compiler; the pod has neither on PATH ("No such file or directory: 'ninja'" at engine start).
@@ -65,4 +66,5 @@ exec "$VLLM" serve "$MODEL" \
   --gpu-memory-utilization "$GPU_UTIL" \
   --generation-config vllm \
   --chat-template "$TEMPLATE" \
+  --hf-overrides "{\"max_position_embeddings\": $MAX_LEN}" \
   "${lora[@]}"
