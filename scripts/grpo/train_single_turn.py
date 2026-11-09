@@ -52,12 +52,11 @@ def load(path: Path) -> dict[str, Any]:
     return cfg
 
 
-def prompts(cfg: dict[str, Any]) -> list[dict[str, Any]]:
-    """The training rows, as the dataset's columns. ``target_calls`` as JSON text: Arrow can't
-    hold argument dicts of different shapes in one column."""
-    path = ROOT / cfg["data"]
+def read_rows(data: str) -> list[dict[str, Any]]:
+    """The GRPO prompts in ``data`` (a path under the repo), checked: our format, train tasks only."""
+    path = ROOT / data
     if not path.exists():
-        raise SystemExit(f"⛔ {cfg['data']} doesn't exist: run `just grpo-data` first")
+        raise SystemExit(f"⛔ {data} doesn't exist: run `just grpo-data` first")
     rows = read_jsonl(path)
     for r in rows:
         if r.get("format") != grpo_data.FORMAT:
@@ -66,7 +65,14 @@ def prompts(cfg: dict[str, Any]) -> list[dict[str, Any]]:
         if splits.split_of(r["domain"], r["task_id"]) != "train":
             raise SystemExit(f"⛔ {r['id']} isn't a train task: rebuild with `just grpo-data`")
     if not rows:
-        raise SystemExit(f"⛔ {cfg['data']} is empty")
+        raise SystemExit(f"⛔ {data} is empty")
+    return rows
+
+
+def prompts(cfg: dict[str, Any]) -> list[dict[str, Any]]:
+    """The training rows, as the dataset's columns. ``target_calls`` as JSON text: Arrow can't
+    hold argument dicts of different shapes in one column."""
+    rows = read_rows(cfg["data"])
     return [{**{k: r[k] for k in COLUMNS}, "target_calls": json.dumps(r["target_calls"])} for r in rows]
 
 
@@ -105,6 +111,35 @@ def prompt_tokens(rows: list[dict[str, Any]], tok: Any) -> list[int]:
     ]
 
 
+def load_tokenizer(model: str) -> Any:
+    """Aya's tokenizer, padding on the left, with the chat template that lets the agent speak first."""
+    from transformers import AutoTokenizer
+
+    tok = AutoTokenizer.from_pretrained(model, padding_side="left", truncation_side="left")
+    tok.chat_template = relax_chat_template(tok.chat_template)  # see reflexive.sft
+    return tok
+
+
+def load_base(cfg: dict[str, Any]) -> Any:
+    """The config's model in 4-bit on GPU 0, as SFT trained the adapter on it."""
+    import torch
+    from transformers import AutoModelForCausalLM, BitsAndBytesConfig
+
+    q = cfg.get("quantization", {})
+    return AutoModelForCausalLM.from_pretrained(
+        cfg["model"],
+        dtype=torch.bfloat16,
+        attn_implementation="sdpa",
+        quantization_config=BitsAndBytesConfig(
+            load_in_4bit=q.get("load_in_4bit", True),
+            bnb_4bit_quant_type=q.get("quant_type", "nf4"),
+            bnb_4bit_use_double_quant=q.get("double_quant", True),
+            bnb_4bit_compute_dtype=torch.bfloat16,
+        ),
+        device_map={"": 0},
+    )
+
+
 def main() -> int:  # noqa: PLR0915 - one linear script: check, load, train, save
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("config", type=Path, nargs="?", default=CONFIG, help=f"default: {shown(CONFIG)}")
@@ -130,10 +165,7 @@ def main() -> int:  # noqa: PLR0915 - one linear script: check, load, train, sav
     args = grpo_args(cfg, out, overrides)
     rows = prompts(cfg)
 
-    from transformers import AutoTokenizer
-
-    tok = AutoTokenizer.from_pretrained(cfg["model"], padding_side="left", truncation_side="left")
-    tok.chat_template = relax_chat_template(tok.chat_template)  # the agent speaks first: see reflexive.sft
+    tok = load_tokenizer(cfg["model"])
     lengths = prompt_tokens(rows, tok)
     n_prompts = args["max_steps"] * args["per_device_train_batch_size"] * args["gradient_accumulation_steps"]
     n_prompts //= args.get("num_generations", 8)
@@ -147,22 +179,10 @@ def main() -> int:  # noqa: PLR0915 - one linear script: check, load, train, sav
     import torch
     from datasets import Dataset
     from peft import PeftModel, prepare_model_for_kbit_training
-    from transformers import AutoModelForCausalLM, BitsAndBytesConfig, TrainerCallback
+    from transformers import TrainerCallback
     from trl import GRPOConfig, GRPOTrainer
 
-    q = cfg.get("quantization", {})
-    base = AutoModelForCausalLM.from_pretrained(
-        cfg["model"],
-        dtype=torch.bfloat16,
-        attn_implementation="sdpa",
-        quantization_config=BitsAndBytesConfig(
-            load_in_4bit=q.get("load_in_4bit", True),
-            bnb_4bit_quant_type=q.get("quant_type", "nf4"),
-            bnb_4bit_use_double_quant=q.get("double_quant", True),
-            bnb_4bit_compute_dtype=torch.bfloat16,
-        ),
-        device_map={"": 0},
-    )
+    base = load_base(cfg)
     base = prepare_model_for_kbit_training(base, use_gradient_checkpointing=True)
     model = PeftModel.from_pretrained(base, cfg["adapter"], is_trainable=True)
     model.print_trainable_parameters()

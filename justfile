@@ -102,6 +102,10 @@ grpo-reward-check *args:
 grpo-train *args:
     python scripts/grpo/train_single_turn.py {{args}}
 
+# Held-out reward: SFT v2 against the GRPO adapter on prompts never trained on (GPU pod; SEL-21)
+grpo-heldout *args:
+    python scripts/grpo/heldout_check.py {{args}}
+
 # Indicative SFT run on the GPU pod (SEL-65): QLoRA on Aya 32B, the agent's turns as targets → runs/
 sft-train *args:
     python scripts/sft/train_sft.py {{args}}
