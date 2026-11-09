@@ -115,3 +115,15 @@ def test_pending_at_counts_only_changes_made_before_the_turn():
     ]
     assert op.pending_at(view, 4, want, mutating) == (want[1],)
     assert op.pending_at(view, 2, want, mutating) == tuple(want)
+
+
+def test_watch_requests_reports_a_retried_request_and_passes_the_reply_on(monkeypatch, capsys):
+    import httpx
+
+    class Reply:
+        status_code, text = 429, '{"error": "rate limited"}'
+
+    monkeypatch.setattr(httpx, "post", lambda *a, **k: Reply())
+    op.watch_requests()  # the real (non dry-run) path calls this before any teacher request
+    assert httpx.post("https://openrouter.ai/x") is not None
+    assert "↻ HTTP 429" in capsys.readouterr().out

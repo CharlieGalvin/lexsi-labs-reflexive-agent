@@ -142,6 +142,33 @@ def verify(fixed: dict, point: FixPoint, mutating: Callable[[str], bool]) -> lis
 # --- With τ²-bench: tasks, tools and the teacher -----------------------------------------------
 
 
+def watch_requests() -> None:
+    """Print every teacher request OpenRouter doesn't answer cleanly (the client retries those
+    quietly, with back-off), so a slow run shows why."""
+    import httpx
+
+    real = httpx.post
+
+    def post(*args: Any, **kw: Any) -> Any:
+        start = time.monotonic()
+        try:
+            r = real(*args, **kw)
+        except httpx.HTTPError as e:
+            print(
+                f"   ↻ request failed after {time.monotonic() - start:.0f}s: {type(e).__name__}: {e}"[:200],
+                flush=True,
+            )
+            raise
+        if r.status_code != 200 or '"error"' in r.text[:2000]:
+            print(
+                f"   ↻ HTTP {r.status_code} after {time.monotonic() - start:.0f}s: {r.text[:160]!r}",
+                flush=True,
+            )
+        return r
+
+    httpx.post = post
+
+
 def teach(
     failure: Any, point: FixPoint, mutating: Callable[[str], bool], attempts: int
 ) -> tuple[dict | None, list]:
