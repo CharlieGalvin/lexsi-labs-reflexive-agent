@@ -329,7 +329,8 @@ def main() -> int:
             tries = len(entry["attempts"])
             verdict = f"accepted on attempt {tries}" if ex is not None else f"refused ({tries} attempts)"
             print(
-                f"[{done}] {d} {t[:40]} {point.kind} → {verdict}, {time.monotonic() - start:.0f}s; {len(fixes)} accepted so far",
+                f"[{done}] {d} {t[:40]} {point.kind} → {verdict}, "
+                f"{time.monotonic() - start:.0f}s; {len(fixes)} accepted so far",
                 flush=True,
             )
             report["conversations"].append(entry)

@@ -6,6 +6,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 spec = importlib.util.spec_from_file_location(
     "onpolicy_fixes", Path(__file__).parents[1] / "scripts/heal/onpolicy_fixes.py"
 )
@@ -118,7 +120,7 @@ def test_pending_at_counts_only_changes_made_before_the_turn():
 
 
 def test_watch_requests_reports_a_retried_request_and_passes_the_reply_on(monkeypatch, capsys):
-    import httpx
+    httpx = pytest.importorskip("httpx")  # with the teacher's client; CI's dev extra hasn't it
 
     class Reply:
         status_code, text = 429, '{"error": "rate limited"}'
