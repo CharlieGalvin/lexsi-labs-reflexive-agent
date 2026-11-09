@@ -232,3 +232,20 @@ def test_the_agreed_gate_runs_in_the_loop_and_reports_what_it_dropped():
     assert decision is not None and decision.verdict == "promote" and agent.adapter == "stub-adapter-1"
     assert report.gate_dropped == [DEV[3]] and decision.details["net_gain"] == 2
     assert json.loads(json.dumps(report.summary()))["gate"]["check"] == "all"
+
+
+def test_stop_after_fixes_trains_and_gates_nothing():
+    rollout = FakeRollout()
+    agent, teacher, trainer = make(rollout)
+    report = agent.run_cycle(TRAIN, DEV, stop_after_fixes=True)
+    assert len(report.fixes) == 3 and trainer.calls == [] and report.gate is None
+    assert report.skipped.startswith("stopped after the fixes") and len(rollout.calls) == len(TRAIN)
+
+
+def test_parallel_rollouts_keep_the_tasks_order():
+    rollout = FakeRollout(heals=set(DEV[:2]))
+    teacher, trainer = StubTeacher(), StubTrainer()
+    agent = ReflexiveAgent(rollout, teacher=teacher, trainer=trainer, gate=PassRateGate(), workers=4)
+    report = agent.run_cycle(TRAIN, DEV)
+    assert [(r["domain"], r["task_id"]) for r in report.rollouts] == TRAIN
+    assert [(r["domain"], r["task_id"]) for r in report.gate_candidate] == DEV and report.swapped

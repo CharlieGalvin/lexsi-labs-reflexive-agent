@@ -131,7 +131,7 @@ work is mainly wiring plus our own classifier, rewards and evaluation. Who build
 
 | Proposal step | AgentTune / AuditKIT component | Owner |
 |---|---|---|
-| Monitor EventLog | `agenttune.agentic.EventLog`, `FailureDetector` (scans DECIDE audit log) | Architect |
+| Monitor EventLog | `agenttune.agentic.EventLog` and the audit log `FullClosedLoop` reads; our `reflexive.monitor` checks it after every turn and stands in for `FailureDetector` (which sees only tool calls, so misses text-only loops) | Architect |
 | Detect & Classify | `FailureClassifier` (LLM, 5 root causes) | Architect: our `classify_hallucination` (Tool / Arg / Loop) |
 | Synthesise | `TrainingExampleGenerator` (chosen/rejected pairs), `create_distill_trainer` | Curator |
 | Retrain | `RetrainingTrigger`, `create_agentic_trainer(algorithm="grpo"/"bco")` | Trainer |
