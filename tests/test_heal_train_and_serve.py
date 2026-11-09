@@ -187,3 +187,11 @@ def test_a_server_that_dies_while_starting_is_reported(pod):
     done = run(pod, HEAL_SERVE=f"{sys.executable} {pod['tmp'] / 'dies.py'}")
     assert done.returncode == 1 and "vLLM exited while starting" in done.stderr
     assert "CUDA error: out of memory" in done.stderr  # the log's tail, to see why
+
+
+def test_for_the_heal_service_the_new_adapter_is_served_from_the_restart(pod):
+    done = run(pod, HEAL_SERVE_NEW="1")
+    assert done.returncode == 0, done.stderr
+    assert read(pod, "env.json")["EXTRA_ADAPTERS"] == f"{pod['out'].name}={pod['out']}"
+    failed = run(pod, HEAL_SERVE_NEW="1", TRAIN_FAILS="1")  # nothing new to serve
+    assert failed.returncode == 3 and read(pod, "env.json")["EXTRA_ADAPTERS"] == ""

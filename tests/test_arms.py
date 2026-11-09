@@ -85,6 +85,18 @@ def test_student_needs_its_api_key(monkeypatch):
     assert agent.api_base == "http://localhost:8000/v1" and agent.model == student["model"]
 
 
+def test_the_pods_student_takes_its_url_and_key_from_the_environment(monkeypatch):
+    # SEL-68: the pod's public endpoint changes with every pod and isn't committed
+    arm = get_arm("P", "configs/sft/arms.pod.yaml")
+    monkeypatch.delenv("POD_STUDENT_URL", raising=False)
+    monkeypatch.setenv("POD_API_KEY", "k")
+    with pytest.raises(RuntimeError, match="POD_STUDENT_URL"):
+        make_student(arm.student)
+    monkeypatch.setenv("POD_STUDENT_URL", "https://pod-8000.proxy.runpod.net/v1/")
+    agent = make_student(arm.student)
+    assert agent.api_base == "https://pod-8000.proxy.runpod.net/v1" and agent.usage.prices == (0.0, 0.0)
+
+
 # --- With τ²-bench ----------------------------------------------------------------------------
 
 

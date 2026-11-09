@@ -22,6 +22,8 @@
 #                        e.g. runs/sft-aya32b-r16-v2 for configs/sft/arms.sft2.yaml (model sft2)
 #   HEAL_SERVE_ADAPTERS  adapters to keep serving, "name=path ...": e.g. "sft2=runs/sft-aya32b-r16-v2"
 #                        when the cycle's student is sft2 (the gate's baseline)
+#   HEAL_SERVE_NEW=1     also serve the new adapter from the restart (scripts/pod/heal_service.py:
+#                        the cycle runs elsewhere and reaches the pod only through its endpoint)
 #   SERVE_LOG (default $WORKSPACE/vllm-heal.log), PORT (8000), READY_TIMEOUT (1200 s),
 #   STOP_TIMEOUT (120 s), HEAL_TRAIN_CONFIG, and for tests HEAL_TRAIN, HEAL_SERVE, VLLM_MATCH.
 
@@ -45,6 +47,7 @@ POLL="${POLL:-5}"
 GPU_FREE_MB="${GPU_FREE_MB:-2000}"
 HEAL_INIT_ADAPTER="${HEAL_INIT_ADAPTER-}"
 HEAL_SERVE_ADAPTERS="${HEAL_SERVE_ADAPTERS-}"
+HEAL_SERVE_NEW="${HEAL_SERVE_NEW:-0}"
 
 log() { echo "[train_and_serve $(date +%H:%M:%S)] $*"; }
 die() { echo "⛔ $*" >&2; exit 1; }
@@ -107,6 +110,9 @@ fi
 # --- 3. Start vLLM again -------------------------------------------------------------------------
 extras="$HEAL_SERVE_ADAPTERS"
 [[ -n "$BASE" ]] && extras="${extras:+$extras }$BASE=$init"
+# HEAL_SERVE_NEW=1 (the pod heal service): serve the new adapter from the start too, so a cycle
+# running elsewhere, which can't load a file on the pod, finds it on the endpoint
+[[ "$HEAL_SERVE_NEW" == 1 && "$train_status" == 0 ]] && extras="${extras:+$extras }$NAME=$OUT"
 read -ra serve_cmd <<< "$SERVE"
 mkdir -p "$(dirname "$SERVE_LOG")"
 log "starting vLLM on :$PORT (runtime LoRA${extras:+, serving $extras}); log: $SERVE_LOG"

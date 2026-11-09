@@ -8,6 +8,7 @@
 #   ADAPTER= EXTRA_ADAPTERS="sft2=runs/sft-aya32b-r16-v2" bash scripts/pod/serve.sh   # v2 only
 #   EXTRA_ADAPTERS="sft2=runs/sft-aya32b-r16-v2" bash scripts/pod/serve.sh   # v1 as "sft" + v2 as "sft2"
 #   ADAPTER= RUNTIME_LORA=1 bash scripts/pod/serve.sh  # heal cycles: adapters loaded while serving
+#   VLLM_API_KEY=... (read by vLLM itself): require a key, when the port is public (configs/sft/arms.pod.yaml)
 #
 # Then, in another terminal on the pod, the rollouts (configs/sft/: P = base, S = adapter):
 #   just rollout P retail --split dev --limit 5 --config configs/sft/arms.base.yaml

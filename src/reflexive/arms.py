@@ -40,7 +40,9 @@ STUDENT_KEYS = {
     "name",
     "model",
     "api_base",
+    "api_base_env",  # the URL from the environment instead (the pod's endpoint, SEL-68)
     "api_key_env",
+    "self_hosted",  # our own server behind a key: no per-token price
     "mode",
     "style",
     "temperature",
@@ -87,6 +89,20 @@ def get_arm(key: str, path: str | Path | None = None) -> Arm:
     )
 
 
+def student_api_base(student: dict) -> str:
+    """The student's server: ``api_base``, or the URL in the environment variable ``api_base_env``
+    (the pod's public vLLM endpoint, which changes with every pod and isn't committed)."""
+    env = student.get("api_base_env")
+    if not env:
+        return student["api_base"]
+    url = os.environ.get(env)
+    if not url:
+        raise RuntimeError(
+            f"Set {env} in .env: the URL of the student's server, e.g. https://<pod>-8000.proxy.runpod.net/v1"
+        )
+    return url.rstrip("/")
+
+
 def make_student(student: dict, *, limiter: RateLimiter | None = None, **kwargs: Any) -> TeacherClient:
     """The student model as an agent (`turn(messages, tool_schemas)`). Same client as the teacher.
 
@@ -101,12 +117,13 @@ def make_student(student: dict, *, limiter: RateLimiter | None = None, **kwargs:
         student.get("mode", "prompted"),
         style=student.get("style", "cohere"),
         model=student["model"],
-        api_base=student["api_base"],
+        api_base=student_api_base(student),
         api_key=api_key or "none",
         temperature=student.get("temperature", 0.0),
         max_tokens=student.get("max_tokens", 1024),
         rpm=student.get("rpm") or 0,  # not TEACHER_RPM: the teacher's cap isn't the student's
-        prices=(0.0, 0.0) if not key_env else None,
+        # our own server (a key only guards the pod's public URL): no per-token price
+        prices=(0.0, 0.0) if not key_env or student.get("self_hosted") else None,
         **kwargs,
     )
     if limiter is not None:
@@ -197,7 +214,8 @@ def run_episode(
         "arm_name": arm.name,
         "student": arm.student.get("name"),
         "agent_llm": arm.student.get("model"),
-        "agent_api_base": arm.student.get("api_base"),
+        # the variable's name, not the pod's URL: metrics files built from records are committed
+        "agent_api_base": arm.student.get("api_base") or f"${arm.student.get('api_base_env')}",
         "agent_mode": arm.student.get("mode", "prompted"),
         "agent_style": arm.student.get("style", "cohere"),
         "agent_usage": usage,

@@ -202,6 +202,10 @@ rollout arm domain *args:
 heal *args:
     python scripts/heal/cycle.py {{args}}
 
+# On the pod (SEL-68): the heal service, so a cycle elsewhere trains here (`just heal --train-url`); needs HEAL_TOKEN
+heal-service *args:
+    python scripts/pod/heal_service.py {{args}}
+
 # --- Training (Trainer, GPU box; docs/experiments/MESSY_LOOKUP.md) --------------
 
 # Run 1 (SEL-34): 10-step Tiny Aya GRPO smoke run with one tool, ~10 min
