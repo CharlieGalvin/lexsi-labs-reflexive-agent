@@ -162,6 +162,10 @@ oracle-score *files:
 arm-metrics file *args:
     python scripts/arms/metrics.py {{file}} {{args}}
 
+# Compare two rollout files with 95% bootstrap CIs (SEL-27): success, hallucination, loops, steps, redundant calls
+arm-compare a b *args:
+    python scripts/arms/compare.py {{a}} {{b}} {{args}}
+
 # Run an arm on a domain's split, e.g. `just rollout A retail --limit 5` or `just rollout C telecom`
 rollout arm domain *args:
     python scripts/arms/rollout.py {{arm}} {{domain}} {{args}}
