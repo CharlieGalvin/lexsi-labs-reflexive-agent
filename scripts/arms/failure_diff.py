@@ -21,15 +21,12 @@ import json
 from collections import Counter
 from pathlib import Path
 
-from reflexive.files import read_jsonl, shown
+from reflexive.files import latest_records, read_jsonl, shown
 
 
 def latest(path: Path) -> list[dict]:
     """The last record per (task, sample): a re-run of a crashed conversation replaces it."""
-    keep: dict[tuple, dict] = {}
-    for r in read_jsonl(path, partial_last_ok=True):
-        keep[(r["task_id"], r.get("sample", 0))] = r
-    return list(keep.values())
+    return latest_records(read_jsonl(path, partial_last_ok=True))
 
 
 def agent_calls(messages: list[dict]) -> list[tuple[str, dict]]:
@@ -75,16 +72,28 @@ def mentioned(name: str, text: str) -> bool:
     return name in text or any(w and w in text for w in words)
 
 
-def compare(expected: list[tuple[str, dict]], done: list[tuple[str, dict]]) -> dict[str, list]:
-    """Match expected state-changing calls to the agent's: exact first, then same tool, other args.
+def same_call(e: tuple, d: tuple[str, dict]) -> bool:
+    """τ²-bench's own rule (``Action.compare_with_tool_call``): same tool, and the arguments agree
+    on the action's ``compare_args`` if it names them, else on the keys the agent sent.
+    ``e`` is (name, arguments) or (name, arguments, compare_args)."""
+    if e[0] != d[0]:
+        return False
+    keys = e[2] if len(e) > 2 and e[2] is not None else d[1].keys()
+    return {k: v for k, v in d[1].items() if k in keys} == {k: v for k, v in e[1].items() if k in keys}
+
+
+def compare(expected: list[tuple], done: list[tuple[str, dict]]) -> dict[str, list]:
+    """Match expected state-changing calls to the agent's: as τ²-bench matches them first, then
+    same tool, other args.
 
     Returns ``ok`` (expected, done as expected), ``wrong`` ((expected, what was done instead)),
     ``missing`` (expected, never called) and ``extra`` (called, not expected)."""
     left = list(done)
     ok, unmatched = [], []
     for e in expected:
-        if e in left:
-            left.remove(e)
+        hit = next((d for d in left if same_call(e, d)), None)
+        if hit is not None:
+            left.remove(hit)
             ok.append(e)
         else:
             unmatched.append(e)
@@ -122,11 +131,15 @@ def report(path: Path, show_all: bool, totals: dict[str, Counter]) -> list[str]:
     sc = scorer(domain)
     env = registry.get_env_constructor(domain)(**(sc.env_kwargs or {}))
 
+    tools = env.tools  # the agent's own toolkit (the customer's is env.user_tools)
+
+    def agents(name: str) -> bool:  # one of the agent's own tools (not the customer's, not made up)
+        return tools is not None and tools.has_tool(name)
+
     def mutating(name: str) -> bool:
-        try:
-            return bool(env._is_mutating_tool(name))
-        except Exception:  # noqa: BLE001 - an unknown tool (a hallucination) changes nothing
-            return False
+        # τ²-bench's _is_mutating_tool says True for a tool it can't find, so ask the agent's
+        # toolkit directly: a made-up or customer-only tool is reported on its own, not as a write
+        return tools is not None and tools.has_tool(name) and bool(tools.tool_mutates_state(name))
 
     failed = [r for r in rows if show_all or not r["outcome"].get("passed")]
     lines = [f"# {shown(path)}: {len(failed)} of {len(rows)} shown ({domain})", ""]
@@ -143,22 +156,29 @@ def report(path: Path, show_all: bool, totals: dict[str, Counter]) -> list[str]:
         why = getattr(instr, "reason_for_call", None) or str(instr or "")
         lines.append(f"Customer: {' '.join(why.split())[:300]}")
 
-        exp_agent = [(a.name, a.arguments or {}) for a in ec.actions or [] if a.requestor != "user"]
+        exp_agent = [
+            (a.name, a.arguments or {}, a.compare_args) for a in ec.actions or [] if a.requestor != "user"
+        ]
         exp_user = [(a.name, a.arguments or {}) for a in ec.actions or [] if a.requestor == "user"]
         want = [e for e in exp_agent if mutating(e[0])]
-        did = [d for d in agent_calls(r["messages"]) if mutating(d[0])]
+        calls = agent_calls(r["messages"])
+        did = [d for d in calls if mutating(d[0])]
+        foreign = [d for d in calls if not agents(d[0])]
         c = compare(want, did)
         for e in c["ok"]:
-            lines.append(f"  ✓ {call(*e)}")
+            lines.append(f"  ✓ {call(e[0], e[1])}")
         for e, d in c["wrong"]:
-            lines.append(f"  ≠ {call(*e)}\n      did: {args_diff(e[1], d[1])}")
+            lines.append(f"  ≠ {call(e[0], e[1])}\n      did: {args_diff(e[1], d[1])}")
             totals["wrong"][e[0]] += 1
         for e in c["missing"]:
-            lines.append(f"  ✗ never done: {call(*e)}")
+            lines.append(f"  ✗ never done: {call(e[0], e[1])}")
             totals["missing"][e[0]] += 1
         for d in c["extra"]:
             lines.append(f"  + not expected: {call(*d)}")
             totals["extra"][d[0]] += 1
+        for d in foreign:
+            lines.append(f"  ? not one of the agent's tools: {call(*d)}")
+            totals["not an agent tool"][d[0]] += 1
         if not (want or did):
             lines.append("  (no state-changing agent actions expected or taken)")
         if exp_user:
@@ -187,7 +207,8 @@ def main() -> int:
             ap.error(f"no such file: {f} (pass rollout files: results/episodes/arms/*.jsonl)")
 
     totals: dict[str, Counter] = {
-        k: Counter() for k in ("missing", "wrong", "extra", "customer step not mentioned")
+        k: Counter()
+        for k in ("missing", "wrong", "extra", "not an agent tool", "customer step not mentioned")
     }
     lines: list[str] = []
     for f in a.files:

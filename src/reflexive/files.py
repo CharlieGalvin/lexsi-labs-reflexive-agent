@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sys
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
@@ -61,6 +62,17 @@ def resume_jsonl(path: Path) -> list[dict[str, Any]]:
     if len(recs) < len(lines):  # cut the half-written last line; keep the others byte for byte
         path.write_text("".join(line + "\n" for line in lines[:-1]))
     return recs
+
+
+def latest_records(records: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The last record per conversation (domain, task, sample): a re-run of a crashed one replaces it.
+
+    Task IDs are compared as strings, so ``7`` and ``"7"`` are the same task. The order is the
+    order in which each conversation first appears."""
+    keep: dict[tuple[Any, str, Any], dict[str, Any]] = {}
+    for r in records:
+        keep[(r.get("domain"), str(r["task_id"]), r.get("sample", 0))] = r
+    return list(keep.values())
 
 
 def sha256(path: Path) -> str:

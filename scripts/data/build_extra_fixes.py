@@ -46,6 +46,11 @@ def _build_golden() -> Any:
     return mod
 
 
+def attempt_id(r: Record) -> str:
+    """``<teacher>/<domain>/<task>/<attempt>``: the id golden records (and v2's examples) carry."""
+    return f"{r.get('sample_model', 'teacher')}/{r.get('domain')}/{r.get('task_id')}/{r.get('attempt') or 1}"
+
+
 def candidates(
     fixes: list[Record], base: list[Record], domains: set[str]
 ) -> tuple[list[Record], collections.Counter]:
@@ -53,11 +58,15 @@ def candidates(
     healable = {(r["domain"], str(r["task_id"])) for r in base if r["group"] == "healable"}
     used = {r["source"]["golden_id"] for r in base}  # "<teacher>/<domain>/<task>/<attempt>"
     why: collections.Counter = collections.Counter()
-    keep = []
+    last: dict[str, Record] = {}  # a re-run of the teacher can append the same attempt again
     for r in fixes:
-        d, t = r.get("domain"), str(r.get("task_id"))
-        if d not in domains:
-            continue
+        if r.get("domain") in domains:
+            if attempt_id(r) in last:
+                why["an earlier record of the same attempt (the last one is kept)"] += 1
+            last[attempt_id(r)] = r
+    keep = []
+    for r in last.values():
+        d, t = str(r["domain"]), str(r.get("task_id"))  # every record here is in ``domains``
         try:
             split = splits.split_of(d, t)
         except KeyError:
@@ -68,7 +77,7 @@ def candidates(
         if (d, t) not in healable:
             why["task not in v1's healable group (held out, or no v1 fix)"] += 1
             continue
-        if f"{r.get('sample_model', 'teacher')}/{d}/{t}/{r.get('attempt') or 1}" in used:
+        if attempt_id(r) in used:
             why["the attempt v1 already uses"] += 1
             continue
         if (problem := golden.why_not_clean(r)) is not None:

@@ -78,6 +78,8 @@ step "Repo: $REPO_DIR on $BRANCH"
 cd "$REPO_DIR"
 if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
   printf '   ! local changes in the repo: not switching branch or pulling\n'
+elif [[ -z "$BRANCH" ]]; then  # a detached HEAD (a tag or commit) has no branch to pull
+  printf '   ! the repo is on a commit, not a branch: staying on it (set BRANCH= to switch)\n'
 else
   git fetch -q origin
   git checkout -q "$BRANCH"

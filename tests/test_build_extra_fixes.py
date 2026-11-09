@@ -51,3 +51,12 @@ def test_never_adds_dev_tasks_or_held_out_ones(monkeypatch):
     )
     assert keep == []
     assert why["a dev task"] == 1 and why["task not in v1's healable group (held out, or no v1 fix)"] == 1
+
+
+def test_a_repeated_attempt_counts_once_and_the_last_record_wins(monkeypatch):
+    monkeypatch.setattr(bx.golden, "why_not_clean", lambda r: None)
+    first, again = fix(TRAIN, 2), fix(TRAIN, 2)
+    first["messages"], again["messages"] = [{"content": "first wording"}], [{"content": "re-run"}]
+    keep, why = bx.candidates([first, again], [base_row(TRAIN)], {"airline"})
+    assert [r["messages"][0]["content"] for r in keep] == ["re-run"]
+    assert why["an earlier record of the same attempt (the last one is kept)"] == 1

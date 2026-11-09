@@ -52,3 +52,58 @@ def test_it_refuses_a_mig_slice_and_a_small_gpu_before_installing_anything():
     text = SCRIPT.read_text()
     gpu, install = text.index('step "GPU"'), text.index("\njust setup\n")  # the command, not the header
     assert gpu < install and "MIG" in text[gpu:install] and "MIN_GPU_GB" in text[gpu:install]
+
+
+def _block(script: str, start: str, end: str) -> str:
+    """The lines of a pod script from ``start`` up to (not including) ``end``, to run on their own."""
+    lines = (ROOT / "scripts" / "pod" / script).read_text().splitlines()
+    i = next(n for n, line in enumerate(lines) if line.startswith(start))
+    j = next(n for n, line in enumerate(lines) if n > i and line.startswith(end))
+    return "\n".join(lines[i:j])
+
+
+def _bash(code: str, env: dict[str, str], cwd=None) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        ["bash", "-c", "set -euo pipefail\n" + code],
+        capture_output=True,
+        text=True,
+        env={"PATH": "/usr/bin:/bin", **env},
+        cwd=cwd,
+    )
+
+
+def test_serve_loads_every_adapter_at_the_largest_rank(tmp_path):
+    for name, r in (("v1", 16), ("v2", 32)):
+        (tmp_path / name).mkdir()
+        (tmp_path / name / "adapter_config.json").write_text(f'{{"r": {r}}}')
+    code = _block("serve.sh", "# Every adapter to load", "# Aya Expanse 32B") + '\necho "ARGS ${lora[*]}"'
+    base = {"MODEL": "m", "PORT": "8000", "MAX_LEN": "32768"}
+
+    both = _bash(code, {**base, "ADAPTER": f"{tmp_path}/v1", "EXTRA_ADAPTERS": f"sft2={tmp_path}/v2"})
+    assert both.returncode == 0, both.stderr
+    assert "--max-lora-rank 32 --max-loras 2" in both.stdout  # not the first adapter's 16
+
+    extra_only = _bash(code, {**base, "ADAPTER": "", "EXTRA_ADAPTERS": f"sft2={tmp_path}/v2"})
+    assert extra_only.returncode == 0, extra_only.stderr
+    assert f"--lora-modules sft2={tmp_path}/v2 " in extra_only.stdout  # not dropped
+
+    missing = _bash(code, {**base, "ADAPTER": f"{tmp_path}/v1", "EXTRA_ADAPTERS": f"sft2={tmp_path}/nope"})
+    assert missing.returncode == 1 and "no adapter in" in missing.stderr
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git isn't installed")
+def test_setup_stays_on_a_detached_head_with_a_clear_note(tmp_path):
+    def git(*args: str) -> None:
+        subprocess.run(["git", *args], cwd=tmp_path, check=True, capture_output=True)
+
+    git("init", "-q")
+    git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "x")
+    git("checkout", "-q", "--detach")
+    code = (
+        'step() { :; }; fail() { echo "FAIL $*" >&2; exit 1; }; ok() { echo "ok $*"; }\n'
+        'BRANCH="$(git branch --show-current)"\n'
+        + _block("setup.sh", 'if [[ -n "$(git status --porcelain', 'step "Training environment')
+    )
+    res = _bash(code, {"HOME": str(tmp_path)}, cwd=tmp_path)
+    assert res.returncode == 0, res.stderr
+    assert "on a commit, not a branch" in res.stdout

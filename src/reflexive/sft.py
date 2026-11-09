@@ -64,9 +64,18 @@ def relaxed_template(template: str) -> str:
 
 def relax_chat_template(template: str | dict[str, str] | list[dict[str, str]]) -> Any:
     """`relaxed_template` for a tokenizer's ``chat_template``: one string, or named templates
-    (a dict, or a list of ``{"name", "template"}``), where every one that has the check loses it."""
+    (a dict, or a list of ``{"name", "template"}``), where every one that has the check loses it.
+
+    Like the one-string form, named templates refuse when none of them has the check: otherwise
+    the template would pass unchanged and fail later, inside training or vLLM."""
     if isinstance(template, str):
         return relaxed_template(template)
+    texts = template.values() if isinstance(template, dict) else [t["template"] for t in template]
+    if not any(_ALTERNATION_CHECK.search(t) for t in texts):
+        raise ValueError(
+            "none of the named chat templates has the 'roles must alternate' check: they aren't "
+            "the ones this was written for, so check them before training"
+        )
     if isinstance(template, dict):
         return {k: relaxed_template(v) if _ALTERNATION_CHECK.search(v) else v for k, v in template.items()}
     return [
@@ -80,6 +89,8 @@ def default_template(template: str | dict[str, str] | list[dict[str, str]]) -> s
     if isinstance(template, str):
         return template
     named = template if isinstance(template, dict) else {t["name"]: t["template"] for t in template}
+    if "default" not in named:
+        raise ValueError(f"no chat template named 'default' (the tokenizer has: {sorted(named)})")
     return named["default"]
 
 
@@ -143,6 +154,12 @@ def encode_all(
             too_long.append({"id": e.get("id"), "tokens": len(enc["input_ids"])})
             continue
         kept.append(enc)
+    if not kept and too_long:  # nothing to train on: stop before a full run loads the 32B model
+        shortest = min(t["tokens"] for t in too_long)
+        raise ValueError(
+            f"all {len(too_long)} conversations are over max_len {max_len} tokens "
+            f"(the shortest is {shortest}): raise max_len"
+        )
     lengths = [len(k["input_ids"]) for k in kept]
     if tiny or (kept and not any(lab != IGNORE for k in kept for lab in k["labels"])):
         raise ValueError(
