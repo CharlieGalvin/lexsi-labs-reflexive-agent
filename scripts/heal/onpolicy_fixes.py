@@ -226,6 +226,8 @@ def main() -> int:
         print("⛔ no validation files to exclude (--exclude): refusing to risk fixing validation tasks")
         return 1
     banned = val_ids(a.exclude)
+    if not a.dry_run:
+        watch_requests()
     envs, tasks = {}, {}
     report: dict[str, Any] = {
         "files": [shown(f) for f in a.files],
@@ -292,9 +294,17 @@ def main() -> int:
             if a.dry_run:
                 report["conversations"].append(entry)
                 continue
+            done = sum(kinds[k] for k in ("unexpected_change", "change_never_made", "classifier"))
+            start = time.monotonic()
             ex, entry["attempts"] = teach(failure, point, mutating, a.attempts)
             if ex is not None:
                 fixes.append(ex)
+            tries = len(entry["attempts"])
+            verdict = f"accepted on attempt {tries}" if ex is not None else f"refused ({tries} attempts)"
+            print(
+                f"[{done}] {d} {t[:40]} {point.kind} → {verdict}, {time.monotonic() - start:.0f}s; {len(fixes)} accepted so far",
+                flush=True,
+            )
             report["conversations"].append(entry)
 
     report["fix_points"] = dict(kinds)
