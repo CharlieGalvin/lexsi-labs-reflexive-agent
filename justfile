@@ -90,6 +90,10 @@ hard-subset *args:
 train-data *args:
     python scripts/data/build_train_data.py {{args}}
 
+# Single-turn GRPO prompts from the training conversations → data/train/grpo-*.jsonl (SEL-21)
+grpo-data *args:
+    python scripts/data/build_grpo_data.py {{args}}
+
 # Indicative SFT run on the GPU pod (SEL-65): QLoRA on Aya 32B, the agent's turns as targets → runs/
 sft-train *args:
     python scripts/sft/train_sft.py {{args}}
