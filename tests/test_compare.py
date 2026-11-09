@@ -147,7 +147,7 @@ def test_the_guards_stops_are_shown_on_their_own():
     a, b = runs()
     b = [{**r, "termination": "monitor_stop"} if r["task_id"] in ("0", "29") else r for r in b]
     c = compare(a, b, reps=200)
-    assert c.a_monitor_stopped["conversations"] == 0
+    assert c.a_monitor_stopped is not None and c.a_monitor_stopped["conversations"] == 0
     assert c.b_monitor_stopped == {
         "conversations": 2,
         "passed": 1,

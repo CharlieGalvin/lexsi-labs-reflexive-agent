@@ -59,6 +59,7 @@ def replay(rec: dict) -> dict:
             reactions.append(r)
     if w.error:
         raise RuntimeError(f"monitor error on {rec['domain']} {rec['task_id']}: {w.error}")
+    assert w.monitor is not None  # act mode always has one; an error above has already raised
     fires = [a.agent_turn for a in w.monitor.alarms if a.kind == "no_progress"]
     return {
         "agent_turns": sum(m.get("role") == "assistant" for m in view),
