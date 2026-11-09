@@ -5,6 +5,17 @@ agent saw it and lists every structural failure in it, typed **TOOL**, **ARG** o
 primary failure is the earliest one. It's rule-based and needs no τ²-bench install or API calls:
 tool schemas come from `configs/tool_schemas.json` (`just tool-schemas`).
 
+> **Update 7 Nov (SEL-62): the hand-off exemption is removed.** It relied on one dataset's tool
+> name (`transfer_to_human_agents`), and it hid A56 (Arm A telecom), a conversation that ran to
+> the step limit swapping goodbyes. Chat after a hand-off now counts as `repeated_message` /
+> `step_limit` like any other. On the 148 Arm A and C telecom conversations this changes only
+> A56 (it gains `step_limit` and `repeated_message`; its primary failure stays TOOL). The
+> precision figures below were measured **with** the exemption, and the "0 false alarms on the
+> 158 golden records" hasn't been re-checked without it (the golden files weren't to hand).
+> The same loops are now also caught while they run, by `reflexive.monitor` (`no_progress`).
+> Tools can also come from the live request (`classify_record(rec, tools=...)`), with
+> customer-only names as an optional label.
+
 | Type | Kind | What it means |
 |---|---|---|
 | TOOL | `customer_tool` | Called one of the customer's phone tools (telecom), which the agent doesn't have |
@@ -15,8 +26,8 @@ tool schemas come from `configs/tool_schemas.json` (`just tool-schemas`).
 | ARG | `malformed` | Arguments that aren't JSON, or an `Action:` block the parser couldn't read |
 | LOOP | `repeated_failed_call` | The same call again after it already failed |
 | LOOP | `repeated_call` | The same call 3 times |
-| LOOP | `repeated_message` | The same reply 3 times (not counted after a real hand-off) |
-| LOOP | `step_limit` | τ²-bench stopped the conversation at 200 steps (not counted after a real hand-off) |
+| LOOP | `repeated_message` | The same reply 3 times (since 7 Nov also after a hand-off: see the update below) |
+| LOOP | `step_limit` | τ²-bench stopped the conversation at 200 steps (since 7 Nov also after a hand-off) |
 
 ## On Aya's telecom rollouts (Arm A and Arm C, 74 train tasks each)
 
@@ -59,7 +70,7 @@ fixed seed. Each was judged by reading the conversation. Labels and notes:
 The spot check changed the classifier twice before these numbers:
 - **A false positive:** a conversation where the agent really did hand over to a human, then
   kept saying goodbye until the step limit. Chat after a successful hand-off no longer counts
-  as a loop.
+  as a loop. *(Reversed on 7 Nov: see the update below.)*
 - **Misses found while reading:** placeholders written with underscores or CamelCase
   (`customer_id_from_search`, `CustomerIDfromPreviousToolResult`), `"user's full name"`, and
   `19XX-05-14`. These are now caught.

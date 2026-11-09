@@ -135,7 +135,10 @@ def report(path: Path, show_all: bool, totals: dict[str, Counter]) -> list[str]:
         ec = task.evaluation_criteria
         missed = [k for k, v in (r["outcome"].get("checks") or {}).items() if v < 1] or ["none recorded"]
         verdict = "PASS" if r["outcome"].get("passed") else "fail"
-        lines.append(f"## {r['task_id']}: {verdict}, {r.get('termination')}; missed: {', '.join(missed)}")
+        lines.append(
+            f"## {r['task_id']} (sample {r.get('sample', 0)}): {verdict}, {r.get('termination')}; "
+            f"missed: {', '.join(missed)}"
+        )
         instr = getattr(task.user_scenario, "instructions", None)
         why = getattr(instr, "reason_for_call", None) or str(instr or "")
         lines.append(f"Customer: {' '.join(why.split())[:300]}")
@@ -179,6 +182,9 @@ def main() -> int:
     ap.add_argument("--all", action="store_true", help="show passed conversations too")
     ap.add_argument("--out", type=Path, help="also write the report here (Markdown)")
     a = ap.parse_args()
+    for f in a.files:  # e.g. `S2` instead of a path: say so instead of a traceback
+        if not f.exists():
+            ap.error(f"no such file: {f} (pass rollout files: results/episodes/arms/*.jsonl)")
 
     totals: dict[str, Counter] = {
         k: Counter() for k in ("missing", "wrong", "extra", "customer step not mentioned")

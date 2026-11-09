@@ -1,0 +1,55 @@
+{
+  "run": "arm-S-airline-dev",
+  "date": "2026-11-09",
+  "owner": "Charlie",
+  "commit": "9615e32",
+  "config": "configs/arms.yaml",
+  "arm": "S",
+  "prompt_variant": "default",
+  "prompt_version": "tau2/default",
+  "student": "sft (http://localhost:8000/v1, prompted, cohere Action: format)",
+  "customer": "gpt-4.1-2025-04-14",
+  "domain": "airline",
+  "split": "dev (frozen splits, configs/splits.json)",
+  "samples_per_task": 2,
+  "judges": true,
+  "note_judges": "τ²-bench's LLM judges ran where a score needed one (11 of 12 conversations; the others ended early or have no judged check): scores are complete",
+  "note_cost": "the saved records' spend: a resumed rollout drops crashed conversations before retrying them, so their first attempts aren't counted (a lower bound)",
+  "records": "results/episodes/arms/S-airline-dev.jsonl (not committed), the dev tasks only",
+  "note_samples": "the 95% range counts every conversation as independent: too narrow",
+  "conversations": 12,
+  "crashed": 0,
+  "passed": 2,
+  "task_success": 0.1667,
+  "task_success_wilson95": [
+    0.047,
+    0.448
+  ],
+  "by_issue": null,
+  "termination": {
+    "user_stop": 11,
+    "max_steps": 1
+  },
+  "context_overflow": 0,
+  "conversations_flagged": {
+    "tool_unknown_tool": 0,
+    "arg_unseen_id_like_argument": 1,
+    "loop_repeated_failed_call": 1,
+    "tool_or_arg": 1
+  },
+  "flag_method": "heuristic diagnostics (reflexive.teacher.unseen_arguments / tool_errors), not the SEL-12 classifier",
+  "hallucination_rate_tool_or_arg": 0.0833,
+  "transferred_to_human": 0,
+  "judged": 11,
+  "skipped_checks": 0,
+  "student_calls": 264,
+  "student_calls_per_success": 132.0,
+  "student_replies_cut_off": 0,
+  "tool_calls_per_conversation": 18.3,
+  "student_tokens_per_conversation_median": 87094,
+  "cost_usd": {
+    "customer": 0.13,
+    "student_est": 0.0,
+    "total": 0.13
+  }
+}

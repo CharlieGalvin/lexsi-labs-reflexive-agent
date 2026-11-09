@@ -22,11 +22,12 @@ Classify is the real classifier, and the gate is the agreed deployment rule
 (`reflexive.gate.DevGate`, SEL-51: oracle-scored, thresholds in `configs/gate.yaml`). The
 current adapter is re-run on the gate tasks at every cycle, never reused from an earlier one.
 `PassRateGate` is a simple stand-in for tests. Rollout is whatever callable it's given:
-`arm_rollout` wraps `reflexive.arms.run_episode`, and the tests pass a fake. Fix and retrain are
-stubs for now, behind small protocols, so the real ones drop in without changing the loop:
+`arm_rollout` wraps `reflexive.arms.run_episode`, and the tests pass a fake. Fix and retrain sit
+behind small protocols; the stubs here are for tests, and the real ones are in `reflexive.heal`
+(SEL-47), with the audit record each cycle writes:
 
-- teacher: SEL-47 (the real GLM-5.3-Flash fix run)
-- trainer: the Trainer's AgentTune GRPO / BCO step
+- teacher: `heal.PrefixTeacher`, GLM-5.3-Flash fixing the failing turn from the agent's view
+- trainer: `heal.CommandTrainer`, the fixes as SFT examples handed to a training command
 
 Heal tasks come from **train**, gate tasks from **dev**; a test task anywhere is refused
 (`reflexive.splits.assert_not_test`), as is a task in no split, a task listed twice, or no gate
@@ -194,8 +195,12 @@ class ReflexiveAgent:
         trainer: Trainer,
         gate: Gate,
         adapter: Adapter = None,
+        workers: int = 1,
     ) -> None:
+        if workers < 1:
+            raise ValueError("workers must be at least 1")
         self.rollout = rollout
+        self.workers = workers  # conversations run at once; results keep the tasks' order
         self.teacher = teacher
         self.trainer = trainer
         self.gate = gate
@@ -203,10 +208,21 @@ class ReflexiveAgent:
         self.history: list[CycleReport] = []
 
     def _run(self, adapter: Adapter, tasks: Sequence[Task]) -> list[Record]:
-        return [self.rollout(adapter, d, t) for d, t in tasks]
+        if self.workers == 1:
+            return [self.rollout(adapter, d, t) for d, t in tasks]
+        from concurrent.futures import ThreadPoolExecutor
 
-    def run_cycle(self, heal_tasks: Sequence[Task], gate_tasks: Sequence[Task]) -> CycleReport:
-        """Rollout → classify → fix → retrain → gate → swap. Returns what happened."""
+        with ThreadPoolExecutor(self.workers) as pool:
+            return list(pool.map(lambda task: self.rollout(adapter, *task), tasks))
+
+    def run_cycle(
+        self, heal_tasks: Sequence[Task], gate_tasks: Sequence[Task], *, stop_after_fixes: bool = False
+    ) -> CycleReport:
+        """Rollout → classify → fix → retrain → gate → swap. Returns what happened.
+
+        ``stop_after_fixes``: stop before retraining (no adapter is trained or gated), e.g. to make
+        and check the fixes while the student can't load an adapter yet.
+        """
         _check(heal_tasks, "train", "heal")
         _check(gate_tasks, "dev", "gate")
         if not gate_tasks:
@@ -242,6 +258,8 @@ class ReflexiveAgent:
             return done(skipped=f"no failures to heal{left_out}")
         if not fixes:
             return done(skipped="the teacher fixed none of the failures")
+        if stop_after_fixes:
+            return done(skipped="stopped after the fixes, as asked: nothing trained or gated")
 
         candidate = self.trainer.train(fixes, before)
         # The current adapter is re-run here every cycle, never reused (agreed in SEL-51)
