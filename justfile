@@ -94,6 +94,10 @@ train-data *args:
 grpo-data *args:
     python scripts/data/build_grpo_data.py {{args}}
 
+# Check the single-turn GRPO reward on the real prompts: the teacher scores the maximum, mistakes less (SEL-21)
+grpo-reward-check *args:
+    python scripts/data/check_grpo_rewards.py {{args}}
+
 # Indicative SFT run on the GPU pod (SEL-65): QLoRA on Aya 32B, the agent's turns as targets → runs/
 sft-train *args:
     python scripts/sft/train_sft.py {{args}}
