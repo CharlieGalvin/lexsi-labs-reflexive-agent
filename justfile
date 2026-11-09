@@ -187,8 +187,9 @@ sft-v2-data *args="--domains airline":
     python scripts/data/build_extra_fixes.py {{args}}
 
 # On-policy teacher fixes (SEL-73): where the student's changes leave the expected ones on train tasks
-onpolicy-fixes *args="results/episodes/arms/S2-retail-trainpool.jsonl results/episodes/arms/S2-airline-trainpool.jsonl results/episodes/arms/S2-telecom-trainpool.jsonl":
-    python scripts/heal/onpolicy_fixes.py {{args}}
+# (v2's train-pool rollouts are always the input; extra arguments are added, e.g. --dry-run)
+onpolicy-fixes *args:
+    python scripts/heal/onpolicy_fixes.py results/episodes/arms/S2-retail-trainpool.jsonl results/episodes/arms/S2-airline-trainpool.jsonl results/episodes/arms/S2-telecom-trainpool.jsonl {{args}}
 
 # SFT v4 data (SEL-73): v2's file + the on-policy fixes (group "onpolicy")
 sft-v4-data fixes="results/heal/onpolicy-fixes.jsonl":
