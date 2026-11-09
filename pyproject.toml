@@ -66,7 +66,9 @@ allowed-unresolved-imports = ["tau2", "tau2.**", "litellm", "litellm.**", "logur
                               # the [train] extra and AgentTune (GPU box only): scripts/train_grpo.py,
                               # scripts/eval_lookup.py, the W&B charts in reflexive.messy_lookup
                               "torch", "transformers", "peft", "datasets", "wandb", "pandas",
-                              "agenttune", "agenttune.**"]
+                              "agenttune", "agenttune.**",
+                              # the [sft] extra: scripts/grpo/train_single_turn.py (single-turn GRPO)
+                              "trl", "tokenizers"]
 
 # Chiara's classifier and arms: typing them is a follow-up for her (warnings, not failures).
 [[tool.ty.overrides]]

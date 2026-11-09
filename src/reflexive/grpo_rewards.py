@@ -220,7 +220,8 @@ def make_reward_fn(
 
     Every scored sample is appended to ``log_path`` as one JSON line, with each component (open it
     with ``pd.read_json(path, lines=True)``): look for groups whose samples all score the same,
-    which teach GRPO nothing.
+    which teach GRPO nothing. Under TRL, each component's batch mean is also logged as a metric
+    (``reward_parts/<component>`` in W&B), through the ``log_metric`` it passes.
     """
     w = {**DEFAULT_WEIGHTS, **(weights or {})}
     if bad := sorted(set(w) - set(COMPONENTS)):
@@ -265,6 +266,9 @@ def make_reward_fn(
         if log:
             with lock, log.open("a") as f:
                 f.writelines(json.dumps(row, ensure_ascii=False) + "\n" for row in rows)
+        if callable(log_metric := kwargs.get("log_metric")) and rows:  # TRL ≥ 1.x: one chart each
+            for k in COMPONENTS:
+                log_metric(f"reward_parts/{k}", sum(r[k] for r in rows) / len(rows))
         return rewards
 
     return single_turn_reward

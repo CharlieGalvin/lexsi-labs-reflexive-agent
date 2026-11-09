@@ -98,6 +98,10 @@ grpo-data *args:
 grpo-reward-check *args:
     python scripts/data/check_grpo_rewards.py {{args}}
 
+# Single-turn GRPO on the GPU pod (SEL-21): SFT v2's adapter on 4-bit Aya 32B, the reward vs the teacher's turn → runs/
+grpo-train *args:
+    python scripts/grpo/train_single_turn.py {{args}}
+
 # Indicative SFT run on the GPU pod (SEL-65): QLoRA on Aya 32B, the agent's turns as targets → runs/
 sft-train *args:
     python scripts/sft/train_sft.py {{args}}

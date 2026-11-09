@@ -152,6 +152,19 @@ def test_the_reward_fn_reads_trl_columns_and_logs(tmp_path: Path):
     assert [r["id"] for r in rows] == ["a#t3", "a#t3"] and rows[1]["no_give_up"] == 0.0
 
 
+def test_each_component_is_logged_as_a_metric_when_trl_asks():
+    seen: dict[str, float] = {}
+    g.make_reward_fn()(
+        completions=[act(FIND), "OK."],
+        prompts=[PROMPT, PROMPT],
+        target_calls=[[FIND]] * 2,
+        domain=["retail"] * 2,
+        log_metric=seen.__setitem__,
+    )
+    assert set(seen) == {f"reward_parts/{k}" for k in g.COMPONENTS}
+    assert seen["reward_parts/tool_match"] == pytest.approx(0.5)
+
+
 def test_a_previous_runs_log_is_kept_apart(tmp_path: Path):
     log = tmp_path / "rewards.jsonl"
     log.write_text('{"old": 1}\n')
