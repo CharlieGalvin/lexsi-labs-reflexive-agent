@@ -58,6 +58,18 @@ def main() -> int:
     ap.add_argument("--out", type=pathlib.Path, help="output .jsonl")
     ap.add_argument("--rpm", type=float, help="student calls/min for the whole run (default: config)")
     ap.add_argument("--fresh", action="store_true", help="overwrite earlier results")
+    ap.add_argument(
+        "--monitor",
+        default="log",
+        choices=["off", "log", "act"],
+        help="the runtime monitor (SEL-62): log = record what it finds (default, the arms); "
+        "act = nudge, then stop, a no_progress loop (an ablation: writes <arm>-<domain>-<split>-guard.jsonl)",
+    )
+    ap.add_argument(
+        "--audit-log",
+        type=pathlib.Path,
+        help="also append every turn to this JSONL audit log (FullClosedLoop's format)",
+    )
     a = ap.parse_args()
 
     arm = get_arm(a.arm, a.config)
@@ -67,7 +79,8 @@ def main() -> int:
         a.split = "-".join(sorted({_split_of(a.domain, t) for t in tasks}))
     if a.limit:
         tasks = tasks[: a.limit]
-    out = a.out or pathlib.Path(f"results/episodes/arms/{arm.key}-{a.domain}-{a.split}.jsonl")
+    guard = "-guard" if a.monitor == "act" else ""  # never mixed into the arm's own file
+    out = a.out or pathlib.Path(f"results/episodes/arms/{arm.key}-{a.domain}-{a.split}{guard}.jsonl")
     out.parent.mkdir(parents=True, exist_ok=True)
 
     kept: list[str] = []  # clean records from earlier runs; crashed ones are dropped and re-run
@@ -97,7 +110,14 @@ def main() -> int:
 
     def one(task_id: str, sample: int) -> dict:
         return run_episode(
-            arm, make_student(arm.student, limiter=limiter), a.domain, task_id, judges=judges, sample=sample
+            arm,
+            make_student(arm.student, limiter=limiter),
+            a.domain,
+            task_id,
+            judges=judges,
+            sample=sample,
+            monitor=a.monitor,
+            audit_log=a.audit_log,
         )
 
     if out.exists() and not a.fresh:  # rewrite without the crashed records being re-run

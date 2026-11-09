@@ -165,11 +165,20 @@ arm-metrics file *args:
 arm-eval +args:
     python scripts/arms/evaluate.py {{args}}
 
+# Compare two rollout files with 95% bootstrap CIs (SEL-27): success, hallucination, loops, steps, redundant calls
+arm-compare a b *args:
+    python scripts/arms/compare.py {{a}} {{b}} {{args}}
+
 # Run an arm on a domain's split, e.g. `just rollout A retail --limit 5` or `just rollout C telecom`
 rollout arm domain *args:
     python scripts/arms/rollout.py {{arm}} {{domain}} {{args}}
 
 # Experiment commands (train, evaluate…) are added by the Architect and Trainer.
+
+# Heal cycles (SEL-47): rollout → teacher fix → retrain → gate → swap, with an audit record.
+# Today `just heal --fixes-only --sample 3` (3 random train tasks per domain); a full cycle needs the vLLM student
+heal *args:
+    python scripts/heal/cycle.py {{args}}
 
 # --- Training (Trainer, GPU box; docs/experiments/MESSY_LOOKUP.md) --------------
 

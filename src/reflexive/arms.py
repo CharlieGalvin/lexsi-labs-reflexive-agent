@@ -137,30 +137,60 @@ def run_episode(
     *,
     judges: bool = True,
     sample: int = 0,
+    monitor: str = "log",
+    audit_log: Path | str | None = None,
     **episode_kwargs: Any,
 ) -> dict:
     """One conversation of ``arm`` on one task. Never raises for a failed conversation.
 
     A crash mid-conversation is recorded (``error``) and scored on what happened so far; a crash
     before it started is a failed attempt with ``termination="unexpected_error"``.
+
+    After every turn the runtime monitor (`reflexive.monitor`, SEL-62) checks the agent's view.
+    ``monitor``: ``log`` (default; the arms only record what it finds, in ``rec["monitor"]``),
+    ``act`` (a ``no_progress`` loop gets a nudge, then a stop: an ablation of its own) or ``off``.
+    ``audit_log``: a JSONL file the conversation is appended to after every turn, in the
+    audit-log format AgentTune's ``FullClosedLoop`` reads.
     """
+    from reflexive.monitor import Guard, Watcher
+
+    Guard(monitor)  # refuse an unknown mode before the conversation starts
     ep = make_episode(arm, domain, task_id, **episode_kwargs)
+    watch: Watcher | None = None
     start = time.monotonic()
     error = None
     try:
         ep.reset()
+        # the live request's tools: the monitor knows no dataset rules. The customer's tool
+        # names, when the domain has them, only label a call (customer_tool, as classify_record).
+        watch = Watcher(
+            monitor,
+            ep.tool_schemas,
+            audit_log,
+            f"{arm.key}/{domain}/{task_id}/{sample}",
+            customer_tools=_customer_tools(domain),
+        )
+        nudge = False
         while not ep.done:
             messages = ep.prompt()
             if ep.done:
                 break
+            if nudge:
+                messages, nudge = watch.guard.nudged(messages), False
             try:
                 ep.step(agent.turn(messages, ep.tool_schemas))
             except ContextTooLong:  # the API's own token count was over the window
                 ep.end_for_context()
+            act = watch.after_turn(ep.messages())
+            nudge = act == "nudge"
+            if act == "stop":
+                ep.finish()
     except Exception as e:  # noqa: BLE001 - one bad conversation shouldn't stop the run
         error = f"{type(e).__name__}: {str(e)[:300]}"
         if ep.has_env and not ep.done:
             ep.finish()
+    if watch is not None and ep.has_env:
+        watch.close(ep.messages())
     usage = agent.usage.as_dict() if hasattr(agent, "usage") else None
     extra = {
         "arm": arm.key,
@@ -173,6 +203,7 @@ def run_episode(
         "agent_usage": usage,
         "sample": sample,
         "error": error,
+        "monitor": watch.to_dict() if watch is not None else {"mode": monitor, "alarms": [], "error": None},
     }
     if ep.done:
         rec = ep.record(judges=judges, **extra)
@@ -209,5 +240,18 @@ def run_episode(
     raw = getattr(agent, "raw_turns", None)
     if raw:  # prompted models (Aya): the raw replies, to review how calls were written and read
         rec["raw_turns"] = raw
+    if watch is not None:  # the outcome line: the detector learns only from failed conversations
+        outcome = rec.get("outcome")
+        watch.finish(isinstance(outcome, dict) and bool(outcome.get("passed")), str(rec.get("termination")))
     rec["wall_s"] = round(time.monotonic() - start, 1)
     return rec
+
+
+def _customer_tools(domain: str) -> list[str]:
+    """The domain's customer-only tool names, or none if it isn't a known τ²-bench domain."""
+    from reflexive.hallucination import domain_tools
+
+    try:
+        return list(domain_tools(domain)[1])
+    except Exception:  # noqa: BLE001 - only a label: never stop a conversation over it
+        return []
