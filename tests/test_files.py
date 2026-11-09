@@ -66,3 +66,15 @@ def test_shown_is_relative_inside_the_repo_and_absolute_outside(tmp_path: Path) 
     assert shown(ROOT / "data" / "golden" / "v1") == "data/golden/v1"
     assert shown(Path("configs/splits.json")) == "configs/splits.json"  # relative input (was a crash)
     assert shown(tmp_path) == str(tmp_path.resolve())
+
+
+def test_latest_records_keeps_the_last_per_conversation_and_reads_ids_as_strings():
+    from reflexive.files import latest_records
+
+    rows = [
+        {"domain": "retail", "task_id": 7, "sample": 0, "v": "crashed"},
+        {"domain": "retail", "task_id": "7", "sample": 1, "v": "other sample"},
+        {"domain": "airline", "task_id": "7", "sample": 0, "v": "other domain"},
+        {"domain": "retail", "task_id": "7", "sample": 0, "v": "re-run"},
+    ]
+    assert [r["v"] for r in latest_records(rows)] == ["re-run", "other sample", "other domain"]

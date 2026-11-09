@@ -86,6 +86,18 @@ golden-publish *args:
 hard-subset *args:
     python scripts/data/build_hard_subset.py {{args}}
 
+# Training examples from golden v1.1: the healable fixes as Aya reads them → data/train/ (SEL-66)
+train-data *args:
+    python scripts/data/build_train_data.py {{args}}
+
+# Indicative SFT run on the GPU pod (SEL-65): QLoRA on Aya 32B, the agent's turns as targets → runs/
+sft-train *args:
+    python scripts/sft/train_sft.py {{args}}
+
+# Serve Aya 32B (+ the SFT adapter) with vLLM on the pod, OpenAI-compatible on :8000 (SEL-65)
+sft-serve:
+    bash scripts/pod/serve.sh
+
 # Confirm configs/splits.json matches a rebuild from its seed (SEL-36)
 splits-check:
     python scripts/data/make_splits.py --check
@@ -161,14 +173,27 @@ oracle-score *files:
 # Summarise a rollout file as results/arm-<arm>-<domain>-<split>.metrics.json (no API calls; `--only dev`)
 arm-metrics file *args:
     python scripts/arms/metrics.py {{file}} {{args}}
+# Failed conversations: the expected state-changing actions against what the agent did (`--all`, `--out`)
+arm-failures +args:
+    python scripts/arms/failure_diff.py {{args}}
+# Passes per arm, domain and sample: the run-to-run spread (`--split val`)
+arm-samples +args:
+    python scripts/arms/samples.py {{args}}
+# The agreed DevGate on saved dev runs: `just gate-check P S` (a check), `--record` (a heal cycle)
+gate-check baseline candidate *args:
+    python scripts/arms/gate_check.py {{baseline}} {{candidate}} {{args}}
+# SFT v2 data (SEL-71): v1's examples + the teacher's extra verified passes for these domains
+sft-v2-data *args="--domains airline":
+    python scripts/data/build_extra_fixes.py {{args}}
 
 # Compare two rollout files with 95% bootstrap CIs (SEL-27): success, hallucination, loops, steps, redundant calls
 arm-compare a b *args:
     python scripts/arms/compare.py {{a}} {{b}} {{args}}
 
 # Run an arm on a domain's split, e.g. `just rollout A retail --limit 5` or `just rollout C telecom`
+[positional-arguments]  # quoted: telecom task IDs contain | and [ ], which a shell would split
 rollout arm domain *args:
-    python scripts/arms/rollout.py {{arm}} {{domain}} {{args}}
+    python scripts/arms/rollout.py "$@"
 
 # Experiment commands (train, evaluate…) are added by the Architect and Trainer.
 

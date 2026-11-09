@@ -431,6 +431,28 @@ def test_too_many_tokens_becomes_context_too_long():
         t.turn([{"role": "user", "content": "hi"}], TOOLS)
 
 
+@pytest.mark.parametrize(
+    ("cls", "msg"),
+    [
+        (
+            "BadRequestError",
+            "This model's maximum context length is 32768 tokens. However, your prompt "
+            "contains at least 32769 input tokens",
+        ),  # vLLM, as on the pod (Arm S)
+        ("ContextWindowExceededError", "prompt is too long"),  # litellm's class, whatever the wording
+    ],
+)
+def test_vllm_context_errors_become_context_too_long(cls, msg):
+    err = type(cls, (Exception,), {})
+
+    def refuse(**kw):
+        raise err(msg)
+
+    t = CohereClient("prompted", completion=refuse, rpm=0)
+    with pytest.raises(ContextTooLong):
+        t.turn([{"role": "user", "content": "hi"}], TOOLS)
+
+
 # --- Client -------------------------------------------------------------------------------------
 
 

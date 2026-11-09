@@ -1,0 +1,69 @@
+{
+  "run": "arm-S-telecom-dev",
+  "date": "2026-11-09",
+  "owner": "Charlie",
+  "commit": "9615e32",
+  "config": "configs/arms.yaml",
+  "arm": "S",
+  "prompt_variant": "default",
+  "prompt_version": "tau2/default",
+  "student": "sft (http://localhost:8000/v1, prompted, cohere Action: format)",
+  "customer": "gpt-4.1-2025-04-14",
+  "domain": "telecom",
+  "split": "dev (frozen splits, configs/splits.json)",
+  "samples_per_task": 2,
+  "judges": false,
+  "note_judges": "telecom has no LLM judges: scores are complete",
+  "note_cost": "the saved records' spend: a resumed rollout drops crashed conversations before retrying them, so their first attempts aren't counted (a lower bound)",
+  "records": "results/episodes/arms/S-telecom-dev.jsonl (not committed), the dev tasks only",
+  "note_samples": "the 95% range counts every conversation as independent: too narrow",
+  "conversations": 30,
+  "crashed": 0,
+  "passed": 12,
+  "task_success": 0.4,
+  "task_success_wilson95": [
+    0.2459,
+    0.5768
+  ],
+  "by_issue": {
+    "mms_issue": {
+      "passed": 4,
+      "n": 16
+    },
+    "mobile_data_issue": {
+      "passed": 1,
+      "n": 6
+    },
+    "service_issue": {
+      "passed": 7,
+      "n": 8
+    }
+  },
+  "termination": {
+    "user_stop": 21,
+    "max_steps": 8,
+    "context_window_exceeded": 1
+  },
+  "context_overflow": 1,
+  "conversations_flagged": {
+    "tool_unknown_tool": 0,
+    "arg_unseen_id_like_argument": 0,
+    "loop_repeated_failed_call": 0,
+    "tool_or_arg": 0
+  },
+  "flag_method": "heuristic diagnostics (reflexive.teacher.unseen_arguments / tool_errors), not the SEL-12 classifier",
+  "hallucination_rate_tool_or_arg": 0.0,
+  "transferred_to_human": 4,
+  "judged": 0,
+  "skipped_checks": 0,
+  "student_calls": 1174,
+  "student_calls_per_success": 97.8,
+  "student_replies_cut_off": 0,
+  "tool_calls_per_conversation": 20.6,
+  "student_tokens_per_conversation_median": 290893,
+  "cost_usd": {
+    "customer": 4.2,
+    "student_est": 0.0,
+    "total": 4.2
+  }
+}

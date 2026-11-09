@@ -11,7 +11,21 @@ prints. **Cost** is the API spend of one run; "none" means no API calls.
 | `make_splits.py` | `just splits-check` | Froze `configs/splits.json` (train / dev / test); `--check` re-draws it from its seed and compares | none |
 | `build_golden.py` | `just golden` | Golden trajectories v1 from the teacher's fix run → `data/golden/v1/`, every record checked | none |
 | `build_hard_subset.py` | `just hard-subset` | The hard subset: every train task grouped as healable / teacher-unsolved / solved by Aya, with Arm A's failure labels → `data/golden/hard/` | none |
+| `build_train_data.py` | `just train-data` | Training examples from golden v1.1: the 112 healable fixes (`--select all`: 127) as Aya reads them, the agent's turns as targets → `data/train/` | none |
 | `publish_golden.py` | `just golden-publish --tag v1.1` | Checks `data/golden/v1/` (and, for any tag but `v1`, the hard subset), writes the data card, uploads it **private** to Hugging Face in one commit and tags it (`--dry-run` first) | none |
+
+## pod/: setting up a RunPod GPU pod
+
+| Script | Command | What it does | Cost |
+|---|---|---|---|
+| `setup.sh` | `bash scripts/pod/setup.sh` (on the pod) | Checks the GPU and disk, installs the training and vLLM environments, downloads Aya Expanse 32B and golden v1.1, builds the training examples. Safe to re-run | the pod's time (~$2–3/hour) |
+| `serve.sh` | `just sft-serve` (on the pod) | Serves Aya Expanse 32B with vLLM, OpenAI-compatible on :8000, with the SFT adapter as `sft`; arms P (base) and S (adapter) in `configs/sft/` | the pod's time |
+
+## sft/: the indicative SFT run (SEL-65)
+
+| Script | `just` command | What it does | Cost |
+|---|---|---|---|
+| `train_sft.py` | `just sft-train` (`--dry-run` first) | QLoRA on Aya Expanse 32B: trains on the healable fixes (the agent's turns only), held-out loss on the 15 fixes Aya already solves → `runs/<name>/` | the pod's time (~1 hour) |
 
 ## arms/: the experiment arms
 
