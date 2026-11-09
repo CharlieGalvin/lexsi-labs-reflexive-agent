@@ -30,6 +30,12 @@ prints. **Cost** is the API spend of one run; "none" means no API calls.
 | `bakeoff_plot.py` | (none) | The quality-vs-cost chart from `bakeoff_report.py --json` (needs `uv pip install -e ".[reports]"`) | none |
 | `phase2_report.py` | (none) | Phase 2: GLM-5.3-Flash vs Qwen3.8 27B, paired (`--plot` needs `.[reports]`) | none |
 
+## heal/: the heal loop (SEL-47)
+
+| Script | `just` command | What it does | Cost |
+|---|---|---|---|
+| `cycle.py` | `just heal --fixes-only --sample 3` | Heal cycles end to end: the student on train tasks, the teacher fixing each failing turn, training on the fixes, the gate on all 36 dev tasks, the adapter swapped only on a pass; an audit record per cycle → `results/heal/`. `--fixes-only` stops before training (works with Cohere's Aya); a full cycle needs the student served by vLLM | the student + customer per conversation, as `rollout.py`; the teacher ~$0.001 a failure per attempt |
+
 ## student/: the student
 
 | Script | `just` command | What it does | Cost |

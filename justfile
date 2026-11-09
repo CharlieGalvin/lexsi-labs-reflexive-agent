@@ -168,6 +168,11 @@ rollout arm domain *args:
 
 # Experiment commands (train, evaluate…) are added by the Architect and Trainer.
 
+# Heal cycles (SEL-47): rollout → teacher fix → retrain → gate → swap, with an audit record.
+# Today `just heal --fixes-only --sample 3` (3 random train tasks per domain); a full cycle needs the vLLM student
+heal *args:
+    python scripts/heal/cycle.py {{args}}
+
 # --- Training (Trainer, GPU box; docs/experiments/MESSY_LOOKUP.md) --------------
 
 # Run 1 (SEL-34): 10-step Tiny Aya GRPO smoke run with one tool, ~10 min

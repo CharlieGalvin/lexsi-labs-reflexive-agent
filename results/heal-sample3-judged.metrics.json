@@ -1,0 +1,215 @@
+{
+ "format": "reagent.heal.metrics/v1",
+ "run": {
+  "command": "just heal --fixes-only --sample 3 --out results/heal/sample3-judged",
+  "commit": "97ae092",
+  "arm": "A",
+  "config": "configs/arms.yaml",
+  "student": "c4ai-aya-expanse-32b",
+  "customer": null,
+  "teacher": "glm53f",
+  "domains": [
+   "retail",
+   "airline",
+   "telecom"
+  ],
+  "limit": null,
+  "sample": 3,
+  "seed": 0,
+  "judges": true,
+  "fixes_only": true,
+  "attempts": 3,
+  "note": "written after the run (run.json was added later): commit and finish time from audit.jsonl, settings from the command",
+  "finished": "2026-11-07T21:47:00+0000",
+  "folder": "results/heal/sample3-judged"
+ },
+ "conversations": 9,
+ "cycles": [
+  {
+   "cycle": 1,
+   "adapter": {
+    "before": null,
+    "candidate": null,
+    "after": null,
+    "swapped": false
+   },
+   "skipped": "stopped after the fixes, as asked: nothing trained or gated",
+   "conversations": 9,
+   "passed": 1,
+   "task_success": 0.1111,
+   "task_success_wilson95": [
+    0.0199,
+    0.435
+   ],
+   "broken": 0,
+   "failures": 8,
+   "failure_types": {
+    "TOOL": 2,
+    "ARG": 4,
+    "LOOP": 0,
+    "NONE": 2
+   },
+   "fixable": 6,
+   "fixed": 6,
+   "first_try": 6,
+   "fixed_at_turn": {
+    "3": 6
+   },
+   "lessons": {
+    "retail:ARG/ungrounded/find_user_id_by_email -> message": 2,
+    "airline:ARG/ungrounded/get_user_details -> message": 1,
+    "telecom:TOOL/customer_tool/check_network_status -> message": 2,
+    "telecom:ARG/placeholder/get_customer_by_phone -> message": 1
+   },
+   "training": null,
+   "gate": null,
+   "tasks": [
+    {
+     "domain": "retail",
+     "task_id": "28",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "NL_ASSERTION": 0.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "ungrounded",
+      "tool": "find_user_id_by_email",
+      "turn": 3,
+      "detail": "email='something@example.com' never appeared before this call"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "retail",
+     "task_id": "47",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "NL_ASSERTION": 1.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "ungrounded",
+      "tool": "find_user_id_by_email",
+      "turn": 3,
+      "detail": "email='something@example.com' never appeared before this call"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "airline",
+     "task_id": "0",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "COMMUNICATE": 1.0
+     },
+     "failure": "NONE",
+     "first": null,
+     "fixed": false,
+     "attempts": 0
+    },
+    {
+     "domain": "airline",
+     "task_id": "23",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "COMMUNICATE": 0.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "ungrounded",
+      "tool": "get_user_details",
+      "turn": 3,
+      "detail": "user_id='sara_doe_496' never appeared before this call"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "airline",
+     "task_id": "33",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "COMMUNICATE": 1.0
+     },
+     "failure": "NONE",
+     "first": null,
+     "fixed": false,
+     "attempts": 0
+    },
+    {
+     "domain": "telecom",
+     "task_id": "[mobile_data_issue]airplane_mode_on|bad_network_preference|bad_vpn|data_mode_off|data_saver_mode_on|data_usage_exceeded|user_abroad_roaming_disabled_off[PERSONA:Hard]",
+     "termination": "user_stop",
+     "checks": {
+      "ENV_ASSERTION": 0.0
+     },
+     "failure": "TOOL",
+     "first": {
+      "type": "TOOL",
+      "kind": "customer_tool",
+      "tool": "check_network_status",
+      "turn": 3,
+      "detail": "the agent has no tool 'check_network_status'"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "telecom",
+     "task_id": "[mobile_data_issue]airplane_mode_on|bad_network_preference|data_mode_off|user_abroad_roaming_disabled_on[PERSONA:Hard]",
+     "termination": "user_stop",
+     "checks": {
+      "ENV_ASSERTION": 0.0
+     },
+     "failure": "TOOL",
+     "first": {
+      "type": "TOOL",
+      "kind": "customer_tool",
+      "tool": "check_network_status",
+      "turn": 3,
+      "detail": "the agent has no tool 'check_network_status'"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "telecom",
+     "task_id": "[service_issue]lock_sim_card_pin|overdue_bill_suspension[PERSONA:Easy]",
+     "termination": "user_stop",
+     "checks": {
+      "ENV_ASSERTION": 1.0,
+      "ACTION": 0.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "placeholder",
+      "tool": "get_customer_by_phone",
+      "turn": 3,
+      "detail": "phone_number=\"customer's phone number\""
+     },
+     "fixed": true,
+     "attempts": 1
+    }
+   ]
+  }
+ ],
+ "cost_usd": {
+  "student": 0.3027,
+  "customer": 0.2704,
+  "teacher": 0.0049,
+  "total": 0.578,
+  "note": "judge calls not included"
+ }
+}
