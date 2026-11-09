@@ -33,6 +33,7 @@ from __future__ import annotations
 import argparse
 import collections
 import glob
+import importlib.util
 import json
 import sys
 import time
@@ -41,11 +42,21 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "arms"))
+from reflexive.files import ROOT, latest_records, read_jsonl, shown
 
-from failure_diff import same_call  # noqa: E402 - τ²-bench's matching rule, one copy
 
-from reflexive.files import ROOT, latest_records, read_jsonl, shown  # noqa: E402
+def _failure_diff() -> Any:
+    """scripts/arms/failure_diff.py, for τ²-bench's matching rule (`same_call`): one copy of it."""
+    path = Path(__file__).resolve().parents[1] / "arms" / "failure_diff.py"
+    spec = importlib.util.spec_from_file_location("failure_diff", path)
+    assert spec is not None and spec.loader is not None
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules.setdefault("failure_diff", mod)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+same_call = _failure_diff().same_call
 
 Call = tuple[str, dict]
 Expected = tuple[str, dict, Any]  # (name, arguments, compare_args)
@@ -207,6 +218,7 @@ def main() -> int:
     from reflexive.agent import Failure
     from reflexive.hallucination import Diagnosis, FailureType, Finding, agent_view_of, classify_record
     from reflexive.metrics import is_broken
+    from reflexive.outcome import scorer
     from reflexive.splits import split_of
 
     logger.remove()
@@ -232,14 +244,14 @@ def main() -> int:
                 kinds["left out: a validation or non-train task"] += 1
                 continue
             if d not in envs:
-                envs[d] = registry.get_env_constructor(d)().tools
-                tasks[d] = {x.id: x for x in registry.get_tasks_loader(d)()}
+                tasks[d] = scorer(d)
+                envs[d] = registry.get_env_constructor(d)(**(tasks[d].env_kwargs or {})).tools
             tools = envs[d]
 
             def mutating(name: str, tools: Any = tools) -> bool:
                 return tools.has_tool(name) and bool(tools.tool_mutates_state(name))
 
-            ec = tasks[d][t].evaluation_criteria
+            ec = tasks[d].task(t).evaluation_criteria
             expected = [
                 (x.name, x.arguments or {}, x.compare_args) for x in ec.actions or [] if x.requestor != "user"
             ]
