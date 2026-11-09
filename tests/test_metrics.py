@@ -264,3 +264,17 @@ def test_a_half_written_last_line_from_a_stopped_rollout_is_skipped(tmp_path: Pa
 def test_the_cost_says_it_leaves_out_retried_first_attempts(tmp_path: Path, monkeypatch) -> None:
     m = json.loads(_run(tmp_path, monkeypatch, [rec(TRAIN[0], True)])[1].read_text())
     assert "lower bound" in m["note_cost"]
+
+
+def test_the_guards_stops_are_reported_on_their_own() -> None:
+    # SEL-69: a pass the guard ended is still a τ²-bench pass, but it's counted apart too
+    recs = [
+        rec("1", True),
+        rec("2", True, termination="monitor_stop"),
+        rec("3", False, termination="monitor_stop"),
+        rec("4", False),
+    ]
+    m = arm_metrics(recs)
+    assert m["task_success"] == 0.5 and m["termination"]["monitor_stop"] == 2
+    assert m["monitor_stopped"] == {"conversations": 2, "passed": 1, "task_success_if_failed": 0.25}
+    assert arm_metrics([rec("1", True)])["monitor_stopped"]["conversations"] == 0

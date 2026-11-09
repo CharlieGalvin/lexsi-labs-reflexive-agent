@@ -43,6 +43,12 @@ from typing import Any, Literal, cast
 JUDGED = {"NL_ASSERTION", "COMMUNICATE"}
 Requestor = Literal["user", "assistant"]  # who made a tool call (τ²-bench ToolMessage)
 NORMAL_STOPS = {"agent_stop", "user_stop"}
+# Our own endings, which τ²-bench doesn't have: each is scored as the τ²-bench ending it sends.
+# ``monitor_stop``: the runtime monitor's guard ended a no_progress loop (SEL-69). The harness
+# sends τ²-bench the agent's stop, so it is graded as if the agent had ended the conversation,
+# but the record keeps its own ending so those runs can be reported on their own.
+MONITOR_STOP = "monitor_stop"
+SCORED_AS = {MONITOR_STOP: "agent_stop"}
 
 
 @dataclass
@@ -181,6 +187,7 @@ class Tau2Scorer:
         from tau2.data_model.simulation import SimulationRun, TerminationReason
         from tau2.evaluator.evaluator import EvaluationType, evaluate_simulation
 
+        termination = SCORED_AS.get(termination, termination)
         task = self.task(task_id)
         basis = [b.value for b in (task.evaluation_criteria.reward_basis if task.evaluation_criteria else [])]
         skipped = [] if judges else [b for b in basis if b in JUDGED]

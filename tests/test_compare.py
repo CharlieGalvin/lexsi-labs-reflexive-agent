@@ -140,3 +140,20 @@ def test_a_run_with_nothing_scored_is_refused():
     a, _ = runs()
     with pytest.raises(ValueError, match="no scored"):
         compare(a, [rec("x", False, [], error="boom")])
+
+
+def test_the_guards_stops_are_shown_on_their_own():
+    # SEL-69: the ablation's gain shouldn't be partly the harness ending conversations
+    a, b = runs()
+    b = [{**r, "termination": "monitor_stop"} if r["task_id"] in ("0", "29") else r for r in b]
+    c = compare(a, b, reps=200)
+    assert c.a_monitor_stopped["conversations"] == 0
+    assert c.b_monitor_stopped == {
+        "conversations": 2,
+        "passed": 1,
+        "task_success_if_failed": round(24 / 30, 4),
+    }
+    md = to_markdown(c, "A", "A-guard")
+    assert "A-guard: the runtime monitor's guard ended 2 conversations" in md and "1 of them passed" in md
+    assert "A: the runtime monitor" not in md  # nothing to say for a run the guard never stopped
+    assert json.loads(json.dumps(c.to_dict()))["b_monitor_stopped"]["passed"] == 1

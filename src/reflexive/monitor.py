@@ -32,7 +32,9 @@ adapters: the rest is stdlib.
 benchmark arms: a guard that changes the conversation is measured as its own ablation, so Arm
 B's gain isn't confused with it). In ``act`` mode, the first ``no_progress`` adds a nudge to
 the agent's next prompt; if the agent keeps looping (another ``no_progress`` after the nudge),
-the conversation is stopped. Other findings are only logged.
+the conversation is stopped, with its own termination ``monitor_stop`` (SEL-69): τ²-bench
+grades it as an agent stop, but metrics report those runs on their own. Other findings are only
+logged.
 
 **Checked against AgentTune itself** (7 Nov, the 148 Arm A and C telecom conversations written
 as audit logs after every message): its own ``FailureDetector`` reads our lines with no schema
