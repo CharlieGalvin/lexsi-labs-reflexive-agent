@@ -317,6 +317,10 @@ def test_act_mode_nudges_a_loop_then_stops_it(tau2, tmp_path):
     assert (m["mode"], m["nudged_at"], m["stopped_at"]) == ("act", 5, 8) and m["error"] is None
     nudged = [i for i, p in enumerate(agent.prompts) if p[-1]["content"] == NUDGE]
     assert nudged == [4]  # only the prompt right after the alarm
+    # SEL-69: the record keeps the nudge, and where it went in the agent's view
+    assert m["nudge"]["text"] == NUDGE and m["nudge"]["before_agent_turn"] == 6
+    assert m["nudge"]["after_view_index"] == len(agent.prompts[4]) - 2
+    assert rec["agent_view"][m["nudge"]["after_view_index"]]["role"] == m["nudge"]["after_role"] == "user"
     # the guard's stop is its own ending, not the agent's (SEL-69), and τ²-bench still scores it
     assert len(agent.prompts) == 7 and rec["termination"] == "monitor_stop"
     assert rec["outcome"]["reward"] is not None
