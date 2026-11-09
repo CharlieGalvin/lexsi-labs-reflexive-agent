@@ -3,7 +3,7 @@
     python scripts/heal/cycle.py --fixes-only --domains telecom --limit 5   # today: Cohere's Aya
     python scripts/heal/cycle.py --fixes-only --sample 3                     # 3 random per domain
     python scripts/heal/cycle.py --config configs/sft/arms.base.yaml \\
-        --train-cmd "<your training command> {data} {out} {base}" --load-adapter
+        --train-cmd "bash scripts/heal/train_and_serve.sh {data} {out} {base}" --load-adapter
     python scripts/heal/cycle.py ... --cycles 3                              # SEL-23
     python scripts/heal/cycle.py --report results/heal/<run>                 # metrics, no API calls
 
@@ -26,7 +26,8 @@ to `heal.CommandTrainer` and the candidate adapter to the agreed gate (`gate.Dev
   pointing ``api_base`` at it. ``--train-cmd`` trains the adapter: ``{data}`` (the fixes, as
   ``reagent.sft/v1``), ``{out}`` (where the adapter must be written), ``{name}`` and ``{base}``
   (the adapter it starts from; empty for the base student) are filled in. One GPU can't train and
-  serve at once, so the command is expected to stop vLLM, train, and start it again.
+  serve at once, so the command is expected to stop vLLM, train, and start it again: on the pod,
+  ``scripts/heal/train_and_serve.sh`` (SEL-68) does exactly that.
   ``--load-adapter`` then registers ``{out}`` with the running vLLM under ``{name}``
   (``/v1/load_lora_adapter``; vLLM needs ``--enable-lora`` and
   ``VLLM_ALLOW_RUNTIME_LORA_UPDATING=True``), and the gate runs the student as model ``{name}``.

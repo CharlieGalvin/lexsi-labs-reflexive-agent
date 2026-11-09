@@ -107,3 +107,24 @@ def test_setup_stays_on_a_detached_head_with_a_clear_note(tmp_path):
     res = _bash(code, {"HOME": str(tmp_path)}, cwd=tmp_path)
     assert res.returncode == 0, res.stderr
     assert "on a commit, not a branch" in res.stdout
+
+
+def test_serve_can_start_with_runtime_lora_and_no_adapter(tmp_path):
+    # SEL-68: a heal cycle loads its adapters while serving; vLLM needs LoRA on from the start
+    code = _block("serve.sh", "# Every adapter to load", "# Aya Expanse 32B") + (
+        '\necho "ARGS ${lora[*]:-}"\necho "RUNTIME ${VLLM_ALLOW_RUNTIME_LORA_UPDATING:-unset}"'
+    )
+    base = {"MODEL": "m", "PORT": "8000", "MAX_LEN": "32768", "ADAPTER": "", "EXTRA_ADAPTERS": ""}
+    heal = _bash(code, {**base, "RUNTIME_LORA": "1"})
+    assert heal.returncode == 0, heal.stderr
+    assert "ARGS --enable-lora --max-lora-rank 16 --max-loras 4" in heal.stdout
+    assert "RUNTIME True" in heal.stdout and "--lora-modules" not in heal.stdout
+
+    (tmp_path / "c1").mkdir()
+    (tmp_path / "c1" / "adapter_config.json").write_text('{"r": 32}')
+    kept = _bash(code, {**base, "RUNTIME_LORA": "1", "EXTRA_ADAPTERS": f"heal-c1={tmp_path}/c1"})
+    assert f"--lora-modules heal-c1={tmp_path}/c1 --max-lora-rank 32 --max-loras 4" in kept.stdout
+
+    plain = _bash(code, base)  # without it: as before, the base model only
+    assert plain.returncode == 0, plain.stderr
+    assert "ARGS \n" in plain.stdout and "RUNTIME unset" in plain.stdout

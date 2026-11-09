@@ -50,6 +50,7 @@ prints. **Cost** is the API spend of one run; "none" means no API calls.
 | Script | `just` command | What it does | Cost |
 |---|---|---|---|
 | `cycle.py` | `just heal --fixes-only --sample 3` | Heal cycles end to end: the student on train tasks, the teacher fixing each failing turn, training on the fixes, the gate on all 36 dev tasks, the adapter swapped only on a pass; an audit record per cycle → `results/heal/`. `--fixes-only` stops before training (works with Cohere's Aya); a full cycle needs the student served by vLLM | the student + customer per conversation, as `rollout.py`; the teacher ~$0.001 a failure per attempt |
+| `train_and_serve.sh` | `--train-cmd "bash scripts/heal/train_and_serve.sh {data} {out} {base}"` | A full cycle's training command on the pod (SEL-68): stops vLLM, trains the adapter on the cycle's fixes (`train_sft.py`, `configs/train/sft_heal.yaml`; from the second cycle on, continuing the adapter being healed), starts vLLM again with runtime LoRA loading and the gate's baseline adapter, and waits until it answers | GPU time: one QLoRA run per cycle, plus vLLM's restart |
 
 ## student/: the student
 
