@@ -18,8 +18,9 @@ dependencies = [
 train = ["datasets", "peft", "wandb", "pandas"]   # pandas: scripts/eval_lookup.py
 # The SFT run on the GPU pod (SEL-65; scripts/pod/setup.sh): on top of train
 sft = ["trl", "bitsandbytes", "accelerate", "peft", "datasets"]
-dev = ["pytest>=8", "pytest-bdd>=7", "ruff>=0.6", "ty==0.0.97", "huggingface_hub>=0.24"]
-# pytest-bdd: tests/features; ty: type checks (beta, so pinned exactly); huggingface_hub: just golden-publish
+dev = ["pytest>=8", "pytest-bdd>=7", "ruff>=0.6", "ty==0.0.97", "huggingface_hub>=0.24", "jinja2>=3.1"]
+# pytest-bdd: tests/features; ty: type checks (beta, so pinned exactly); huggingface_hub: just golden-publish;
+# jinja2: tests/test_sft.py renders Aya's chat template (on the pod it comes with transformers)
 # τ²-bench itself is NOT installed from here: a pip install from git leaves out its data/ folder
 # (tasks, databases, language packs). `just setup-dev` clones v2.0.0 into third_party/ and
 # installs it editable instead. This extra only adds what τ²-bench needs on top.
