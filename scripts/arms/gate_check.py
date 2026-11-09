@@ -12,6 +12,7 @@ the check that made it, and the numbers behind it, and writes them to
 
 Without ``--record`` it's a check: the decision isn't added to the gate's history
 (``results/gate_history.jsonl``), so it doesn't use up one of the ``max_cycles`` heal cycles.
+It still reads that history, so once the budget is spent a check says so too.
 """
 
 from __future__ import annotations
@@ -21,19 +22,20 @@ import glob
 import json
 from pathlib import Path
 
-from reflexive.files import ROOT, read_jsonl, shown
+from reflexive.files import ROOT, latest_records, read_jsonl, shown
 from reflexive.gate import DevGate
 
 HISTORY = ROOT / "results" / "gate_history.jsonl"
 
 
 def dev_run(arm: str, sample: int) -> list[dict]:
-    keep: dict[tuple[str, str], dict] = {}
-    for f in sorted(glob.glob(str(ROOT / "results" / "episodes" / "arms" / f"{arm}-*-dev.jsonl"))):
-        for r in read_jsonl(Path(f), partial_last_ok=True):
-            if r.get("sample", 0) == sample:
-                keep[(r["domain"], str(r["task_id"]))] = r
-    return list(keep.values())
+    recs = [
+        r
+        for f in sorted(glob.glob(str(ROOT / "results" / "episodes" / "arms" / f"{arm}-*-dev.jsonl")))
+        for r in read_jsonl(Path(f), partial_last_ok=True)
+        if r.get("sample", 0) == sample
+    ]
+    return latest_records(recs)
 
 
 def main() -> int:
@@ -51,7 +53,10 @@ def main() -> int:
     print(
         f"{a.baseline}: {len(base)} conversations, {a.candidate}: {len(cand)} (sample {a.sample}); scoring..."
     )
-    gate = DevGate.load(history_file=HISTORY) if a.record else DevGate.load()
+    gate = DevGate.load(history_file=HISTORY)  # the budget counts every recorded decision
+    if not a.record:
+        gate.history_file = None  # a check reads the history but never adds to it
+    print(f"heal cycles gated so far: {gate.cycles_used} of {gate.max_cycles}")
     d = gate.decide(base, cand)
     note = "" if a.record else "  [check only: not recorded]"
     print(f"\nGATE: {d.verdict.upper()} (decided by: {d.check}){note}")
@@ -63,7 +68,7 @@ def main() -> int:
             print(f"  {k}: {d.details[k]}")
     if f := d.details.get("findings_per_conversation"):
         print(f"  findings per conversation: {f['baseline']['total']} -> {f['candidate']['total']}")
-    out = ROOT / "results" / f"gate-{a.baseline}-vs-{a.candidate}-s{a.sample}.json"
+    out = HISTORY.parent / f"gate-{a.baseline}-vs-{a.candidate}-s{a.sample}.json"
     out.write_text(
         json.dumps(
             {

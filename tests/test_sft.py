@@ -352,3 +352,21 @@ def test_implausibly_short_conversations_or_no_targets_stop_the_run():
     with pytest.raises(ValueError, match="implausible tokenising"):
         encode_all([example()], FakeTokenizer(), max_len=10_000, min_tokens=64)
     assert encode_all([example()], FakeTokenizer(), max_len=10_000, min_tokens=8)[1]["examples"] == 1
+
+
+def test_named_templates_without_the_check_are_refused():
+    plain = "{{ bos_token }}{% for m in messages %}{{ m['content'] }}{% endfor %}"
+    with pytest.raises(ValueError, match="none of the named chat templates"):
+        relax_chat_template({"default": plain, "tool_use": plain})
+    with pytest.raises(ValueError, match="none of the named chat templates"):
+        relax_chat_template([{"name": "default", "template": plain}])
+
+
+def test_a_missing_default_template_is_named_not_a_bare_key_error():
+    with pytest.raises(ValueError, match=r"no chat template named 'default'.*\['rag', 'tool_use'\]"):
+        default_template({"tool_use": COHERE, "rag": COHERE})
+
+
+def test_every_example_over_max_len_stops_the_run():
+    with pytest.raises(ValueError, match=r"all 1 conversations are over max_len 5 tokens"):
+        encode_all([example()], FakeTokenizer(), max_len=5, min_tokens=1)

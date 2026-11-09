@@ -11,7 +11,7 @@ Read these in order. Each page says at the top whether it's final, and what supe
 | 4 | [`GOLDEN_TRAJECTORIES_V1.md`](GOLDEN_TRAJECTORIES_V1.md) | 4 Nov | What exactly does the Trainer get? | **127 training + 31 dev reference records**, checked end to end | Final; **published 5 Nov** ([private HF dataset](https://huggingface.co/datasets/reagent-lexsi/tau2-golden-trajectories), tag `v1`) |
 | 5 | [`HALLUCINATION_CLASSIFIER.md`](HALLUCINATION_CLASSIFIER.md) | 5 Nov | How do we label *how* a conversation went wrong (Tool / Arg / Loop)? | A deterministic classifier (SEL-12, Chiara): 100% of failed telecom runs call the customer's tools; 0 false alarms on the 158 golden records; precision checked on 13 + 30 findings | Final; retail/airline checked on `aya.jsonl` |
 | 6 | [`HEAL_FIXES_ONLY.md`](HEAL_FIXES_ONLY.md) | 7 Nov | Can the teacher fix a failure at runtime, from the agent's view up to the failing turn? What would a first heal cycle train on? | Yes: 6/6 failures with a finding fixed first try (~$0.001 each). But all at turn 3, all "identify the customer first"; 2/8 failures had no finding to fix | Final for 9 tasks; nothing trained yet (needs SEL-63) |
-| 7 | [`SFT_POD.md`](SFT_POD.md) | 7 Nov | How do we run the indicative SFT (QLoRA, Aya 32B) on a RunPod H100, and where does everything live? | The end-to-end runbook: setup, dry run, train, serve, dev score, copy back; what's persistent on a pod | Runbook; not yet run (SEL-65) |
+| 7 | [`SFT_POD.md`](SFT_POD.md) | 7 Nov | How do we run the indicative SFT (QLoRA, Aya 32B) on a RunPod H100, and where does everything live? | The end-to-end runbook: setup, dry run, train, serve, dev score, copy back; what's persistent on a pod | Runbook; used for v1 and v2 (SEL-65, SEL-71) |
 | 8 | [`SFT.md`](SFT.md) | 8 Nov | Does SFT on the verified fixes heal the student? | **v1:** dev success 11% → 38% (mean of 2 samples) against the same base model, and Tool/Arg hallucination → 0%; the gate rejects it on airline (−2). **v2** (+34 airline examples): dev 38% → 60%, the gate promotes it, and it meets the decision rule fixed in advance | v1 final; v2 done on dev (dev-informed), validation to come |
 
 **Decisions along the way**, and where each is recorded:
@@ -29,8 +29,8 @@ Read these in order. Each page says at the top whether it's final, and what supe
   p = 0.45), with no drop in hallucination flags. [`../EXPERIMENTS.md`](../EXPERIMENTS.md).
 - **Golden trajectories v1 handed over** (5 Nov) to the Trainer and Architect.
 
-- **SFT v1 heals the hallucinations but not airline** (8 Nov): 0% Tool/Arg on dev, success 11% → 38%, gate rejected on airline. The remaining failures are wrong decisions (eligibility), not hallucinations. Page 7.
-- **Each split has one job** (8 Nov): unseen train tasks for validation, dev for the gate, test only for a declared arm. Page 7.
+- **SFT v1 heals the hallucinations but not airline** (8 Nov): 0% Tool/Arg on dev, success 11% → 38%, gate rejected on airline. The remaining failures are wrong decisions (eligibility), not hallucinations. Page 8.
+- **Each split has one job** (8 Nov): unseen train tasks for validation, dev for the gate, test only for a declared arm. Page 8.
 
 **Not yet done:**
 - **The hard subset**, as golden trajectories v1.1 (SEL-7 builds it, SEL-60 publishes it):

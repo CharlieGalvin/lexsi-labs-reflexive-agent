@@ -5,6 +5,7 @@
 #   bash scripts/pod/serve.sh                          # base model + runs/sft-aya32b-r16 as "sft"
 #   ADAPTER=runs/other bash scripts/pod/serve.sh       # another adapter
 #   ADAPTER= bash scripts/pod/serve.sh                 # the base model only
+#   ADAPTER= EXTRA_ADAPTERS="sft2=runs/sft-aya32b-r16-v2" bash scripts/pod/serve.sh   # v2 only
 #   EXTRA_ADAPTERS="sft2=runs/sft-aya32b-r16-v2" bash scripts/pod/serve.sh   # v1 as "sft" + v2 as "sft2"
 #
 # Then, in another terminal on the pod, the rollouts (configs/sft/: P = base, S = adapter):
@@ -37,17 +38,25 @@ cd "$REPO_DIR"
 TEMPLATE="$WORKSPACE/chat_template.$(basename "$MODEL").jinja"
 "$REPO_DIR/.venv/bin/python" scripts/sft/chat_template.py "$MODEL" "$TEMPLATE"
 
+# Every adapter to load: ADAPTER as "sft" (unless empty), plus EXTRA_ADAPTERS ("name=path ...")
+mods=()
+[[ -n "$ADAPTER" ]] && mods=("sft=$ADAPTER")
+for m in $EXTRA_ADAPTERS; do
+  [[ "$m" == *=* ]] || { echo "⛔ EXTRA_ADAPTERS entry '$m' isn't name=path" >&2; exit 1; }
+  mods+=("$m")
+done
 lora=()
-if [[ -n "$ADAPTER" ]]; then
-  [[ -f "$ADAPTER/adapter_config.json" ]] || { echo "⛔ no adapter in $ADAPTER: train it first (just sft-train)" >&2; exit 1; }
-  rank="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['r'])" "$ADAPTER/adapter_config.json")"
-  mods=("sft=$ADAPTER")
-  for m in $EXTRA_ADAPTERS; do
-    [[ -f "${m#*=}/adapter_config.json" ]] || { echo "⛔ no adapter in ${m#*=}" >&2; exit 1; }
-    mods+=("$m")
+if (( ${#mods[@]} )); then
+  rank=0  # vLLM needs the largest rank among them, not the first one's
+  for m in "${mods[@]}"; do
+    dir="${m#*=}"
+    [[ -f "$dir/adapter_config.json" ]] || { echo "⛔ no adapter in $dir: train it first (just sft-train)" >&2; exit 1; }
+    r="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['r'])" "$dir/adapter_config.json")"
+    (( r > rank )) && rank="$r"
   done
   lora=(--enable-lora --lora-modules "${mods[@]}" --max-lora-rank "$rank" --max-loras "${#mods[@]}")
-  echo "serving $MODEL + ${mods[*]} (rank $rank) on :$PORT, context $MAX_LEN"
+  echo "serving $MODEL + ${mods[*]} (max rank $rank) on :$PORT, context $MAX_LEN"
+  [[ -z "$ADAPTER" ]] && echo "   note: no \"sft\" adapter (ADAPTER is empty): arm S won't find its model"
 else
   echo "serving $MODEL (no adapter) on :$PORT, context $MAX_LEN"
 fi

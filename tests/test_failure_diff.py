@@ -68,3 +68,20 @@ def test_mentioned_recognises_plain_words_for_phone_actions():
     assert fd.mentioned("toggle_airplane_mode", text)
     assert fd.mentioned("reboot_device", text)
     assert not fd.mentioned("reset_apn_settings", text)
+
+
+def test_same_call_follows_tau2s_rule():
+    # no compare_args: only the keys the agent sent are compared, as in τ²-bench
+    assert fd.same_call(("cancel", {"id": "A", "reason": "x"}, None), ("cancel", {"id": "A"}))
+    assert not fd.same_call(("cancel", {"id": "A"}, None), ("cancel", {"id": "A", "extra": 1}))
+    # compare_args: only those keys count, so an ignored extra key still matches
+    assert fd.same_call(("cancel", {"id": "A"}, ["id"]), ("cancel", {"id": "A", "note": "hi"}))
+    assert not fd.same_call(("cancel", {"id": "A"}, ["id"]), ("cancel", {"id": "B"}))
+    assert not fd.same_call(("cancel", {"id": "A"}, []), ("refund", {"id": "A"}))
+
+
+def test_compare_args_keep_an_ignored_extra_key_out_of_wrong():
+    want = [("update", {"res": "R1", "cabin": "business"}, ["res", "cabin"])]
+    did = [("update", {"res": "R1", "cabin": "business", "payment": "card_1"})]
+    c = fd.compare(want, did)
+    assert c["ok"] == want and not c["wrong"] and not c["extra"]

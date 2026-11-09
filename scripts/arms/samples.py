@@ -16,7 +16,7 @@ import collections
 import glob
 from pathlib import Path
 
-from reflexive.files import ROOT, read_jsonl
+from reflexive.files import ROOT, latest_records, read_jsonl
 from reflexive.metrics import is_broken
 
 DOMAINS = ("retail", "airline", "telecom")
@@ -27,11 +27,8 @@ def table(arm: str, split: str) -> dict[tuple[str, int], list[int]]:
     out: dict[tuple[str, int], list[int]] = collections.defaultdict(lambda: [0, 0, 0])
     for d in DOMAINS:
         for f in glob.glob(str(ROOT / "results" / "episodes" / "arms" / f"{arm}-{d}-{split}.jsonl")):
-            last = {}
-            for r in read_jsonl(Path(f), partial_last_ok=True):
-                last[(str(r["task_id"]), r.get("sample", 0))] = r
-            for (_, s), r in last.items():
-                c = out[(d, s)]
+            for r in latest_records(read_jsonl(Path(f), partial_last_ok=True)):
+                c = out[(d, r.get("sample", 0))]
                 if is_broken(r):
                     c[2] += 1
                 else:
