@@ -1,0 +1,42 @@
+# SFT v4 (SEL-73): v2 plus on-policy teacher fixes at v2's own wrong decisions, at 74 steps.
+# Build the data:  just onpolicy-fixes, then just sft-v4-data
+# Train on the pod: just sft-train configs/train/sft_aya32b_v4.yaml --push
+#
+# Why: 14 of v2's 26 failed validation conversations are wrong decisions (an unneeded change, wrong
+# arguments, a change never made). v2's teacher data never reaches the states where v2 goes wrong;
+# these fixes start from them (v2 on train tasks; the teacher rewrites the turn where v2's changes
+# leave the expected ones). Steps stay at 74, as for v2, SL and v3, so only the data differs.
+# Everything below is v2's, except name, data, train_group and max_steps.
+
+name: sft-aya32b-r16-v4
+model: CohereLabs/aya-expanse-32b
+data: data/train/sft-v4.jsonl          # v2's file + group "onpolicy" (scripts/heal/onpolicy_fixes.py)
+train_group: [healable, extra, onpolicy]
+eval_group: solved_by_aya             # the same 15 held-out examples as v1 (no extras for them)
+max_len: 16384
+
+lora:
+  r: 16
+  alpha: 32
+  dropout: 0.05
+  target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+
+quantization:
+  load_in_4bit: true
+  quant_type: nf4
+  double_quant: true
+
+trainer:
+  num_train_epochs: 2
+  max_steps: 74                        # v2's, SL's and v3's: only the data differs
+  learning_rate: 1.0e-4
+  lr_scheduler_type: cosine
+  warmup_ratio: 0.05
+  per_device_train_batch_size: 1
+  gradient_accumulation_steps: 4
+  max_grad_norm: 1.0
+  weight_decay: 0.0
+  optim: paged_adamw_8bit
+  logging_steps: 1
+  eval_steps: 7
+  seed: 0

@@ -186,6 +186,15 @@ gate-check baseline candidate *args:
 sft-v2-data *args="--domains airline":
     python scripts/data/build_extra_fixes.py {{args}}
 
+# On-policy teacher fixes (SEL-73): where the student's changes leave the expected ones on train tasks
+onpolicy-fixes *args="results/episodes/arms/S2-retail-trainpool.jsonl results/episodes/arms/S2-airline-trainpool.jsonl results/episodes/arms/S2-telecom-trainpool.jsonl":
+    python scripts/heal/onpolicy_fixes.py {{args}}
+
+# SFT v4 data (SEL-73): v2's file + the on-policy fixes (group "onpolicy")
+sft-v4-data fixes="results/heal/onpolicy-fixes.jsonl":
+    cat data/train/sft-v2.jsonl {{fixes}} > data/train/sft-v4.jsonl
+    @echo "data/train/sft-v4.jsonl: $(wc -l < data/train/sft-v4.jsonl) examples ($(wc -l < {{fixes}}) on-policy)"
+
 # SFT v3 data (SEL-72): v1's examples + the extra verified retail and airline passes
 sft-v3-data *args:
     python scripts/data/build_extra_fixes.py --domains retail airline --out data/train/sft-v3.jsonl {{args}}
