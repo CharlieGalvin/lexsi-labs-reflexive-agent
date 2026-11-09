@@ -1,7 +1,8 @@
-# The runtime monitor's `no_progress` check on retail and airline (SEL-69)
+# The runtime monitor on retail and airline, and the guard ablation (SEL-69)
 
-**Status:** final for the saved Arm A rollouts (9 Nov). The guard ablation (the rest of
-SEL-69) will be added here.
+**Status:** final (9 Nov). Two questions: does `no_progress` behave on retail and airline as on
+telecom (first half), and does the guard change anything on its own (the ablation, second
+half)? Short answer to both: nothing looped, so the monitor stayed quiet and the guard never acted.
 
 **Question.** The runtime monitor (SEL-62, `reflexive.monitor`) raises `no_progress` after 3
 agent turns in a row with no tool call, each repeating something the agent already said. On
@@ -66,3 +67,74 @@ episode files.
 - The known gap from SEL-62 still holds: a loop that rewords itself each time isn't caught.
 
 Metrics: [`results/monitor-no-progress-replay.metrics.json`](../../results/monitor-no-progress-replay.metrics.json).
+
+## The guard ablation (telecom dev)
+
+**Question.** In `act` mode the guard nudges a `no_progress` loop, then stops it. Does that change
+success, loops or steps per task on its own, so its effect can be told apart from Arm B's?
+
+**Answer.** It never acted. In 30 guarded conversations `no_progress` never fired, so there was no
+nudge and no stop, and the guarded run is the plain one again. The differences in the table below
+are run-to-run noise: none is clear, and this is effectively an A/A test. **The guard's effect is
+not measured**, because telecom dev didn't loop this time.
+
+**Method.** Arm A (Aya Expanse 32B via Cohere, GPT-4.1 customer) on the 15 telecom dev tasks, 2
+samples each, run twice at the same commit (`e3194b3`), side by side: once plain (`--monitor log`)
+and once with the guard (`--monitor act`). Retail and airline were left out because the guard can't act
+where `no_progress` never fires (first half). Telecom has no LLM judges, so the scores are
+complete. One guarded conversation crashed inside τ²-bench (`unexpected_error`, guard not
+involved) and was re-run, so both arms have 30.
+
+```
+just rollout A telecom --split dev --samples 2                  # → A-telecom-dev.jsonl
+just rollout A telecom --split dev --samples 2 --monitor act    # → A-telecom-dev-guard.jsonl
+just arm-compare results/episodes/arms/A-telecom-dev.jsonl results/episodes/arms/A-telecom-dev-guard.jsonl \
+  --names arm-A-telecom-dev arm-A-telecom-dev-guard
+```
+
+| Metric | A | 95% CI | A + guard | 95% CI | Guard − A (paired) | 95% CI |
+|---|---:|---|---:|---|---:|---|
+| Success rate | 10.0% | 0.0 to 23.3% | 3.3% | 0.0 to 10.0% | −6.7 pts | −23.3 to +6.7 |
+| Hallucination rate (Tool or Arg) | 100% | 100 to 100% | 100% | 100 to 100% | 0 | 0 to 0 |
+| Loop rate (classifier) | 70.0% | 53.3 to 86.7% | 80.0% | 66.7 to 93.3% | +10.0 pts | −3.3 to +23.3 |
+| Steps per task | 11.3 | 9.7 to 12.8 | 10.0 | 8.4 to 11.8 | −1.2 | −3.0 to +0.6 |
+| Redundant-call rate | 27.5% | 20.7 to 33.2% | 34.8% | 28.8 to 40.2% | +7.3 pts | −0.1 to +14.1 |
+
+30 vs 30 conversations, paired on 15 tasks; 95% percentile bootstrap, 10,000 resamples, seed 0.
+
+- **The guard never acted:** 0 `no_progress` fires, 0 nudges, 0 `monitor_stop` endings. Replaying
+  both files through `monitor_replay.py` agrees (30 quiet each).
+- **No conversation reached the step limit:** at most 25 agent turns (telecom's loops ran to about
+  100). Endings: plain 21 `user_stop` and 9 `too_many_errors`; guarded 20 and 10.
+- **So the 3 vs 1 passes are noise.** The guard didn't touch either run, and the passes fall on
+  different tasks in the two runs (plain: both samples of one airplane-mode/APN/SIM-PIN task and
+  one roaming task; guarded: one contract-suspension task). That is the student's run-to-run spread at a pass
+  rate of about 1 in 10.
+- **The "Loop rate" row is the classifier's Loop** (repeated or failing tool calls), not
+  `no_progress`. It's high in both runs and isn't what the guard reacts to.
+- **Why no loops this time:** on 4 Nov, 7 of 148 telecom train conversations looped to the step
+  limit, and one of those tasks (A69) is a dev task. In today's 60 dev conversations, including
+  A69's 4, none did. Loops are rare enough (about 5% of telecom conversations) that 30 per arm
+  may contain none.
+
+**What it would take to measure the guard:** run it where loops happen. That means the telecom
+train tasks that looped (A37, A42, A56, A68, A69, A73, C42), several samples each, or a larger
+telecom sample. The replay above shows what `act` would have done on the 4 Nov loops: nudge all
+7, stop 6 (C42 fires only on its last turn).
+
+### What a guarded run records (from Charlie's review of #52)
+
+- **A guard stop has its own ending**, `monitor_stop`. τ²-bench grades it as the agent's stop, but
+  `arm_metrics` and `arm-compare` report those runs separately (`monitor_stopped`: conversations,
+  passes, and the success rate if those passes count as failures). A `monitor_stop` is never a
+  golden trajectory. None happened here.
+- **The nudge is kept** in `rec["monitor"]["nudge"]`: its text, the message in the agent's view
+  it followed (`after_view_index`, `after_role`) and the agent turn it was shown before. The
+  nudge goes into one prompt only, not into τ²-bench's conversation, so this is the only record of
+  it. **Reader's note:** the nudge follows the customer's message, so the agent sees two user
+  turns in a row (`after_role: "user"`).
+
+Metrics: [plain](../../results/arm-A-telecom-dev-sel69.metrics.json),
+[guarded](../../results/arm-A-telecom-dev-guard.metrics.json),
+[comparison](../../results/arm-A-telecom-dev-vs-arm-A-telecom-dev-guard.compare.metrics.json).
+Cost: $2.96 + $2.51 (customer and student; the crashed attempt's spend isn't counted).

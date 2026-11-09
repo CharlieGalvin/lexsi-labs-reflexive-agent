@@ -278,3 +278,14 @@ def test_the_guards_stops_are_reported_on_their_own() -> None:
     assert m["task_success"] == 0.5 and m["termination"]["monitor_stop"] == 2
     assert m["monitor_stopped"] == {"conversations": 2, "passed": 1, "task_success_if_failed": 0.25}
     assert arm_metrics([rec("1", True)])["monitor_stopped"]["conversations"] == 0
+
+
+def test_a_guarded_run_is_named_as_its_own_run(tmp_path: Path, monkeypatch) -> None:
+    # SEL-69: the guard ablation's summary mustn't take the plain run's name (and file)
+    dev = splits.task_ids("retail", "dev")[:2]
+    recs = [rec(t, False, monitor={"mode": "act", "nudged_at": None}) for t in dev]
+    code, out = _run(tmp_path, monkeypatch, recs, name="A-retail-dev-guard")
+    m = json.loads(out.read_text())
+    assert code == 0 and m["run"] == "arm-A-retail-dev-guard" and m["monitor"].startswith("act")
+    code, out = _run(tmp_path, monkeypatch, [rec(t, False) for t in dev], "--force", name="A-retail-dev")
+    assert json.loads(out.read_text())["run"] == "arm-A-retail-dev"
