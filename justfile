@@ -186,6 +186,10 @@ gate-check baseline candidate *args:
 sft-v2-data *args="--domains airline":
     python scripts/data/build_extra_fixes.py {{args}}
 
+# SFT v3 data (SEL-72): v1's examples + the extra verified retail and airline passes
+sft-v3-data *args:
+    python scripts/data/build_extra_fixes.py --domains retail airline --out data/train/sft-v3.jsonl {{args}}
+
 # Compare two rollout files with 95% bootstrap CIs (SEL-27): success, hallucination, loops, steps, redundant calls
 arm-compare a b *args:
     python scripts/arms/compare.py {{a}} {{b}} {{args}}

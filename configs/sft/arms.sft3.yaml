@@ -1,0 +1,28 @@
+# Arm S3: Aya Expanse 32B + SFT v3 (SEL-72), served next to the others as "sft3":
+#   EXTRA_ADAPTERS="sft2=runs/sft-aya32b-r16-v2 sftlong=runs/sft-aya32b-r16-long sft3=runs/sft-aya32b-r16-v3" just sft-serve
+# Same harness, prompt, decoding and customer as configs/arms.yaml; only the student differs:
+# it's served by vLLM on the pod (scripts/pod/serve.sh), on localhost:8000, no API key.
+# Scored on the validation tasks (SEL-72), like SL and S2:
+#   just rollout S3 <domain> --split train --task-ids ... --samples 2 --config configs/sft/arms.sft3.yaml
+# Never on test unless the team declares it. Everything but the adapter is as in arms.sft.yaml.
+
+student:
+  name: aya32-sft-r16-v3
+  model: sft3
+  api_base: http://localhost:8000/v1
+  api_key_env: null
+  mode: prompted          # the data contract (SEL-35): don't change these two
+  style: cohere
+  temperature: 0.0
+  max_tokens: 1024
+  max_context: 32768      # = serve.sh MAX_LEN (the GPU's limit; Cohere's API allows 128K)
+  reserve: 4096
+  rpm: 0
+
+customer: null            # GPT-4.1, as for every arm
+
+arms:
+  S3:
+    name: sft-v3-indicative
+    description: "SFT v3: v2's data plus the teacher's extra verified retail passes, 74 steps (SEL-72; indicative, not Arm B)"
+    prompt_variant: default

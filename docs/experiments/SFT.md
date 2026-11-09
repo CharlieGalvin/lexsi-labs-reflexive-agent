@@ -187,12 +187,61 @@ done
 - On these unseen tasks, **v1 equalled the base model on airline** (2/5 on average each), confirming its airline weakness without using dev.
 - v2 on validation is still to run: it's the dev-independent test of the airline fix.
 
+## Validation (9 Nov): v2 on tasks no arm trained on
+
+The dev-independent check: the 30 validation tasks (13 retail, 5 airline, 12 telecom), 2 samples
+each, scored in-run (`just arm-samples P S S2 --split val`).
+
+| Arm | Retail | Airline | Telecom | Total, mean of 2 | Samples |
+|---|---:|---:|---:|---:|---:|
+| P (base) | 5.0 | 2.0 | 2.0 | **9.0** | 8, 10 |
+| S (v1) | 6.0 | 2.0 | 6.0 | **14.0** | 16, 12 |
+| S2 (v2) | 6.5 | 2.5 | 8.0 | **17.0** | 16, 18 |
+
+- **SFT generalises:** v2 scores +8 over the same base model on unseen tasks, well above either
+  arm's spread between samples.
+- **v2 against v1 is +3, within noise** (v1's own samples differ by 4), and no domain is worse.
+- **The airline hypothesis isn't supported here:** airline is 2.5 against 2.0. The gain is in
+  telecom, where v2 got no new data. So v2's extra steps (74 against 56) may explain it: the
+  known confound. Until SL is in, credit v2's gain over v1 to "more training and/or more data".
+- On dev, v2 did fix airline's over-action (unwarranted cancellations 14 → 2, `just arm-failures`),
+  but dev informed v2's design, and that gain doesn't show detectably on 5 unseen airline tasks.
+
+Commands: the task list for each domain comes from `P-<domain>-val.jsonl`. A resume rewrites an
+arm's own file without its crashed records, so a task whose samples all crashed vanishes from it.
+
+## SL and v3 (SEL-72): plan fixed before any result
+
+Three arms at the same **74 steps**, so they differ only in data:
+
+| Arm | Data | Config |
+|---|---|---|
+| SL | v1's 112 | `configs/train/sft_aya32b_long.yaml` |
+| S2 (v2) | v1's 112 and 34 airline | `configs/train/sft_aya32b_v2.yaml` |
+| S3 (v3) | v1's 112, 34 airline and 20 retail (166) | `configs/train/sft_aya32b_v3.yaml` (`just sft-v3-data`) |
+
+Telecom has no extra verified passes, so it stays at v1's 47. Tests check that SL differs from v1
+only in its steps, and v3 from v2 only in its data and steps.
+
+**Reading SL:** SL ≈ v2 means the steps explain v2's gain over v1; SL ≈ v1 means the airline data
+helped, just not where expected.
+
+**Decision rule for v3** (on validation, 2 samples each): v3 is better than v2 if its total beats
+17.0 by more than v2's sample spread (2), so 19.5 or more; no domain drops by more than 1 task;
+and Tool/Arg hallucination stays at or below 5% of conversations. Otherwise it's reported, not
+adopted.
+
+**Caveat:** each version compared on the same 30 tasks tunes us to them a little, as dev was. The
+headline arm is declared before test (SEL-26), and every test run is reported.
+
 ## Version log
 
 | Version | Date | Data | Change from the previous version | Dev success (mean of 2 samples) | Tool/Arg | Gate against P | Adapter |
 |---|---|---|---|---|---|---|---|
 | v1 | 8 Nov | 112 healable fixes (golden v1.1) | — | 13.5/36 (38%) | 0% | Reject (airline −2) | `reagent-lexsi/sft-aya32b-r16` |
 | v2 | 8 Nov | v1 + 34 extra airline passes (airline 19 → 53) | Data only (airline); 74 steps against 56 | **21.5/36 (60%)** | 4.2% | **Promote** (airline +1) | `reagent-lexsi/sft-aya32b-r16-v2` |
+| SL | 9 Nov | v1's 112 | Steps only: 74 (the ablation for v2's confound) | — (scored on validation) | | | `reagent-lexsi/sft-aya32b-r16-long` |
+| v3 | 9 Nov | v2 + 20 extra retail passes (retail 46 → 66) | Data only (retail), at 74 steps (SEL-72) | — (scored on validation) | | | `reagent-lexsi/sft-aya32b-r16-v3` |
 
 ## Next idea, beyond v2
 

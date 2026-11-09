@@ -1,0 +1,42 @@
+# SFT v3 (SEL-72): v2 plus the teacher's extra verified retail passes, at v2's 74 steps.
+# Build the data:  just sft-v3-data
+# Train on the pod: just sft-train configs/train/sft_aya32b_v3.yaml --push
+#
+# Why: on the 30 validation tasks v2 beat v1 by +3 (within noise), with the gain in telecom, not
+# airline, so the extra steps (74 against 56) may explain it. SL (sft_aya32b_long.yaml: v1's data,
+# 74 steps) measures that. v3 keeps the steps fixed at 74 too, so SL, v2 and v3 differ only in data:
+#   SL: v1's 112 · v2: + 34 airline · v3: + 34 airline + 20 retail (no telecom extras exist).
+# Everything below is v2's, except name, data and max_steps.
+
+name: sft-aya32b-r16-v3
+model: CohereLabs/aya-expanse-32b
+data: data/train/sft-v3.jsonl          # v1's sft-all examples + group "extra" (retail, airline)
+train_group: [healable, extra]
+eval_group: solved_by_aya             # the same 15 held-out examples as v1 (no extras for them)
+max_len: 16384
+
+lora:
+  r: 16
+  alpha: 32
+  dropout: 0.05
+  target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+
+quantization:
+  load_in_4bit: true
+  quant_type: nf4
+  double_quant: true
+
+trainer:
+  num_train_epochs: 2
+  max_steps: 74                        # v2's and SL's step count: only the data differs
+  learning_rate: 1.0e-4
+  lr_scheduler_type: cosine
+  warmup_ratio: 0.05
+  per_device_train_batch_size: 1
+  gradient_accumulation_steps: 4
+  max_grad_norm: 1.0
+  weight_decay: 0.0
+  optim: paged_adamw_8bit
+  logging_steps: 1
+  eval_steps: 7
+  seed: 0
