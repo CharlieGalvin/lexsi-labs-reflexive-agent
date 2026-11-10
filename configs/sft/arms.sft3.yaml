@@ -2,8 +2,10 @@
 #   EXTRA_ADAPTERS="sft2=runs/sft-aya32b-r16-v2 sftlong=runs/sft-aya32b-r16-long sft3=runs/sft-aya32b-r16-v3" just sft-serve
 # Same harness, prompt, decoding and customer as configs/arms.yaml; only the student differs:
 # it's served by vLLM on the pod (scripts/pod/serve.sh), on localhost:8000, no API key.
-# Scored on the validation tasks (SEL-72), like SL and S2:
-#   just rollout S3 <domain> --split train --task-ids ... --samples 2 --config configs/sft/arms.sft3.yaml
+# Scored on the validation tasks (SEL-72), like SL and S2. --out names the file `just arm-samples
+# --split val` reads (without it, the validation tasks' split, train, names it S3-<domain>-train.jsonl):
+#   just rollout S3 <domain> --task-ids ... --samples 2 --config configs/sft/arms.sft3.yaml \
+#     --out results/episodes/arms/S3-<domain>-val.jsonl
 # Never on test unless the team declares it. Everything but the adapter is as in arms.sft.yaml.
 
 student:
