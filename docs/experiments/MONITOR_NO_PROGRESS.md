@@ -86,10 +86,12 @@ complete. One guarded conversation crashed inside τ²-bench (`unexpected_error`
 involved) and was re-run, so both arms have 30.
 
 ```
-just rollout A telecom --split dev --samples 2                  # → A-telecom-dev.jsonl
-just rollout A telecom --split dev --samples 2 --monitor act    # → A-telecom-dev-guard.jsonl
-just arm-compare results/episodes/arms/A-telecom-dev.jsonl results/episodes/arms/A-telecom-dev-guard.jsonl \
-  --names arm-A-telecom-dev arm-A-telecom-dev-guard
+just rollout A telecom --split dev --samples 2 --out results/episodes/arms/A-telecom-dev-sel69.jsonl
+just rollout A telecom --split dev --samples 2 --monitor act --out results/episodes/arms/A-telecom-dev-guard.jsonl
+just arm-metrics results/episodes/arms/A-telecom-dev-sel69.jsonl --name arm-A-telecom-dev-sel69
+just arm-metrics results/episodes/arms/A-telecom-dev-guard.jsonl
+just arm-compare results/episodes/arms/A-telecom-dev-sel69.jsonl results/episodes/arms/A-telecom-dev-guard.jsonl \
+  --names arm-A-telecom-dev-sel69 arm-A-telecom-dev-guard
 ```
 
 | Metric | A | 95% CI | A + guard | 95% CI | Guard − A (paired) | 95% CI |
@@ -115,7 +117,9 @@ just arm-compare results/episodes/arms/A-telecom-dev.jsonl results/episodes/arms
 - **Why no loops this time:** on 4 Nov, 7 of 148 telecom train conversations looped to the step
   limit, and one of those tasks (A69) is a dev task. In today's 60 dev conversations, including
   A69's 4, none did. Loops are rare enough (about 5% of telecom conversations) that 30 per arm
-  may contain none.
+  may contain none. Telecom conversations also often end early: about a third end on
+  `too_many_errors` (9 plain, 10 guarded, of 30 each), so they stop long before the step limit. That is
+  probably why nothing looped long enough for the guard to act.
 
 **What it would take to measure the guard:** run it where loops happen. That means the telecom
 train tasks that looped (A37, A42, A56, A68, A69, A73, C42), several samples each, or a larger
@@ -136,5 +140,5 @@ telecom sample. The replay above shows what `act` would have done on the 4 Nov l
 
 Metrics: [plain](../../results/arm-A-telecom-dev-sel69.metrics.json),
 [guarded](../../results/arm-A-telecom-dev-guard.metrics.json),
-[comparison](../../results/arm-A-telecom-dev-vs-arm-A-telecom-dev-guard.compare.metrics.json).
+[comparison](../../results/arm-A-telecom-dev-sel69-vs-arm-A-telecom-dev-guard.compare.metrics.json).
 Cost: $2.96 + $2.51 (customer and student; the crashed attempt's spend isn't counted).

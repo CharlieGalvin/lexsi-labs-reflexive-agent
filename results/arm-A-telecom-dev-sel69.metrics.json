@@ -1,5 +1,5 @@
 {
-  "run": "arm-A-telecom-dev",
+  "run": "arm-A-telecom-dev-sel69",
   "monitor": "log or off",
   "date": "2026-11-09",
   "owner": "unknown",
@@ -16,7 +16,7 @@
   "judges": false,
   "note_judges": "telecom has no LLM judges: scores are complete",
   "note_cost": "the saved records' spend: a resumed rollout drops crashed conversations before retrying them, so their first attempts aren't counted (a lower bound)",
-  "records": "results/episodes/arms/A-telecom-dev.jsonl (not committed)",
+  "records": "results/episodes/arms/A-telecom-dev-sel69.jsonl (not committed)",
   "note_samples": "the 95% range counts every conversation as independent: too narrow",
   "conversations": 30,
   "crashed": 0,

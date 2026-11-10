@@ -289,3 +289,13 @@ def test_a_guarded_run_is_named_as_its_own_run(tmp_path: Path, monkeypatch) -> N
     assert code == 0 and m["run"] == "arm-A-retail-dev-guard" and m["monitor"].startswith("act")
     code, out = _run(tmp_path, monkeypatch, [rec(t, False) for t in dev], "--force", name="A-retail-dev")
     assert json.loads(out.read_text())["run"] == "arm-A-retail-dev"
+
+
+def test_name_gives_a_run_its_own_name(tmp_path: Path, monkeypatch) -> None:
+    # SEL-69 review: a second plain run on the same split mustn't take the baseline's name
+    dev = splits.task_ids("retail", "dev")[:2]
+    recs = [rec(t, False) for t in dev]
+    code, out = _run(
+        tmp_path, monkeypatch, recs, "--name", "arm-A-retail-dev-sel69", name="A-retail-dev-sel69"
+    )
+    assert code == 0 and json.loads(out.read_text())["run"] == "arm-A-retail-dev-sel69"

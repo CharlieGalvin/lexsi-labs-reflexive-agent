@@ -1,7 +1,7 @@
 {
  "a": {
-  "name": "arm-A-telecom-dev",
-  "file": "results/episodes/arms/A-telecom-dev.jsonl"
+  "name": "arm-A-telecom-dev-sel69",
+  "file": "results/episodes/arms/A-telecom-dev-sel69.jsonl"
  },
  "b": {
   "name": "arm-A-telecom-dev-guard",

@@ -186,8 +186,11 @@ def main() -> int:
     p.add_argument("--owner", default=_git("config", "user.name"), help="who ran it (default: git user.name)")
     p.add_argument("--note", help="anything a reader should know, saved as `history`")
     p.add_argument(
-        "--out", type=Path, help="default: results/arm-<arm>-<domain>-<split>[-guard].metrics.json"
+        "--name",
+        help="the run's name, when another run has the default one "
+        "(default: arm-<arm>-<domain>-<split>[-guard])",
     )
+    p.add_argument("--out", type=Path, help="default: results/<name>.metrics.json")
     p.add_argument("--force", action="store_true", help="replace an existing summary")
     a = p.parse_args()
 
@@ -206,6 +209,8 @@ def main() -> int:
         return 1
 
     out = {**header(recs, a.records, split, a.only, a.owner), **arm_metrics(recs)}
+    if a.name:
+        out["run"] = a.name
     if a.note:
         out["history"] = a.note
     path = a.out or ROOT / "results" / f"{out['run']}.metrics.json"
