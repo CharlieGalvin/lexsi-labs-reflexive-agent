@@ -276,6 +276,44 @@ particular turn; airline still over-acts on unseen tasks (3 of its 5 failures), 
 **Training** (both pushed to `reagent-lexsi`): SL 31 min, train loss 0.401, held-out 0.854 → 0.365;
 v3 29 min, train loss 0.408, held-out 0.854 → 0.368. Neither held-out loss rose.
 
+## v4 (SEL-73): on-policy fixes at v2's own wrong decisions
+
+Plan and rule fixed at 21:16 on 9 Nov, before any result: v4 replaces v2 if its validation total is
+19.5 or more, no domain drops by more than 1, and Tool/Arg hallucination stays at or below 5%.
+
+**Method** (`just onpolicy-fixes`, `scripts/heal/onpolicy_fixes.py`):
+
+1. v2 on the 112 train tasks outside validation, 1 sample (`S2-<domain>-trainpool.jsonl`): **55 passed**
+   (retail 21/46, airline 8/19, telecom 26/47). Most are tasks v2 trained on: it underfits.
+2. The turn to fix, from the task's expected actions: the first change that matches none still pending;
+   else the last agent turn if an expected change was never made; else the classifier's first finding.
+3. GLM-5.3-Flash rewrites that turn (`heal.fix_point`, `check_fix`, `to_sft_example`), up to 3 attempts;
+   accepted only if every change in it is one the task still expects.
+
+| Fix point | Found | Accepted |
+|---|---:|---:|
+| Unexpected change | 38 | 26 |
+| Classifier (loop / hallucination) | 3 | 3 |
+| Change never made | 13 | 0 |
+| No fix point (actions matched) | 3 | — |
+
+- **No stop-short fixes:** at those points the teacher looked something up or asked to confirm (which
+  the policy requires), but the rule demanded the change itself in that turn.
+- **OpenRouter credit ran out** at fix point 51: the last 3 were refused for that reason.
+- **A spot check of 8** found the accepted turns sound: they confirm, re-check or hold back instead of
+  v2's premature or wrong change.
+
+**Data and training:** `just sft-v4-data` (v2's file + 29 on-policy, group `onpolicy`); trains on 175
+(112 + 34 + 29) for 74 steps; held-out loss tracked SL's and v3's.
+
+**Result** (validation, 2 samples each): retail **7.0**, airline **3.5** (best of any arm), telecom
+6.5, total **17.0** (samples 18, 16). **Not adopted:** total below 19.5, telecom −1.5 against v2. The
+fixes moved the domains they target, and telecom fell as it did for v3: at a fixed 74 steps, more
+non-telecom examples mean fewer passes over telecom's (about 2.0 per example for v2, 1.7 for v4).
+
+**Next, after submission:** v4's data at about 90 steps (restore telecom's passes); a stop-short rule
+that accepts a look-up or confirmation and checks the following turns.
+
 ## Version log
 
 | Version | Date | Data | Change from the previous version | Dev success (mean of 2 samples) | Validation, mean of 2 (of 30) | Tool/Arg | Gate against P | Adapter |
@@ -284,6 +322,7 @@ v3 29 min, train loss 0.408, held-out 0.854 → 0.368. Neither held-out loss ros
 | v2 | 8 Nov | v1 + 34 extra airline passes (airline 19 → 53) | Data only (airline); 74 steps against 56 | **21.5/36 (60%)** | **17.0** | 4.2% | **Promote** (airline +1) | `reagent-lexsi/sft-aya32b-r16-v2` |
 | SL | 9 Nov | v1's 112 | Steps only: 74 (the ablation for v2's confound) | — | 15.5 | | | `reagent-lexsi/sft-aya32b-r16-long` |
 | v3 | 9 Nov | v2 + 20 extra retail passes (retail 46 → 66) | Data only (retail), at 74 steps (SEL-72) | — | 17.0 (not adopted) | | | `reagent-lexsi/sft-aya32b-r16-v3` |
+| v4 | 9 Nov | v2 + 29 on-policy teacher fixes (retail, airline, telecom) | Data only (on-policy), at 74 steps (SEL-73) | — | 17.0 (not adopted) | | | `reagent-lexsi/sft-aya32b-r16-v4` (upload to confirm) |
 
 ## Next idea, beyond v2
 
