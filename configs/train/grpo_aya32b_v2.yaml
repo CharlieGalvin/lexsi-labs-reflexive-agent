@@ -35,6 +35,9 @@ trainer:                        # passed to TRL's GRPOConfig
   max_steps: 100                # x 2 prompts = 200 of the 721; ~2–3 min/step expected on an H100
   per_device_train_batch_size: 1          # one ~7K-token sequence through the backward pass at a time
   gradient_accumulation_steps: 16         # 16 samples per step = 2 prompts x 8 samples
+  steps_per_generation: 8       # generate one prompt's 8 samples at a time (default: 16 at once, which ran
+                                # out of memory on the H100: 16 x ~8K-token prompts in one forward pass). Same
+                                # training: each step is still 2 prompts x 8 samples, in two generation rounds
   num_generations: 8            # the "group": samples per prompt, compared with each other
   max_completion_length: 384    # the teacher's turns: 95% under ~100 tokens, the longest ~500
   temperature: 1.0              # diversity: SFT v2 already knows these turns, the groups need spread

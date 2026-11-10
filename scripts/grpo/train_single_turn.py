@@ -81,17 +81,24 @@ def grpo_args(cfg: dict[str, Any], out: Path, overrides: dict[str, Any] | None =
 
     Checks the batch arithmetic here, so a bad config stops before the 32B model loads: the
     samples generated together (``per_device_train_batch_size`` x ``steps_per_generation``,
-    which defaults to ``gradient_accumulation_steps``) must hold whole groups."""
+    which defaults to ``gradient_accumulation_steps``) and the samples in one training step must
+    both hold whole groups."""
     t = {**cfg["trainer"], **(overrides or {})}
-    per_step = t.get("per_device_train_batch_size", 8) * (
-        t.get("steps_per_generation") or t.get("gradient_accumulation_steps", 1)
-    )
+    batch = t.get("per_device_train_batch_size", 8)
+    accumulate = t.get("gradient_accumulation_steps", 1)
     groups = t.get("num_generations", 8)
-    if per_step % groups:
-        raise SystemExit(
-            f"⛔ {per_step} samples per generation batch don't divide into groups of {groups}: "
-            "make per_device_train_batch_size x gradient_accumulation_steps a multiple of num_generations"
-        )
+    for what, n in (
+        (
+            "generation batch (per_device_train_batch_size x steps_per_generation)",
+            batch * (t.get("steps_per_generation") or accumulate),
+        ),
+        ("training step (per_device_train_batch_size x gradient_accumulation_steps)", batch * accumulate),
+    ):
+        if n % groups:
+            raise SystemExit(
+                f"⛔ {n} samples per {what} don't divide into groups of {groups}: "
+                "make it a multiple of num_generations"
+            )
     return {
         "output_dir": str(out / "checkpoints"),
         "bf16": True,

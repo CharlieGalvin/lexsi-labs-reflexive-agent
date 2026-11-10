@@ -59,6 +59,8 @@ def test_the_config_loads_and_its_batches_hold_whole_groups(tmp_path: Path):
     args = ts.grpo_args(cfg, tmp_path)
     assert args["remove_unused_columns"] is False and args["num_generations"] == 8
     assert (args["per_device_train_batch_size"] * args["gradient_accumulation_steps"]) % 8 == 0
+    # one group per generation round: 16 x ~8K-token prompts at once ran the H100 out of memory
+    assert args["per_device_train_batch_size"] * args["steps_per_generation"] == args["num_generations"]
 
 
 def test_batches_that_split_a_group_are_refused_before_loading(tmp_path: Path):
