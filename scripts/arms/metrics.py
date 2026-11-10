@@ -140,8 +140,11 @@ def header(
     judged = sum(bool(r["outcome"].get("judged")) for r in scored)
     skipped = sum(bool(r["outcome"].get("skipped")) for r in scored)
     samples = max(r.get("sample", 0) for r in recs) + 1
+    # the guard ablation (SEL-69): a run with the runtime monitor acting is its own run
+    guard = any((r.get("monitor") or {}).get("mode") == "act" for r in recs)
     return {
-        "run": f"arm-{arm}-{domain}-{split}",
+        "run": f"arm-{arm}-{domain}-{split}" + ("-guard" if guard else ""),
+        "monitor": "act (guard: nudge, then stop, a no_progress loop)" if guard else "log or off",
         "date": dt.date.today().isoformat(),
         "owner": owner,
         "commit": _git("rev-parse", "--short", "HEAD"),
@@ -182,7 +185,12 @@ def main() -> int:
     p.add_argument("--only", choices=["train", "dev"], help="keep only this frozen split's tasks")
     p.add_argument("--owner", default=_git("config", "user.name"), help="who ran it (default: git user.name)")
     p.add_argument("--note", help="anything a reader should know, saved as `history`")
-    p.add_argument("--out", type=Path, help="default: results/arm-<arm>-<domain>-<split>.metrics.json")
+    p.add_argument(
+        "--name",
+        help="the run's name, when another run has the default one "
+        "(default: arm-<arm>-<domain>-<split>[-guard])",
+    )
+    p.add_argument("--out", type=Path, help="default: results/<name>.metrics.json")
     p.add_argument("--force", action="store_true", help="replace an existing summary")
     a = p.parse_args()
 
@@ -201,6 +209,8 @@ def main() -> int:
         return 1
 
     out = {**header(recs, a.records, split, a.only, a.owner), **arm_metrics(recs)}
+    if a.name:
+        out["run"] = a.name
     if a.note:
         out["history"] = a.note
     path = a.out or ROOT / "results" / f"{out['run']}.metrics.json"

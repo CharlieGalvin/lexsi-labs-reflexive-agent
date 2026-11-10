@@ -1,0 +1,127 @@
+{
+ "a": {
+  "name": "arm-A-telecom-dev-sel69",
+  "file": "results/episodes/arms/A-telecom-dev-sel69.jsonl"
+ },
+ "b": {
+  "name": "arm-A-telecom-dev-guard",
+  "file": "results/episodes/arms/A-telecom-dev-guard.jsonl"
+ },
+ "commit": "e3194b3",
+ "date": "2026-11-09",
+ "rows": [
+  {
+   "metric": "success_rate",
+   "a": 0.1,
+   "a_ci95": [
+    0.0,
+    0.23333333333333334
+   ],
+   "b": 0.03333333333333333,
+   "b_ci95": [
+    0.0,
+    0.1
+   ],
+   "diff_b_minus_a": -0.06666666666666668,
+   "diff_ci95": [
+    -0.23333333333333334,
+    0.06666666666666667
+   ],
+   "clear": false
+  },
+  {
+   "metric": "hallucination_rate",
+   "a": 1.0,
+   "a_ci95": [
+    1.0,
+    1.0
+   ],
+   "b": 1.0,
+   "b_ci95": [
+    1.0,
+    1.0
+   ],
+   "diff_b_minus_a": 0.0,
+   "diff_ci95": [
+    0.0,
+    0.0
+   ],
+   "clear": false
+  },
+  {
+   "metric": "loop_rate",
+   "a": 0.7,
+   "a_ci95": [
+    0.5333333333333333,
+    0.8666666666666667
+   ],
+   "b": 0.8,
+   "b_ci95": [
+    0.6666666666666666,
+    0.9333333333333333
+   ],
+   "diff_b_minus_a": 0.10000000000000009,
+   "diff_ci95": [
+    -0.033333333333333326,
+    0.2333333333333334
+   ],
+   "clear": false
+  },
+  {
+   "metric": "steps_per_task",
+   "a": 11.266666666666667,
+   "a_ci95": [
+    9.733333333333333,
+    12.833333333333334
+   ],
+   "b": 10.033333333333333,
+   "b_ci95": [
+    8.433333333333334,
+    11.766666666666667
+   ],
+   "diff_b_minus_a": -1.2333333333333343,
+   "diff_ci95": [
+    -3.0,
+    0.5999999999999996
+   ],
+   "clear": false
+  },
+  {
+   "metric": "redundant_call_rate",
+   "a": 0.2748091603053435,
+   "a_ci95": [
+    0.2073170731707317,
+    0.3321678321678322
+   ],
+   "b": 0.34782608695652173,
+   "b_ci95": [
+    0.2878787878787879,
+    0.40217391304347827
+   ],
+   "diff_b_minus_a": 0.0730169266511782,
+   "diff_ci95": [
+    -0.0011152043705986991,
+    0.14147792267215742
+   ],
+   "clear": false
+  }
+ ],
+ "a_scored": 30,
+ "b_scored": 30,
+ "a_crashed": 0,
+ "b_crashed": 0,
+ "shared_tasks": 15,
+ "reps": 10000,
+ "seed": 0,
+ "a_monitor_stopped": {
+  "conversations": 0,
+  "passed": 0,
+  "task_success_if_failed": 0.1
+ },
+ "b_monitor_stopped": {
+  "conversations": 0,
+  "passed": 0,
+  "task_success_if_failed": 0.0333
+ },
+ "method": "percentile bootstrap; difference paired on shared tasks (cluster by task)"
+}
