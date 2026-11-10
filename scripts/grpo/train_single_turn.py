@@ -164,6 +164,47 @@ def git_commit() -> str | None:
         return None
 
 
+def warm_cublas() -> None:
+    """Create cuBLAS's handles now, on this thread and on autograd's backward thread.
+
+    cuBLAS allocates its handle outside PyTorch, the first time a thread multiplies on the GPU.
+    For the backward thread that's the first backward pass, after generation has filled PyTorch's
+    memory cache: the first trial failed there with ``CUBLAS_STATUS_ALLOC_FAILED``."""
+    import torch
+
+    x = torch.ones(16, 16, device="cuda", requires_grad=True)
+    (x @ x).sum().backward()
+    torch.cuda.synchronize()
+
+
+def gb(n: int) -> float:
+    return round(n / 2**30, 1)
+
+
+def releasing_trainer(base: type) -> type:
+    """TRL's trainer class, giving generation's cached GPU memory back before the backward pass.
+
+    Prints the first round's peak memory: what generating one group of samples takes."""
+    import torch
+
+    class Trainer(base):
+        rounds = 0
+
+        def _generate_and_score_completions(self, *args: Any, **kwargs: Any) -> Any:
+            out = super()._generate_and_score_completions(*args, **kwargs)
+            self.rounds += 1
+            if torch.cuda.is_available():
+                used, cached = torch.cuda.max_memory_allocated(), torch.cuda.memory_reserved()
+                torch.cuda.empty_cache()
+                if self.rounds == 1:
+                    print(
+                        f"first generation round: peak {gb(used)} GB, {gb(cached)} GB cached (now released)"
+                    )
+            return out
+
+    return Trainer
+
+
 def no_gqa_in_sdpa() -> None:
     """Make transformers expand Aya's key/value heads itself instead of asking SDPA for GQA.
 
@@ -234,8 +275,9 @@ def main() -> int:  # noqa: PLR0915 - one linear script: check, load, train, sav
                 log.write(json.dumps({"step": state.global_step, **logs}) + "\n")
                 log.flush()
 
+    Trainer = releasing_trainer(GRPOTrainer)
     reward = grpo_rewards.make_reward_fn(cfg.get("reward_weights"), log_path=out / "rewards.jsonl")
-    trainer = GRPOTrainer(
+    trainer = Trainer(
         model=model,
         reward_funcs=[reward],
         args=GRPOConfig(**args),
@@ -243,6 +285,7 @@ def main() -> int:  # noqa: PLR0915 - one linear script: check, load, train, sav
         processing_class=tok,
         callbacks=[Log()],
     )
+    warm_cublas()
     torch.cuda.reset_peak_memory_stats()
     start = time.time()
     result = trainer.train()

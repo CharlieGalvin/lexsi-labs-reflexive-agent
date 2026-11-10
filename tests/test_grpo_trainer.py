@@ -174,7 +174,7 @@ def test_one_real_grpo_step_on_a_tiny_model(tmp_path: Path):
         return reward(**kw, log_metric=lambda k, v: (seen.setdefault(k, []).append(v), log_metric(k, v)))
 
     spy.__name__ = "single_turn_reward"
-    trainer = trl.GRPOTrainer(
+    trainer = ts.releasing_trainer(trl.GRPOTrainer)(  # the trainer the script uses
         model=model,
         reward_funcs=[spy],
         args=trl.GRPOConfig(**args),
@@ -187,5 +187,6 @@ def test_one_real_grpo_step_on_a_tiny_model(tmp_path: Path):
     logged = [json.loads(line) for line in (tmp_path / "rewards.jsonl").read_text().splitlines()]
     assert len(logged) == 8 and all(r["id"] == rows[0]["id"] for r in logged)  # two groups of 4 samples
     assert {r["call"] for r in logged} == {1, 2}  # in two generation rounds
+    assert trainer.rounds == 2
     assert set(seen) == {f"reward_parts/{k}" for k in grpo_rewards.COMPONENTS}
     assert trainable and all("lora" in n for n in trainable)  # the SFT adapter is what trains
