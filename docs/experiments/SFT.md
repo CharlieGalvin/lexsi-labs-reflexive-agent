@@ -234,14 +234,56 @@ adopted.
 **Caveat:** each version compared on the same 30 tasks tunes us to them a little, as dev was. The
 headline arm is declared before test (SEL-26), and every test run is reported.
 
+## SL and v3: results (9 Nov)
+
+All six arms on the 30 validation tasks, 2 samples each (`just arm-samples P S S2 SL S3 --split val`;
+SL's and S3's telecom crashes came from running both arms at once and were re-run one arm at a time):
+
+| Arm | Data | Steps | Retail (13) | Airline (5) | Telecom (12) | Total, mean | Samples |
+|---|---|---:|---:|---:|---:|---:|---:|
+| P | — | — | 5.0 | 2.0 | 2.0 | **9.0** | 8, 10 |
+| S (v1) | 112 | 56 | 6.0 | 2.0 | 6.0 | **14.0** | 16, 12 |
+| SL | 112 | 74 | 6.5 | 2.0 | 7.0 | **15.5** | 15, 16 |
+| S2 (v2) | + 34 airline | 74 | 6.5 | 2.5 | 8.0 | **17.0** | 16, 18 |
+| S3 (v3) | + 34 airline + 20 retail | 74 | **8.0** | 2.5 | 6.5 | **17.0** | 16, 18 |
+
+**v3 isn't adopted:** its total (17.0) needed 19.5 or more, and telecom fell 1.5 against v2 (at most 1
+allowed). v2 stays Arm B and GRPO's starting adapter, as fixed at 19:24 in SEL-72.
+
+- **SL sits halfway between v1 and v2** (14.0 → 15.5 → 17.0). Each step of 1.5 is within v1's sample
+  spread of 4, so the shares due to training longer and to the airline data can't be separated.
+- **v3's retail data helped retail** (8.0, the best of any arm) and **telecom fell** (6.5): at a fixed
+  74 steps, more non-telecom examples mean fewer passes over each telecom example.
+- **Held-out loss doesn't separate them:** SL 0.365, v2 0.368, v3 0.368 at the end of training.
+
+**Failure analysis** (one main cause per failed conversation, validation, both samples):
+
+| Main cause | v1 | v2 | v3 |
+|---|---:|---:|---:|
+| Loop / hit the step limit | 13 | 5 | 8 |
+| Over-action (an unneeded change) | 5 | 5 | 4 |
+| Right action, wrong arguments | 5 | 4 | 9 |
+| Missed an action | 2 | 4 | 5 |
+| Did something else instead | 3 | 1 | 0 |
+| Past 32K context / too many errors | 3 | 4 | 0 |
+| Actions right, another check failed | 1 | 3 | 0 |
+| **Failed (of 60)** | 32 | 26 | 26 |
+
+v2's gain over v1 is mostly fewer loops (13 → 5). 14 of its 26 failures are wrong decisions at a
+particular turn; airline still over-acts on unseen tasks (3 of its 5 failures), so the dev fix
+(cancellations 14 → 2) doesn't carry over. 4 conversations ran past 32K context.
+
+**Training** (both pushed to `reagent-lexsi`): SL 31 min, train loss 0.401, held-out 0.854 → 0.365;
+v3 29 min, train loss 0.408, held-out 0.854 → 0.368. Neither held-out loss rose.
+
 ## Version log
 
-| Version | Date | Data | Change from the previous version | Dev success (mean of 2 samples) | Tool/Arg | Gate against P | Adapter |
-|---|---|---|---|---|---|---|---|
-| v1 | 8 Nov | 112 healable fixes (golden v1.1) | — | 13.5/36 (38%) | 0% | Reject (airline −2) | `reagent-lexsi/sft-aya32b-r16` |
-| v2 | 8 Nov | v1 + 34 extra airline passes (airline 19 → 53) | Data only (airline); 74 steps against 56 | **21.5/36 (60%)** | 4.2% | **Promote** (airline +1) | `reagent-lexsi/sft-aya32b-r16-v2` |
-| SL | 9 Nov | v1's 112 | Steps only: 74 (the ablation for v2's confound) | — (scored on validation) | | | `reagent-lexsi/sft-aya32b-r16-long` |
-| v3 | 9 Nov | v2 + 20 extra retail passes (retail 46 → 66) | Data only (retail), at 74 steps (SEL-72) | — (scored on validation) | | | `reagent-lexsi/sft-aya32b-r16-v3` |
+| Version | Date | Data | Change from the previous version | Dev success (mean of 2 samples) | Validation, mean of 2 (of 30) | Tool/Arg | Gate against P | Adapter |
+|---|---|---|---|---|---|---|---|---|
+| v1 | 8 Nov | 112 healable fixes (golden v1.1) | — | 13.5/36 (38%) | 14.0 | 0% | Reject (airline −2) | `reagent-lexsi/sft-aya32b-r16` |
+| v2 | 8 Nov | v1 + 34 extra airline passes (airline 19 → 53) | Data only (airline); 74 steps against 56 | **21.5/36 (60%)** | **17.0** | 4.2% | **Promote** (airline +1) | `reagent-lexsi/sft-aya32b-r16-v2` |
+| SL | 9 Nov | v1's 112 | Steps only: 74 (the ablation for v2's confound) | — | 15.5 | | | `reagent-lexsi/sft-aya32b-r16-long` |
+| v3 | 9 Nov | v2 + 20 extra retail passes (retail 46 → 66) | Data only (retail), at 74 steps (SEL-72) | — | 17.0 (not adopted) | | | `reagent-lexsi/sft-aya32b-r16-v3` |
 
 ## Next idea, beyond v2
 
