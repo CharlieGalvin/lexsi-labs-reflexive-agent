@@ -185,7 +185,7 @@ done
 - P: 9.0/30 on average.
 - v1 (S): retail 6, 6 /13; airline 3, 1 /5; telecom 6, 3 of 8 scored (8 crashed, to re-run).
 - On these unseen tasks, **v1 equalled the base model on airline** (2/5 on average each), confirming its airline weakness without using dev.
-- v2 on validation is still to run: it's the dev-independent test of the airline fix.
+- v2 on validation is still to run: it's the dev-independent test of the airline fix (done 9 Nov: see the next section).
 
 ## Validation (9 Nov): v2 on tasks no arm trained on
 
@@ -255,6 +255,9 @@ allowed). v2 stays Arm B and GRPO's starting adapter, as fixed at 19:24 in SEL-7
 - **v3's retail data helped retail** (8.0, the best of any arm) and **telecom fell** (6.5): at a fixed
   74 steps, more non-telecom examples mean fewer passes over each telecom example.
 - **Held-out loss doesn't separate them:** SL 0.365, v2 0.368, v3 0.368 at the end of training.
+- **The rule's third part, Tool/Arg at or below 5%:** v3 has 3 of 60 conversations (5.0%), so it
+  holds; v3 fails on the first two parts. For reference: SL 4 of 60, v2 4 of 60 (6.7%, all telecom's
+  customer-only phone tools), v1 6 of 60, P 52 of 60 (`classify_record`, any Tool or Arg finding).
 
 **Failure analysis** (one main cause per failed conversation, validation, both samples):
 
@@ -324,6 +327,9 @@ that accepts a look-up or confirmation and checks the following turns.
 | v3 | 9 Nov | v2 + 20 extra retail passes (retail 46 → 66) | Data only (retail), at 74 steps (SEL-72) | — | 17.0 (not adopted) | | | `reagent-lexsi/sft-aya32b-r16-v3` |
 | v4 | 9 Nov | v2 + 29 on-policy teacher fixes (retail, airline, telecom) | Data only (on-policy), at 74 steps (SEL-73) | — | 17.0 (not adopted) | | | `reagent-lexsi/sft-aya32b-r16-v4` |
 
-## Next idea, beyond v2
+## Next ideas
 
-v2 adds *off-policy* data: teacher conversations, which never reach the states where S goes wrong. On-policy corrections are the standard fix in imitation learning (DAgger): run S on train tasks, find its first wrong action, and have the teacher continue from that point (#50's `PrefixTeacher`). That's the project's heal loop with this adapter as the student, and it's to discuss with Chiara (SEL-68).
+v2's teacher data is off-policy; v3 added more of it and v4 added on-policy fixes (DAgger, above).
+Neither beat v2 on validation. After submission: v4's data at about 90 steps (restoring telecom's
+passes), and a stop-short rule that accepts a look-up or a confirmation and checks the turns that
+follow it. GRPO from v2 (SEL-21, SEL-49) is the next step for the project itself.
