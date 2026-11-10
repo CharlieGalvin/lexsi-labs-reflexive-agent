@@ -186,6 +186,14 @@ gate-check baseline candidate *args:
 sft-v2-data *args="--domains airline":
     python scripts/data/build_extra_fixes.py {{args}}
 
+# Adapter lifecycle (SEL-22): configs/adapters.yaml; state and history in results/adapters/state.json
+adapter-publish id *args:
+    python scripts/adapters/publish.py {{id}} {{args}}
+adapter-use id *args:
+    python scripts/adapters/use.py {{id}} {{args}}
+adapter-rollback *args:
+    python scripts/adapters/use.py --rollback {{args}}
+
 # On-policy teacher fixes (SEL-73): where the student's changes leave the expected ones on train tasks
 # (v2's train-pool rollouts are always the input; extra arguments are added, e.g. --dry-run)
 onpolicy-fixes *args:

@@ -253,11 +253,17 @@ def main() -> int:  # noqa: C901, PLR0915 - one linear script: load, tokenise, t
         "peak_gpu_gb": round(torch.cuda.max_memory_allocated() / 2**30, 1),
         "gpu": torch.cuda.get_device_name(0),
     }
+    repo = f"{HUB_ORG}/{cfg['name']}"
     if a.push:
-        repo = f"{HUB_ORG}/{cfg['name']}"
-        model.push_to_hub(repo, private=True)
         summary["hub"] = repo
+    # written before the upload, so a failed upload still leaves it (SEL-22: the provenance needs it)
     (out / "run_summary.json").write_text(json.dumps(summary, indent=1) + "\n")
+    if a.push:
+        from huggingface_hub import HfApi
+
+        model.push_to_hub(repo, private=True)
+        for f in ("run_summary.json", "log.jsonl"):
+            HfApi().upload_file(path_or_fileobj=str(out / f), path_in_repo=f, repo_id=repo)
     print(
         f"done in {minutes:.0f} min: train loss {result.training_loss:.3f}; held-out loss "
         f"{summary['held_out_loss']['before']} -> {summary['held_out_loss']['after']}; "

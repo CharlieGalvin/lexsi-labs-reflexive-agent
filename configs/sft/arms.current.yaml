@@ -1,0 +1,28 @@
+# Arm B: whichever adapter is current (SEL-22), served by vLLM as "current".
+#   EXTRA_ADAPTERS="current=runs/sft-aya32b-r16-v2" just sft-serve      # or, on a running server:
+#   just adapter-use <id> --why "..." --server http://localhost:8000      # swap without a restart
+# Same harness, prompt, decoding and customer as configs/arms.yaml; only the student differs:
+# it's served by vLLM on the pod (scripts/pod/serve.sh), on localhost:8000, no API key.
+# Which adapter is current, and every switch: results/adapters/state.json (just adapter-use / -rollback).
+# Everything but the adapter is as in arms.sft.yaml. For a fixed adapter, use its own config.
+
+student:
+  name: aya32-current
+  model: current
+  api_base: http://localhost:8000/v1
+  api_key_env: null
+  mode: prompted          # the data contract (SEL-35): don't change these two
+  style: cohere
+  temperature: 0.0
+  max_tokens: 1024
+  max_context: 32768      # = serve.sh MAX_LEN (the GPU's limit; Cohere's API allows 128K)
+  reserve: 4096
+  rpm: 0
+
+customer: null            # GPT-4.1, as for every arm
+
+arms:
+  B:
+    name: arm-b-current
+    description: "Arm B: the current adapter in results/adapters/state.json (SEL-22)"
+    prompt_variant: default

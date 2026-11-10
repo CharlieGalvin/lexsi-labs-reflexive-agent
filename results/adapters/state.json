@@ -1,0 +1,14 @@
+{
+ "current": "sft-v2",
+ "revisions": {},
+ "history": [
+  {
+   "at": "2026-11-10T09:50:00+00:00",
+   "from": null,
+   "to": "sft-v2",
+   "revision": null,
+   "why": "Declared Arm B at the 9am call (SEL-26): best on validation, 17.0/30 against the base model's 9.0",
+   "by": "Charlie"
+  }
+ ]
+}
