@@ -46,9 +46,12 @@ def main() -> int:
     p.add_argument("--record", action="store_true", help="add the decision to the gate's history")
     a = p.parse_args()
 
-    from loguru import logger
+    try:
+        from loguru import logger
 
-    logger.remove()  # τ²-bench logs every step
+        logger.remove()  # τ²-bench logs every step
+    except ImportError:  # no τ²-bench here (CI): nothing to silence
+        pass
     base, cand = dev_run(a.baseline, a.sample), dev_run(a.candidate, a.sample)
     print(
         f"{a.baseline}: {len(base)} conversations, {a.candidate}: {len(cand)} (sample {a.sample}); scoring..."
