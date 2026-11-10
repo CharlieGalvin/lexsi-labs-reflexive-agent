@@ -155,7 +155,8 @@ def test_one_real_grpo_step_on_a_tiny_model(tmp_path: Path):
         {
             "max_steps": 1,
             "per_device_train_batch_size": 2,
-            "gradient_accumulation_steps": 2,
+            "gradient_accumulation_steps": 4,  # a step is 2 groups,
+            "steps_per_generation": 2,  # generated one group at a time, as on the pod
             "num_generations": 4,
             "max_completion_length": 8,
             "optim": "adamw_torch",
@@ -184,6 +185,7 @@ def test_one_real_grpo_step_on_a_tiny_model(tmp_path: Path):
     trainer.train()
 
     logged = [json.loads(line) for line in (tmp_path / "rewards.jsonl").read_text().splitlines()]
-    assert len(logged) == 4 and all(r["id"] == rows[0]["id"] for r in logged)  # one group of 4 samples
+    assert len(logged) == 8 and all(r["id"] == rows[0]["id"] for r in logged)  # two groups of 4 samples
+    assert {r["call"] for r in logged} == {1, 2}  # in two generation rounds
     assert set(seen) == {f"reward_parts/{k}" for k in grpo_rewards.COMPONENTS}
     assert trainable and all("lora" in n for n in trainable)  # the SFT adapter is what trains
