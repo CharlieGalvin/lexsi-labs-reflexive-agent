@@ -171,9 +171,10 @@ def test_one_real_grpo_step_on_a_tiny_model(tmp_path: Path):
     base = transformers.AutoModelForCausalLM.from_config(small)
     lora = peft.LoraConfig(r=4, lora_alpha=8, target_modules=["q_proj", "v_proj"], task_type="CAUSAL_LM")
     peft.get_peft_model(base, lora).save_pretrained(tmp_path / "sft")  # stands in for SFT v2's adapter
-    model = peft.PeftModel.from_pretrained(
-        transformers.AutoModelForCausalLM.from_config(small), tmp_path / "sft", is_trainable=True
-    )
+    tiny = transformers.AutoModelForCausalLM.from_config(small).to(torch.bfloat16)
+    ts.prepare_for_training(tiny)  # as the script does: frozen base, checkpointing, bfloat16 kept
+    assert all(p.dtype == torch.bfloat16 and not p.requires_grad for p in tiny.parameters())
+    model = peft.PeftModel.from_pretrained(tiny, tmp_path / "sft", is_trainable=True)
 
     cfg = _data(tmp_path, _row(), _row())
     rows = ts.prompts(cfg)

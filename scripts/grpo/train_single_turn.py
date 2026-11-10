@@ -231,12 +231,26 @@ def releasing_trainer(base: type) -> type:
     return Trainer
 
 
+def prepare_for_training(base: Any) -> None:
+    """Freeze the base and enable gradient checkpointing, keeping its activations in bfloat16.
+
+    Not ``peft.prepare_model_for_kbit_training``: it casts the norms and embeddings to float32, so
+    every activation, the KV cache and the generation buffers are float32 too. In the 3-step trial
+    that peaked at 77.9 of the H100's 79 GB on a median-length prompt, and every telecom prompt is
+    longer. bfloat16 halves that memory. (SFT v2 trained with the float32 norms; within GRPO, the
+    policy and the reference adapter both run in bfloat16.)"""
+    for p in base.parameters():
+        p.requires_grad_(False)
+    base.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+    base.enable_input_require_grads()
+
+
 def no_gqa_in_sdpa() -> None:
     """Make transformers expand Aya's key/value heads itself instead of asking SDPA for GQA.
 
     With no padding mask (every sequence in a generation round is the same prompt), transformers
-    passes ``enable_gqa=True`` to SDPA. On the float32 activations ``prepare_model_for_kbit_training``
-    gives, only SDPA's math kernel supports that, and it builds the full attention matrix: 8 x 64
+    passes ``enable_gqa=True`` to SDPA. On float32 activations (as ``prepare_model_for_kbit_training``
+    gave), only SDPA's math kernel supports that, and it builds the full attention matrix: 8 x 64
     heads x ~8.5K x ~8.5K floats asked for 137 GiB on the H100. Expanded heads take the
     memory-efficient kernel instead, as they did when padding made a mask (~5 GB per layer)."""
     from transformers.integrations import sdpa_attention
@@ -258,7 +272,7 @@ def main() -> int:  # noqa: PLR0915 - one linear script: check, load, train, sav
 
     cfg = load(a.config)
     out = ROOT / "runs" / cfg["name"]
-    if (out / "run_summary.json").exists() and not a.force:
+    if (out / "run_summary.json").exists() and not a.force and not a.dry_run:
         print(f"⛔ {shown(out)} already has a finished run: pass --force to train again")
         return 1
     overrides: dict[str, Any] = {}
@@ -284,12 +298,12 @@ def main() -> int:  # noqa: PLR0915 - one linear script: check, load, train, sav
 
     import torch
     from datasets import Dataset
-    from peft import PeftModel, prepare_model_for_kbit_training
+    from peft import PeftModel
     from transformers import TrainerCallback
     from trl import GRPOConfig, GRPOTrainer
 
     base = load_base(cfg)
-    base = prepare_model_for_kbit_training(base, use_gradient_checkpointing=True)  # float32 activations
+    prepare_for_training(base)  # bfloat16 throughout: the float32 upcast nearly filled the H100
     no_gqa_in_sdpa()
     model = PeftModel.from_pretrained(base, cfg["adapter"], is_trainable=True)
     model.print_trainable_parameters()
