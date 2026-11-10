@@ -1,0 +1,117 @@
+{
+ "a": {
+  "name": "arm-C-test",
+  "file": "results/episodes/arms/C-{retail,airline,telecom}-test.jsonl (concatenated)"
+ },
+ "b": {
+  "name": "arm-S2-test",
+  "file": "results/episodes/arms/S2-{retail,airline,telecom}-test.jsonl (concatenated)"
+ },
+ "commit": "b8830fa",
+ "date": "2026-11-10",
+ "rows": [
+  {
+   "metric": "success_rate",
+   "a": 0.1,
+   "a_ci95": [
+    0.05,
+    0.16
+   ],
+   "b": 0.515,
+   "b_ci95": [
+    0.445,
+    0.585
+   ],
+   "diff_b_minus_a": 0.41500000000000004,
+   "diff_ci95": [
+    0.31999999999999995,
+    0.51
+   ],
+   "clear": true
+  },
+  {
+   "metric": "hallucination_rate",
+   "a": 0.96,
+   "a_ci95": [
+    0.92,
+    0.99
+   ],
+   "b": 0.1,
+   "b_ci95": [
+    0.06,
+    0.145
+   ],
+   "diff_b_minus_a": -0.86,
+   "diff_ci95": [
+    -0.9149999999999999,
+    -0.8
+   ],
+   "clear": true
+  },
+  {
+   "metric": "loop_rate",
+   "a": 0.48,
+   "a_ci95": [
+    0.38,
+    0.58
+   ],
+   "b": 0.27,
+   "b_ci95": [
+    0.21,
+    0.335
+   ],
+   "diff_b_minus_a": -0.20999999999999996,
+   "diff_ci95": [
+    -0.31500000000000006,
+    -0.10499999999999998
+   ],
+   "clear": true
+  },
+  {
+   "metric": "steps_per_task",
+   "a": 12.15,
+   "a_ci95": [
+    11.11,
+    13.24
+   ],
+   "b": 25.62,
+   "b_ci95": [
+    22.655,
+    28.945
+   ],
+   "diff_b_minus_a": 13.47,
+   "diff_ci95": [
+    9.725000000000001,
+    17.56
+   ],
+   "clear": true
+  },
+  {
+   "metric": "redundant_call_rate",
+   "a": 0.2277580071174377,
+   "a_ci95": [
+    0.18615751789976134,
+    0.26832151300236406
+   ],
+   "b": 0.5038880248833593,
+   "b_ci95": [
+    0.3953757225433526,
+    0.5870882740447958
+   ],
+   "diff_b_minus_a": 0.27613001776592155,
+   "diff_ci95": [
+    0.14460052700182896,
+    0.37265163714439076
+   ],
+   "clear": true
+  }
+ ],
+ "a_scored": 100,
+ "b_scored": 200,
+ "a_crashed": 0,
+ "b_crashed": 0,
+ "shared_tasks": 100,
+ "reps": 10000,
+ "seed": 0,
+ "method": "percentile bootstrap; difference paired on shared tasks (cluster by task)"
+}

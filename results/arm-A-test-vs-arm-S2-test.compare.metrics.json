@@ -1,0 +1,117 @@
+{
+ "a": {
+  "name": "arm-A-test",
+  "file": "results/episodes/arms/A-{retail,airline,telecom}-test.jsonl (concatenated)"
+ },
+ "b": {
+  "name": "arm-S2-test",
+  "file": "results/episodes/arms/S2-{retail,airline,telecom}-test.jsonl (concatenated)"
+ },
+ "commit": "b8830fa",
+ "date": "2026-11-10",
+ "rows": [
+  {
+   "metric": "success_rate",
+   "a": 0.15,
+   "a_ci95": [
+    0.08,
+    0.22
+   ],
+   "b": 0.515,
+   "b_ci95": [
+    0.445,
+    0.585
+   ],
+   "diff_b_minus_a": 0.365,
+   "diff_ci95": [
+    0.26,
+    0.46499999999999997
+   ],
+   "clear": true
+  },
+  {
+   "metric": "hallucination_rate",
+   "a": 0.95,
+   "a_ci95": [
+    0.9,
+    0.99
+   ],
+   "b": 0.1,
+   "b_ci95": [
+    0.06,
+    0.145
+   ],
+   "diff_b_minus_a": -0.85,
+   "diff_ci95": [
+    -0.905,
+    -0.7899999999999999
+   ],
+   "clear": true
+  },
+  {
+   "metric": "loop_rate",
+   "a": 0.52,
+   "a_ci95": [
+    0.42,
+    0.62
+   ],
+   "b": 0.27,
+   "b_ci95": [
+    0.21,
+    0.335
+   ],
+   "diff_b_minus_a": -0.25,
+   "diff_ci95": [
+    -0.355,
+    -0.14499999999999996
+   ],
+   "clear": true
+  },
+  {
+   "metric": "steps_per_task",
+   "a": 11.3,
+   "a_ci95": [
+    10.31,
+    12.4
+   ],
+   "b": 25.62,
+   "b_ci95": [
+    22.655,
+    28.945
+   ],
+   "diff_b_minus_a": 14.32,
+   "diff_ci95": [
+    10.44,
+    18.575
+   ],
+   "clear": true
+  },
+  {
+   "metric": "redundant_call_rate",
+   "a": 0.21997621878715815,
+   "a_ci95": [
+    0.18098958333333334,
+    0.25748502994011974
+   ],
+   "b": 0.5038880248833593,
+   "b_ci95": [
+    0.3953757225433526,
+    0.5870882740447958
+   ],
+   "diff_b_minus_a": 0.28391180609620115,
+   "diff_ci95": [
+    0.14560274888545155,
+    0.3865423238718336
+   ],
+   "clear": true
+  }
+ ],
+ "a_scored": 100,
+ "b_scored": 200,
+ "a_crashed": 0,
+ "b_crashed": 0,
+ "shared_tasks": 100,
+ "reps": 10000,
+ "seed": 0,
+ "method": "percentile bootstrap; difference paired on shared tasks (cluster by task)"
+}

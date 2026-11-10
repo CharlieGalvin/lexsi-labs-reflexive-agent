@@ -1,0 +1,187 @@
+{
+ "arm": "A",
+ "split": "test",
+ "success": "the runs' saved verdicts",
+ "note": "arm-eval (SEL-38) on the saved test rollouts; success = the runs' own \u03c4\u00b2-bench verdicts, judged during the run. Conversations: results/episodes/arms/A-<domain>-test.jsonl (not in git).",
+ "overall": {
+  "conversations": 100,
+  "crashed_not_scored": 0,
+  "verdicts": {
+   "success": 15,
+   "failure": 85,
+   "unknown": 0,
+   "error": 0
+  },
+  "success_rate": 0.15,
+  "success_ci95": [
+   0.08,
+   0.22
+  ],
+  "ci_method": "percentile bootstrap over tasks (a task's samples together), 10,000 resamples",
+  "success_by_sample": {
+   "rates": {
+    "0": 0.15
+   },
+   "mean": 0.15
+  },
+  "success_bounds": null,
+  "tool_call_validity": 0.7109,
+  "redundant_tool_calls": 0.1668,
+  "agent_loop_detection": 0.37,
+  "conversations_with_invalid_call": 44,
+  "conversations_looping": 63,
+  "agent_tokens_median": 56418.0,
+  "agent_tokens_mean": 72147.51,
+  "user_tokens_median": null,
+  "user_tokens_mean": null,
+  "total_tokens_median": null,
+  "total_tokens_mean": null,
+  "cost_usd_median": 0.05,
+  "cost_usd_mean": 0.07,
+  "seconds_median": 39.3,
+  "seconds_mean": 47.86,
+  "steps_median": 10.0,
+  "steps_mean": 11.3,
+  "successes_per_million_tokens": 2.079,
+  "successes_per_dollar": 2.077,
+  "cost_covers": "API calls only (agent and customer): a self-hosted student counts as $0",
+  "user_tokens_recorded": false
+ },
+ "by_domain": {
+  "A-airline-test": {
+   "conversations": 20,
+   "crashed_not_scored": 0,
+   "verdicts": {
+    "success": 2,
+    "failure": 18,
+    "unknown": 0,
+    "error": 0
+   },
+   "success_rate": 0.1,
+   "success_ci95": [
+    0.0,
+    0.25
+   ],
+   "ci_method": "percentile bootstrap over tasks (a task's samples together), 10,000 resamples",
+   "success_by_sample": {
+    "rates": {
+     "0": 0.1
+    },
+    "mean": 0.1
+   },
+   "success_bounds": null,
+   "tool_call_validity": 0.9735,
+   "redundant_tool_calls": 0.1259,
+   "agent_loop_detection": 0.5,
+   "conversations_with_invalid_call": 3,
+   "conversations_looping": 10,
+   "agent_tokens_median": 45786.0,
+   "agent_tokens_mean": 57684.65,
+   "user_tokens_median": null,
+   "user_tokens_mean": null,
+   "total_tokens_median": null,
+   "total_tokens_mean": null,
+   "cost_usd_median": 0.04,
+   "cost_usd_mean": 0.05,
+   "seconds_median": 37.35,
+   "seconds_mean": 41.54,
+   "steps_median": 10.0,
+   "steps_mean": 11.35,
+   "successes_per_million_tokens": 1.734,
+   "successes_per_dollar": 2.181,
+   "cost_covers": "API calls only (agent and customer): a self-hosted student counts as $0",
+   "user_tokens_recorded": false,
+   "split": "test"
+  },
+  "A-retail-test": {
+   "conversations": 40,
+   "crashed_not_scored": 0,
+   "verdicts": {
+    "success": 5,
+    "failure": 35,
+    "unknown": 0,
+    "error": 0
+   },
+   "success_rate": 0.125,
+   "success_ci95": [
+    0.025,
+    0.225
+   ],
+   "ci_method": "percentile bootstrap over tasks (a task's samples together), 10,000 resamples",
+   "success_by_sample": {
+    "rates": {
+     "0": 0.125
+    },
+    "mean": 0.125
+   },
+   "success_bounds": null,
+   "tool_call_validity": 0.9901,
+   "redundant_tool_calls": 0.1549,
+   "agent_loop_detection": 0.425,
+   "conversations_with_invalid_call": 2,
+   "conversations_looping": 23,
+   "agent_tokens_median": 47771.0,
+   "agent_tokens_mean": 66255.8,
+   "user_tokens_median": null,
+   "user_tokens_mean": null,
+   "total_tokens_median": null,
+   "total_tokens_mean": null,
+   "cost_usd_median": 0.04,
+   "cost_usd_mean": 0.05,
+   "seconds_median": 32.8,
+   "seconds_mean": 39.67,
+   "steps_median": 9.0,
+   "steps_mean": 11.53,
+   "successes_per_million_tokens": 1.887,
+   "successes_per_dollar": 2.437,
+   "cost_covers": "API calls only (agent and customer): a self-hosted student counts as $0",
+   "user_tokens_recorded": false,
+   "split": "test"
+  },
+  "A-telecom-test": {
+   "conversations": 40,
+   "crashed_not_scored": 0,
+   "verdicts": {
+    "success": 8,
+    "failure": 32,
+    "unknown": 0,
+    "error": 0
+   },
+   "success_rate": 0.2,
+   "success_ci95": [
+    0.075,
+    0.325
+   ],
+   "ci_method": "percentile bootstrap over tasks (a task's samples together), 10,000 resamples",
+   "success_by_sample": {
+    "rates": {
+     "0": 0.2
+    },
+    "mean": 0.2
+   },
+   "success_bounds": null,
+   "tool_call_validity": 0.3004,
+   "redundant_tool_calls": 0.1992,
+   "agent_loop_detection": 0.25,
+   "conversations_with_invalid_call": 39,
+   "conversations_looping": 30,
+   "agent_tokens_median": 79517.0,
+   "agent_tokens_mean": 85270.65,
+   "user_tokens_median": null,
+   "user_tokens_mean": null,
+   "total_tokens_median": null,
+   "total_tokens_mean": null,
+   "cost_usd_median": 0.1,
+   "cost_usd_mean": 0.11,
+   "seconds_median": 55.8,
+   "seconds_mean": 59.2,
+   "steps_median": 11.0,
+   "steps_mean": 11.05,
+   "successes_per_million_tokens": 2.345,
+   "successes_per_dollar": 1.881,
+   "cost_covers": "API calls only (agent and customer): a self-hosted student counts as $0",
+   "user_tokens_recorded": false,
+   "split": "test"
+  }
+ }
+}
