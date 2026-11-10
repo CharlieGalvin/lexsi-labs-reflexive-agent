@@ -37,7 +37,7 @@ to `heal.CommandTrainer` and the candidate adapter to the agreed gate (`gate.Dev
   ``POD_API_KEY``). ``--train-url`` (default ``$HEAL_SERVICE_URL``, with ``HEAL_TOKEN``) sends each
   cycle's fixes to the pod's heal service (`scripts/pod/heal_service.py`), which trains and
   restarts vLLM with the new adapter served (`RemoteTrainer`); no ``--train-cmd`` or
-  ``--load-adapter``. ``just heal --config configs/sft/arms.pod.yaml --sample 10``.
+  ``--load-adapter``. ``just heal --config configs/sft/arms.pod.yaml --arm P --sample 10``.
 
 **What it writes**, in ``--out`` (default ``results/heal/<time>``):
 

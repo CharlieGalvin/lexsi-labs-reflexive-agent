@@ -1,7 +1,7 @@
 # The student on the pod, reached through its public vLLM endpoint (SEL-68): a heal cycle runs here
 # and trains on the pod through its heal service (scripts/pod/heal_service.py).
 #
-#   just heal --config configs/sft/arms.pod.yaml --sample 10 --out results/heal/first-cycle
+#   just heal --config configs/sft/arms.pod.yaml --arm P --sample 10 --out results/heal/first-cycle
 #
 # .env (none of it committed; the pod's URLs change with every pod):
 #   POD_STUDENT_URL=https://<pod>-8000.proxy.runpod.net/v1   # vLLM, OpenAI-compatible
