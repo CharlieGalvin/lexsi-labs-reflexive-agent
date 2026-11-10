@@ -112,10 +112,36 @@ def grpo_args(cfg: dict[str, Any], out: Path, overrides: dict[str, Any] | None =
 
 
 def prompt_tokens(rows: list[dict[str, Any]], tok: Any) -> list[int]:
-    """Each prompt's length in tokens, rendered as the trainer renders it (with the turn header)."""
-    return [
-        len(tok.apply_chat_template(r["prompt"], tokenize=True, add_generation_prompt=True)) for r in rows
-    ]
+    """Each prompt's length in tokens, rendered as the trainer renders it (with the turn header).
+
+    Renders to text, then tokenises: with ``tokenize=True``, transformers 5 returns a dict (its
+    keys, not its tokens, are what ``len`` counts), as SFT found."""
+    out = []
+    for r in rows:
+        text = tok.apply_chat_template(r["prompt"], tokenize=False, add_generation_prompt=True)
+        out.append(len(tok(text, add_special_tokens=False)["input_ids"]))
+    return out
+
+
+def cap_prompts(
+    rows: list[dict[str, Any]], lengths: list[int], cap: int | None
+) -> tuple[list[dict[str, Any]], list[int]]:
+    """Drops the prompts longer than ``cap`` tokens (the config's ``max_prompt_tokens``): GPU memory
+    during generation grows with the prompt's length. ``None`` keeps them all."""
+    if not cap:
+        return rows, lengths
+    kept = [(r, n) for r, n in zip(rows, lengths, strict=True) if n <= cap]
+    if not kept:
+        raise SystemExit(f"⛔ no prompt is {cap:,} tokens or shorter: raise max_prompt_tokens")
+    return [r for r, _ in kept], [n for _, n in kept]
+
+
+def length_report(lengths: list[int]) -> str:
+    """Quantiles and how many prompts are over a few lengths: to choose ``max_prompt_tokens``."""
+    xs = sorted(lengths)
+    q = {p: xs[min(int(p / 100 * len(xs)), len(xs) - 1)] for p in (50, 90, 99)}
+    over = ", ".join(f">{k // 1000}K: {sum(n > k for n in xs)}" for k in (6000, 8000, 9000, 10000, 12000))
+    return f"tokens: median {q[50]:,}, p90 {q[90]:,}, p99 {q[99]:,}, longest {xs[-1]:,}; over {over}"
 
 
 def load_tokenizer(model: str) -> Any:
@@ -245,10 +271,12 @@ def main() -> int:  # noqa: PLR0915 - one linear script: check, load, train, sav
 
     tok = load_tokenizer(cfg["model"])
     lengths = prompt_tokens(rows, tok)
+    print(f"{len(rows)} prompts; {length_report(lengths)}")
+    rows, lengths = cap_prompts(rows, lengths, cfg.get("max_prompt_tokens"))
     n_prompts = args["max_steps"] * args["per_device_train_batch_size"] * args["gradient_accumulation_steps"]
     n_prompts //= args.get("num_generations", 8)
     print(
-        f"{len(rows)} prompts, {statistics.median(lengths):,.0f} tokens median, longest {max(lengths):,}; "
+        f"training on {len(rows)} prompts (max_prompt_tokens: {cfg.get('max_prompt_tokens') or 'none'}); "
         f"{args['max_steps']} steps see {n_prompts} of them, {args.get('num_generations', 8)} samples each"
     )
     if a.dry_run:
@@ -301,7 +329,11 @@ def main() -> int:  # noqa: PLR0915 - one linear script: check, load, train, sav
         "adapter": cfg["adapter"],
         "config": shown(a.config),
         "data": {"file": cfg["data"], "sha256": sha256(ROOT / cfg["data"]), "prompts": len(rows)},
-        "prompt_tokens": {"median": statistics.median(lengths), "max": max(lengths)},
+        "prompt_tokens": {
+            "median": statistics.median(lengths),
+            "max": max(lengths),
+            "cap": cfg.get("max_prompt_tokens"),
+        },
         "reward_weights": {**grpo_rewards.DEFAULT_WEIGHTS, **(cfg.get("reward_weights") or {})},
         "trainer": {k: v for k, v in args.items() if isinstance(v, str | int | float | bool)},
         "train_loss": result.training_loss,

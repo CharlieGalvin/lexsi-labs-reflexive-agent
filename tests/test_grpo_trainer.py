@@ -94,6 +94,34 @@ def test_a_missing_data_file_says_how_to_build_it():
         ts.prompts({**ts.load(ts.CONFIG), "data": str(ROOT / "nowhere.jsonl")})
 
 
+class _Tok:
+    """transformers 5's shape: apply_chat_template(tokenize=True) would give a 2-key dict."""
+
+    def apply_chat_template(self, messages, tokenize, add_generation_prompt):  # noqa: ANN001
+        assert not tokenize and add_generation_prompt
+        return "".join(m["content"] for m in messages) + "<turn>"
+
+    def __call__(self, text: str, add_special_tokens: bool) -> dict[str, list[int]]:
+        return {"input_ids": list(range(len(text.split()))), "attention_mask": [1] * len(text.split())}
+
+
+def test_prompt_lengths_count_tokens_not_dict_keys():
+    rows = [
+        {"prompt": [{"role": "user", "content": "a b c "}]},
+        {"prompt": [{"role": "user", "content": "a "}]},
+    ]
+    assert ts.prompt_tokens(rows, _Tok()) == [4, 2]
+
+
+def test_long_prompts_are_dropped_only_when_a_cap_is_set():
+    rows = [{"id": i} for i in range(3)]
+    assert ts.cap_prompts(rows, [5, 12, 9], None) == (rows, [5, 12, 9])
+    assert ts.cap_prompts(rows, [5, 12, 9], 9) == ([rows[0], rows[2]], [5, 9])
+    with pytest.raises(SystemExit, match="raise max_prompt_tokens"):
+        ts.cap_prompts(rows, [5, 12, 9], 4)
+    assert "over >6K: 2, >8K: 1, >9K: 1, >10K: 0" in ts.length_report([5000, 7000, 9500])
+
+
 def test_the_run_records_its_commit():
     commit = ts.git_commit()
     assert commit and len(commit.split("+")[0]) >= 7

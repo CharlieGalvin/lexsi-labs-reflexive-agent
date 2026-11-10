@@ -17,6 +17,7 @@ name: grpo-aya32b-v2
 model: CohereLabs/aya-expanse-32b
 adapter: reagent-lexsi/sft-aya32b-r16-v2   # SFT v2 (21.5/36 on dev): GRPO trains this adapter further
 data: data/train/grpo-healable.jsonl        # `just grpo-data`: 721 prompts, train tasks only
+max_prompt_tokens: null       # drop longer prompts (GPU memory in generation grows with length); `--dry-run` shows the lengths
 
 quantization:                   # as SFT trained it: the adapter learned on the 4-bit base
   load_in_4bit: true
