@@ -322,7 +322,7 @@ that accepts a look-up or confirmation and checks the following turns.
 | v2 | 8 Nov | v1 + 34 extra airline passes (airline 19 → 53) | Data only (airline); 74 steps against 56 | **21.5/36 (60%)** | **17.0** | 4.2% | **Promote** (airline +1) | `reagent-lexsi/sft-aya32b-r16-v2` |
 | SL | 9 Nov | v1's 112 | Steps only: 74 (the ablation for v2's confound) | — | 15.5 | | | `reagent-lexsi/sft-aya32b-r16-long` |
 | v3 | 9 Nov | v2 + 20 extra retail passes (retail 46 → 66) | Data only (retail), at 74 steps (SEL-72) | — | 17.0 (not adopted) | | | `reagent-lexsi/sft-aya32b-r16-v3` |
-| v4 | 9 Nov | v2 + 29 on-policy teacher fixes (retail, airline, telecom) | Data only (on-policy), at 74 steps (SEL-73) | — | 17.0 (not adopted) | | | `reagent-lexsi/sft-aya32b-r16-v4` (upload to confirm) |
+| v4 | 9 Nov | v2 + 29 on-policy teacher fixes (retail, airline, telecom) | Data only (on-policy), at 74 steps (SEL-73) | — | 17.0 (not adopted) | | | `reagent-lexsi/sft-aya32b-r16-v4` |
 
 ## Next idea, beyond v2
 
