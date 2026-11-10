@@ -94,6 +94,23 @@ def test_a_missing_data_file_says_how_to_build_it():
         ts.prompts({**ts.load(ts.CONFIG), "data": str(ROOT / "nowhere.jsonl")})
 
 
+def test_the_run_records_its_commit():
+    commit = ts.git_commit()
+    assert commit and len(commit.split("+")[0]) >= 7
+
+
+def test_sdpa_is_never_asked_for_gqa_so_float32_attention_stays_memory_efficient():
+    sdpa = pytest.importorskip("transformers.integrations.sdpa_attention")
+    torch = pytest.importorskip("torch")
+    key = torch.zeros(1, 8, 4, 128)
+    original = sdpa.use_gqa_in_sdpa
+    try:
+        ts.no_gqa_in_sdpa()
+        assert sdpa.use_gqa_in_sdpa(None, key, key) is False  # no mask: transformers would have said True
+    finally:
+        sdpa.use_gqa_in_sdpa = original
+
+
 def test_one_real_grpo_step_on_a_tiny_model(tmp_path: Path):
     torch = pytest.importorskip("torch")
     transformers = pytest.importorskip("transformers")

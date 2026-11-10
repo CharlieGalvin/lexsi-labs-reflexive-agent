@@ -147,6 +147,36 @@ def load_base(cfg: dict[str, Any]) -> Any:
     )
 
 
+def git_commit() -> str | None:
+    """The repo's commit, with ``+dirty`` if files have changed since: the code this run used."""
+    import subprocess
+
+    def git(*args: str) -> str:
+        return subprocess.run(
+            ["git", "-C", str(ROOT), *args], capture_output=True, text=True, check=True
+        ).stdout
+
+    try:
+        return git("rev-parse", "--short", "HEAD").strip() + (
+            "+dirty" if git("status", "--porcelain", "-uno") else ""
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+
+
+def no_gqa_in_sdpa() -> None:
+    """Make transformers expand Aya's key/value heads itself instead of asking SDPA for GQA.
+
+    With no padding mask (every sequence in a generation round is the same prompt), transformers
+    passes ``enable_gqa=True`` to SDPA. On the float32 activations ``prepare_model_for_kbit_training``
+    gives, only SDPA's math kernel supports that, and it builds the full attention matrix: 8 x 64
+    heads x ~8.5K x ~8.5K floats asked for 137 GiB on the H100. Expanded heads take the
+    memory-efficient kernel instead, as they did when padding made a mask (~5 GB per layer)."""
+    from transformers.integrations import sdpa_attention
+
+    sdpa_attention.use_gqa_in_sdpa = lambda *args, **kwargs: False
+
+
 def main() -> int:  # noqa: PLR0915 - one linear script: check, load, train, save
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("config", type=Path, nargs="?", default=CONFIG, help=f"default: {shown(CONFIG)}")
@@ -190,7 +220,8 @@ def main() -> int:  # noqa: PLR0915 - one linear script: check, load, train, sav
     from trl import GRPOConfig, GRPOTrainer
 
     base = load_base(cfg)
-    base = prepare_model_for_kbit_training(base, use_gradient_checkpointing=True)
+    base = prepare_model_for_kbit_training(base, use_gradient_checkpointing=True)  # float32 activations
+    no_gqa_in_sdpa()
     model = PeftModel.from_pretrained(base, cfg["adapter"], is_trainable=True)
     model.print_trainable_parameters()
 
@@ -222,6 +253,7 @@ def main() -> int:  # noqa: PLR0915 - one linear script: check, load, train, sav
 
     summary = {
         "name": cfg["name"],
+        "commit": git_commit(),
         "model": cfg["model"],
         "adapter": cfg["adapter"],
         "config": shown(a.config),
