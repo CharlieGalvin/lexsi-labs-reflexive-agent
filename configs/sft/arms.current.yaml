@@ -1,5 +1,5 @@
 # Arm B: whichever adapter is current (SEL-22), served by vLLM as "current".
-#   EXTRA_ADAPTERS="current=runs/sft-aya32b-r16-v2" just sft-serve      # or, on a running server:
+#   ADAPTER= EXTRA_ADAPTERS="current=runs/sft-aya32b-r16-v2" just sft-serve   # or, on a running server:
 #   just adapter-use <id> --why "..." --server http://localhost:8000      # swap without a restart
 # Same harness, prompt, decoding and customer as configs/arms.yaml; only the student differs:
 # it's served by vLLM on the pod (scripts/pod/serve.sh), on localhost:8000, no API key.

@@ -28,6 +28,7 @@ from typing import Any
 import yaml
 
 from reflexive import splits
+from reflexive.adapters import git_state
 from reflexive.files import ROOT, read_jsonl, sha256, shown
 from reflexive.sft import encode_all, pad_batch, relax_chat_template
 
@@ -252,6 +253,7 @@ def main() -> int:  # noqa: C901, PLR0915 - one linear script: load, tokenise, t
         "minutes": round(minutes, 1),
         "peak_gpu_gb": round(torch.cuda.max_memory_allocated() / 2**30, 1),
         "gpu": torch.cuda.get_device_name(0),
+        "code": git_state(),  # the commit trained from, and uncommitted changes (SEL-22 provenance)
     }
     repo = f"{HUB_ORG}/{cfg['name']}"
     if a.push:

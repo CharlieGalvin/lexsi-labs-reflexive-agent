@@ -7,10 +7,14 @@
 # at them); new adapters are named `aya32b-<method>-<version>`, e.g. aya32b-grpo-v1, aya32b-heal-c1.
 # The id is short and stable (sft-v2); `served_as` is the name vLLM serves it under.
 #
-# status: current (Arm B) | candidate (not yet decided) | superseded (was current, replaced) |
-#         not_adopted (decided against by its rule) | control (an ablation, never a candidate)
-# eval: means of 2 samples. val = the 30 validation tasks (13 retail, 5 airline, 12 telecom),
-# dev = the 36 dev tasks. Numbers are copied from docs/experiments/SFT.md, which links the runs.
+# status: what was decided about it. adopted (passed its rule: can be Arm B) | candidate (not yet
+#         decided) | superseded (replaced by a better one) | not_adopted (decided against by its
+#         rule) | control (an ablation, never a candidate). Which adapter IS Arm B lives only in
+#         results/adapters/state.json (`just adapter-use`), never here, so the two can't disagree.
+#         adapter-use refuses not_adopted and control adapters unless --force.
+# eval: val = the 30 validation tasks (13 retail, 5 airline, 12 telecom), dev = the 36 dev tasks;
+# mean over `samples` (each sample a full run), `of` tasks (default 30 / 36 / 100 for val / dev /
+# test). Numbers are copied from docs/experiments/SFT.md, which links the runs.
 
 base: CohereLabs/aya-expanse-32b
 hub_org: reagent-lexsi
@@ -26,7 +30,7 @@ adapters:
     served_as: sft
     ticket: SEL-65
     status: superseded
-    eval: {val: {mean: 14.0, samples: [16, 12]}, dev: {mean: 13.5, of: 36}}
+    eval: {val: {mean: 14.0, samples: [16, 12]}, dev: {mean: 13.5, of: 36, samples: [16, 11]}}
     metrics: [results/arm-S-retail-dev.metrics.json, results/arm-S-airline-dev.metrics.json, results/arm-S-telecom-dev.metrics.json]
 
   - id: sft-long
@@ -51,8 +55,8 @@ adapters:
     arm_config: configs/sft/arms.sft2.yaml
     served_as: sft2
     ticket: SEL-71
-    status: current
-    eval: {val: {mean: 17.0, samples: [16, 18]}, dev: {mean: 21.5, of: 36}}
+    status: adopted
+    eval: {val: {mean: 17.0, samples: [16, 18]}, dev: {mean: 21.5, of: 36, samples: [24, 19]}}
     metrics: [results/arm-S2-retail-dev.metrics.json, results/arm-S2-airline-dev.metrics.json, results/arm-S2-telecom-dev.metrics.json]
 
   - id: sft-v3

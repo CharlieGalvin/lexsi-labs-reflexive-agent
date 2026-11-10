@@ -6,8 +6,10 @@
 
 Adds to the repo the adapter weights are already in (`train_sft.py --push`): ``README.md`` (the
 model card), ``lexsi_provenance.json`` (registry entry, code commit, the run's summary) and the
-adapter's ``metrics`` files under ``eval/``. The upload's commit is recorded in
-``results/adapters/state.json`` as the adapter's revision, which ``just adapter-use`` pins.
+adapter's ``metrics`` files under ``eval/`` (cleared first, so only the registry's current list
+goes up). The card's status comes from `adapters.status_of`: ``results/adapters/state.json``
+decides which adapter is Arm B. The upload's commit is recorded in ``state.json`` as the
+adapter's revision, which ``just adapter-use`` pins.
 """
 
 from __future__ import annotations
@@ -31,15 +33,11 @@ def main() -> int:
     a = p.parse_args()
 
     reg = ad.load_registry()
-    problems = ad.check_registry(reg)
-    if problems:
-        print("⛔ fix configs/adapters.yaml first:\n  " + "\n  ".join(problems))
+    try:
+        adapter = ad.get_adapter(reg, a.id)
+    except ad.RegistryError as e:
+        print(f"⛔ {e}")
         return 1
-    by_id = ad.adapters_by_id(reg)
-    if a.id not in by_id:
-        print(f"⛔ no adapter {a.id!r}; the registry has {sorted(by_id)}")
-        return 1
-    adapter = by_id[a.id]
     summary_path = a.summary or ROOT / "runs" / adapter["repo"] / "run_summary.json"
     summary = json.loads(summary_path.read_text()) if summary_path.exists() else None
     if summary is None:
@@ -47,10 +45,13 @@ def main() -> int:
 
     out = ROOT / "results" / "adapters" / a.id
     out.mkdir(parents=True, exist_ok=True)
-    prov = ad.provenance(reg, adapter, summary, ad.git_commit())
+    prov = ad.provenance(reg, adapter, summary, ad.git_state(), ad.status_of(adapter, ad.load_state()))
+    if prov["code_commit"] is None:
+        print("   ! the run's summary has no training commit: the card says it wasn't recorded")
     (out / "lexsi_provenance.json").write_text(json.dumps(prov, indent=1, ensure_ascii=False) + "\n")
     (out / "README.md").write_text(ad.model_card(reg, adapter, prov))
-    (out / "eval").mkdir(exist_ok=True)
+    shutil.rmtree(out / "eval", ignore_errors=True)  # only this publish's metrics files go up
+    (out / "eval").mkdir()
     for m in adapter.get("metrics", []):
         if (ROOT / m).exists():
             shutil.copy(ROOT / m, out / "eval" / Path(m).name)
