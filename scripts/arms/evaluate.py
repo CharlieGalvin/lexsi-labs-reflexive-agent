@@ -16,6 +16,10 @@ seconds per conversation, and successes per million tokens and per dollar. See
 Reads results only, so it runs on any split, test included. Crashed conversations are counted
 and left out (re-run them first); a re-run's record replaces the crashed one.
 
+The success range resamples tasks (a task's samples together), and each sample's rate is shown
+too. An ``unknown`` or ``error`` verdict gives a range of rates instead of one rate. Successes
+per dollar count API spend only: a self-hosted student is $0, so compare arms per token.
+
 **Judges:** the oracle's LLM-judged checks (retail, airline) follow ``--judges`` as in
 ``oracle-score`` (auto: on with ``OPENAI_API_KEY``). With them off, some verdicts are
 ``unknown`` and the success rate isn't given.
@@ -42,13 +46,16 @@ ROW = (
 def line(name: str, s: dict[str, Any]) -> str:
     if s["success_bounds"]:
         lo, hi = s["success_bounds"]
-        succ = f"{lo:.0%}–{hi:.0%} ({s['verdicts']['unknown']} unknown)"
+        undecided = s["verdicts"]["unknown"] + s["verdicts"]["error"]
+        succ = f"{lo:.0%}–{hi:.0%} ({undecided} unknown or error)"
     elif s["success_rate"] is None:
         succ = "n/a"
     else:
-        lo, hi = s["success_wilson95"]
+        lo, hi = s["success_ci95"]
         k, n = s["verdicts"]["success"], s["verdicts"]["success"] + s["verdicts"]["failure"]
-        succ = f"{k}/{n} = {s['success_rate']:.0%} ({lo:.0%}–{hi:.0%})"
+        per = s["success_by_sample"]["rates"]
+        each = "" if len(per) < 2 else " [" + ", ".join(f"{v:.0%}" for v in per.values()) + "]"
+        succ = f"{k}/{n} = {s['success_rate']:.0%} ({lo:.0%}–{hi:.0%}){each}"
     total = s["total_tokens_mean"] if s["user_tokens_recorded"] else f"{s['agent_tokens_mean']}*"
     sel = f"  selection {s['tool_selection']}" if "tool_selection" in s else ""
     return ROW.format(name=name, succ=succ, sel=sel, total=total, **s)
@@ -69,9 +76,12 @@ def main() -> int:
     p.add_argument("--json", type=Path, help="write every summary and conversation here")
     a = p.parse_args()
 
-    from loguru import logger
+    try:
+        from loguru import logger
 
-    logger.remove()  # τ²-bench logs every step
+        logger.remove()  # τ²-bench logs every step
+    except ImportError:  # no τ²-bench here: nothing to silence
+        pass
     if a.success == "oracle":
         from reflexive.oracle import Tau2Oracle
 
@@ -116,6 +126,9 @@ def main() -> int:
         report["overall"] = overall
     if crashed:
         print(f"⚠ {crashed} crashed conversations left out: re-run them for a complete result")
+    errors = sum(v["summary"]["verdicts"]["error"] for v in report["files"].values())
+    if errors:
+        print(f"⚠ the oracle couldn't score {errors} conversations (verdict error): see --json for why")
     if not all(v["summary"]["user_tokens_recorded"] for v in report["files"].values()):
         print("* agent tokens only: these records predate the customer's token count (its cost is included)")
     if a.json:

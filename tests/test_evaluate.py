@@ -110,7 +110,34 @@ def test_unknown_verdicts_give_bounds_not_a_rate():
     ]
 
 
-def test_latest_keeps_the_rerun():
+def test_an_oracle_error_gives_bounds_not_a_rate():
+    s = ev.summarise([row("success"), row("failure"), row("error")])
+    assert s["success_rate"] is None and s["success_ci95"] is None
+    assert s["success_bounds"] == [pytest.approx(1 / 3, abs=1e-3), pytest.approx(2 / 3, abs=1e-3)]
+
+
+def test_the_range_resamples_tasks_not_conversations():
+    # 10 tasks, each passed in both samples or failed in both: 20 conversations, 10 independent results
+    rows = [
+        row("success" if t < 5 else "failure", task_id=f"retail:{t}", sample=s)
+        for t in range(10)
+        for s in (0, 1)
+    ]
+    lo, hi = ev.summarise(rows)["success_ci95"]
+    by_conv = [row("success" if i < 10 else "failure", task_id=f"retail:{i}") for i in range(20)]
+    lo2, hi2 = ev.summarise(by_conv)["success_ci95"]
+    assert hi - lo > hi2 - lo2  # paired samples carry less information than 20 separate tasks
+
+
+def test_each_sample_has_its_rate():
+    rows = [row("success", task_id="r:1", sample=0), row("failure", task_id="r:2", sample=0)]
+    rows += [row("success", task_id="r:1", sample=1), row("success", task_id="r:2", sample=1)]
+    assert ev.summarise(rows)["success_by_sample"] == {"rates": {"0": 0.5, "1": 1.0}, "mean": 0.75}
+
+
+def test_evaluate_keeps_the_rerun(monkeypatch):
+    monkeypatch.setattr(ev, "evaluate_record", lambda r, success, judge: row(success(r), task_id="retail:1"))
     a = rec([], error="crash")
     b = rec([], outcome={"passed": True})
-    assert ev.latest([a, b]) == [b]
+    rows, s = ev.evaluate([a, b], ev.saved_verdict)
+    assert [r["verdict"] for r in rows] == ["success"] and s["crashed_not_scored"] == 0

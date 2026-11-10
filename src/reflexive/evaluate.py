@@ -13,26 +13,40 @@ Per conversation (`evaluate_record`):
   customer's tokens (when the record has them; records from before 8 Nov have only its cost),
   the cost of both, and the wall-clock seconds.
 
-`summarise` turns a run's conversations into the arm's numbers: success with its 95% Wilson
-range, the scorers' means, TTC medians and means, and success per million tokens and per
-dollar. Crashed conversations (`reflexive.metrics.is_broken`) are counted, not scored. Works on
-any split, test included: it only reads results.
+`summarise` turns a run's conversations into the arm's numbers: success with its 95% range,
+the success rate of each sample, the scorers' means, TTC medians and means, and success per
+million tokens and per dollar. Crashed conversations (`reflexive.metrics.is_broken`) are
+counted, not scored. Works on any split, test included: it only reads results.
+
+**Success:** only success and failure verdicts make a rate. An ``unknown`` (judges off) or an
+``error`` (the oracle couldn't score it) could be either, so with any of them the summary gives
+the range they span (``success_bounds``) and no rate. The 95% range resamples **tasks**, not
+conversations: two samples of one task aren't independent, so counting them separately would
+make the range too narrow.
+
+**Per dollar** counts API spend only (the agent's and the customer's). A self-hosted student
+(the pod arms) costs $0 there, so its successes per dollar can't be compared with an API arm's;
+successes per million tokens can.
 """
 
 from __future__ import annotations
 
+import random
 import statistics
 from collections.abc import Callable, Iterable
 from functools import cache
 from typing import Any
 
+from reflexive.files import latest_records
 from reflexive.metrics import is_broken
-from reflexive.stats import wilson
 
 Record = dict[str, Any]
 
 SCORERS = ("tool_call_validity", "redundant_tool_calls", "agent_loop_detection")
 JUDGED = "tool_selection"
+REPS = 10_000
+UNDECIDED = ("unknown", "error")  # verdicts that could be a success or a failure
+COST_COVERS = "API calls only (agent and customer): a self-hosted student counts as $0"
 
 
 @cache
@@ -42,14 +56,6 @@ def tool_schemas(domain: str) -> tuple[dict, ...]:
 
     env = registry.get_env_constructor(domain)()
     return tuple(t.openai_schema for t in env.get_tools() if t.name != "done")
-
-
-def latest(records: Iterable[Record]) -> list[Record]:
-    """The last record per (task, sample): a re-run of a crashed conversation replaces it."""
-    keep: dict[tuple, Record] = {}
-    for r in records:
-        keep[(r.get("domain"), str(r.get("task_id")), r.get("sample", 0))] = r
-    return list(keep.values())
 
 
 def agent_scores(rec: Record, schemas: Iterable[dict], judge: Any = None) -> dict[str, Any]:
@@ -102,6 +108,8 @@ def evaluate_record(rec: Record, success: Callable[[Record], str], judge: Any = 
     """Everything SEL-38 reports for one conversation."""
     return {
         "task": f"{rec.get('domain')}:{rec.get('task_id')} #{rec.get('sample', 0)}",
+        "task_id": f"{rec.get('domain')}:{rec.get('task_id')}",
+        "sample": rec.get("sample", 0),
         "domain": rec.get("domain"),
         "verdict": success(rec),
         "termination": rec.get("termination"),
@@ -138,13 +146,44 @@ def _median(xs: list[float]) -> float | None:
     return round(statistics.median(xs), 2) if xs else None
 
 
+def task_bootstrap(rows: list[dict[str, Any]], reps: int = REPS, seed: int = 0) -> list[float] | None:
+    """95% percentile-bootstrap range of the success rate, resampling tasks (all their samples)."""
+    by_task: dict[str, list[int]] = {}
+    for i, r in enumerate(rows):
+        if r["verdict"] in ("success", "failure"):
+            by_task.setdefault(r.get("task_id") or f"row{i}", []).append(r["verdict"] == "success")
+    tasks = list(by_task.values())
+    if not tasks:
+        return None
+    rng = random.Random(seed)
+    stats = []
+    for _ in range(reps):
+        pick = rng.choices(tasks, k=len(tasks))
+        stats.append(sum(map(sum, pick)) / sum(map(len, pick)))
+    stats.sort()
+    return [round(stats[int(0.025 * reps)], 4), round(stats[min(int(0.975 * reps), reps - 1)], 4)]
+
+
+def by_sample(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Success per sample (each sample is one full run over the tasks) and their mean."""
+    rates = {}
+    for s in sorted({r.get("sample", 0) for r in rows}):
+        mine = [r for r in rows if r.get("sample", 0) == s]
+        if any(r["verdict"] in UNDECIDED for r in mine):
+            rates[str(s)] = None
+            continue
+        rates[str(s)] = round(sum(r["verdict"] == "success" for r in mine) / len(mine), 4) if mine else None
+    known = [v for v in rates.values() if v is not None]
+    mean = round(statistics.fmean(known), 4) if known and len(known) == len(rates) else None
+    return {"rates": rates, "mean": mean}
+
+
 def summarise(rows: list[dict[str, Any]], crashed: int = 0) -> dict[str, Any]:
     """An arm's headline numbers from its conversations' `evaluate_record` rows."""
     n_ok = sum(r["verdict"] == "success" for r in rows)
     n = sum(r["verdict"] in ("success", "failure") for r in rows)
-    unknown = sum(r["verdict"] == "unknown" for r in rows)
-    lo, hi = wilson(n_ok, n)
-    rated = bool(n) and not unknown  # an unknown could be either: give bounds, not a rate
+    undecided = sum(r["verdict"] in UNDECIDED for r in rows)
+    rated = bool(n) and not undecided  # an unknown or error could be either: bounds, not a rate
     out: dict[str, Any] = {
         "conversations": len(rows),
         "crashed_not_scored": crashed,
@@ -152,9 +191,14 @@ def summarise(rows: list[dict[str, Any]], crashed: int = 0) -> dict[str, Any]:
             v: sum(r["verdict"] == v for r in rows) for v in ("success", "failure", "unknown", "error")
         },
         "success_rate": round(n_ok / n, 4) if rated else None,
-        "success_wilson95": [round(lo, 4), round(hi, 4)] if rated else None,
-        "success_bounds": [round(n_ok / (n + unknown), 4), round((n_ok + unknown) / (n + unknown), 4)]
-        if unknown
+        "success_ci95": task_bootstrap(rows) if rated else None,
+        "ci_method": "percentile bootstrap over tasks (a task's samples together), 10,000 resamples",
+        "success_by_sample": by_sample(rows),
+        "success_bounds": [
+            round(n_ok / (n + undecided), 4),
+            round((n_ok + undecided) / (n + undecided), 4),
+        ]
+        if undecided
         else None,
     }
     for s in (*SCORERS, JUDGED):
@@ -173,6 +217,7 @@ def summarise(rows: list[dict[str, Any]], crashed: int = 0) -> dict[str, Any]:
     cost = sum(r["cost_usd"] or 0 for r in rows)
     out["successes_per_million_tokens"] = round(n_ok / tokens * 1e6, 3) if tokens else None
     out["successes_per_dollar"] = round(n_ok / cost, 3) if cost else None
+    out["cost_covers"] = COST_COVERS
     out["user_tokens_recorded"] = all(r.get("user_tokens") is not None for r in rows) if rows else None
     return out
 
@@ -183,7 +228,7 @@ def evaluate(
     """(one row per scored conversation, the summary) for a run's records."""
     from concurrent.futures import ThreadPoolExecutor
 
-    recs = latest(records)
+    recs = latest_records(records)
     broken = [r for r in recs if is_broken(r)]
     ok = [r for r in recs if not is_broken(r)]
     with ThreadPoolExecutor(max(1, workers)) as pool:
