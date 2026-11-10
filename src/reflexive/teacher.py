@@ -415,6 +415,16 @@ class ContextTooLong(RuntimeError):
     """The model's API refused the prompt as longer than its context window."""
 
 
+# How each server words it: Cohere ("too many tokens: size limit exceeded"), vLLM and OpenAI
+# ("This model's maximum context length is 32768 tokens"); litellm's own class for either
+_TOO_LONG = ("too many tokens", "maximum context length")
+
+
+def _too_long(e: Exception) -> bool:
+    names = {c.__name__ for c in type(e).__mro__}
+    return "ContextWindowExceededError" in names or any(s in str(e).lower() for s in _TOO_LONG)
+
+
 class CohereClient:
     """Aya Expanse 32B (by default) as the agent: one call per agent turn."""
 
@@ -482,7 +492,7 @@ class CohereClient:
                         raise _NoResponse("the API returned no choices")
                     break
                 except Exception as e:
-                    if "too many tokens" in str(e).lower():
+                    if _too_long(e):
                         raise ContextTooLong(str(e)) from e
                     if attempt == self.num_retries or not _retryable(e):
                         raise

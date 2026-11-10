@@ -1,0 +1,40 @@
+# SFT v2 (SEL-71): v1 plus the teacher's extra verified airline passes. One change from v1: the data.
+# Build the data:  python scripts/data/build_extra_fixes.py --domains airline
+# Train on the pod: just sft-train configs/train/sft_aya32b_v2.yaml --push
+#
+# Why: v1 failed the DevGate on airline (-2): it cancels reservations the policy doesn't allow,
+# from only 19 airline examples (the teacher already explains its eligibility checks in them).
+# Hypothesis: more varied airline examples (attempts 2-3 at temperature 0.7 on the same train
+# tasks) teach the eligibility rule. Everything below is v1's, except name, data and train_group.
+
+name: sft-aya32b-r16-v2
+model: CohereLabs/aya-expanse-32b
+data: data/train/sft-v2.jsonl          # v1's sft-all examples + group "extra"
+train_group: [healable, extra]
+eval_group: solved_by_aya             # the same 15 held-out examples as v1 (no extras for them)
+max_len: 16384
+
+lora:
+  r: 16
+  alpha: 32
+  dropout: 0.05
+  target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+
+quantization:
+  load_in_4bit: true
+  quant_type: nf4
+  double_quant: true
+
+trainer:
+  num_train_epochs: 2
+  learning_rate: 1.0e-4
+  lr_scheduler_type: cosine
+  warmup_ratio: 0.05
+  per_device_train_batch_size: 1
+  gradient_accumulation_steps: 4
+  max_grad_norm: 1.0
+  weight_decay: 0.0
+  optim: paged_adamw_8bit
+  logging_steps: 1
+  eval_steps: 7
+  seed: 0

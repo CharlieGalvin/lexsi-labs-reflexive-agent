@@ -16,8 +16,11 @@ dependencies = [
 [project.optional-dependencies]
 # AgentTune is installed from source by `just setup`; it pins torch + transformers.
 train = ["datasets", "peft", "wandb", "pandas"]   # pandas: scripts/eval_lookup.py
-dev = ["pytest>=8", "pytest-bdd>=7", "ruff>=0.6", "ty==0.0.97", "huggingface_hub>=0.24"]
-# pytest-bdd: tests/features; ty: type checks (beta, so pinned exactly); huggingface_hub: just golden-publish
+# The SFT run on the GPU pod (SEL-65; scripts/pod/setup.sh): on top of train
+sft = ["trl", "bitsandbytes", "accelerate", "peft", "datasets"]
+dev = ["pytest>=8", "pytest-bdd>=7", "ruff>=0.6", "ty==0.0.97", "huggingface_hub>=0.24", "jinja2>=3.1"]
+# pytest-bdd: tests/features; ty: type checks (beta, so pinned exactly); huggingface_hub: just golden-publish;
+# jinja2: tests/test_sft.py renders Aya's chat template (on the pod it comes with transformers)
 # τ²-bench itself is NOT installed from here: a pip install from git leaves out its data/ folder
 # (tasks, databases, language packs). `just setup-dev` clones v2.0.0 into third_party/ and
 # installs it editable instead. This extra only adds what τ²-bench needs on top.
@@ -82,7 +85,7 @@ unsupported-operator = "warn"
 # deptry (`just quality`): imports with no declared dependency
 [tool.deptry]
 known_first_party = ["reflexive"]
-pep621_dev_dependency_groups = ["dev", "bench", "train"]   # tools and extras, not imports
+pep621_dev_dependency_groups = ["dev", "bench", "train", "sft"]   # tools and extras, not imports
 extend_exclude = ["scripts/archive", "third_party", "tests"]
 
 [tool.deptry.package_module_name_map]
