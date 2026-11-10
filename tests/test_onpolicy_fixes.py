@@ -129,3 +129,78 @@ def test_watch_requests_reports_a_retried_request_and_passes_the_reply_on(monkey
     op.watch_requests()  # the real (non dry-run) path calls this before any teacher request
     assert httpx.post("https://openrouter.ai/x") is not None
     assert "↻ HTTP 429" in capsys.readouterr().out
+
+
+# --- review fixes -----------------------------------------------------------------------------
+
+
+def test_at_a_change_never_made_the_last_turns_own_changes_are_still_pending():
+    # the last turn cancels R1 and stops: it's the turn rewritten, so R1 must be redone in it
+    want = [("cancel_reservation", {"id": "R1"}, None), ("cancel_reservation", {"id": "R2"}, None)]
+    view = [SYSTEM, USER, agent(("cancel_reservation", {"id": "R1"})), TOOL, USER]
+    point = op.locate(view, want, mutating)
+    assert (point.turn, point.kind, point.detail) == (
+        2,
+        "change_never_made",
+        "never done: cancel_reservation",
+    )
+    assert point.pending == tuple(want)
+    both = agent(("cancel_reservation", {"id": "R1"}), ("cancel_reservation", {"id": "R2"}))
+    assert op.verify(both, point, mutating) == []
+
+
+ERROR = {"role": "tool", "tool_call_id": "c0", "content": "Error: reservation not found"}
+
+
+def test_a_call_the_environment_rejected_isnt_a_change():
+    view = [SYSTEM, USER, agent(("cancel_reservation", {"id": "R9"})), ERROR, agent(text="Sorry.")]
+    assert op.locate(view, [], mutating) is None  # changed nothing: not an unexpected change
+    want = [("cancel_reservation", {"id": "R1"}, None)]
+    view = [SYSTEM, USER, agent(("cancel_reservation", {"id": "R1"})), ERROR, USER, agent(text="Done.")]
+    point = op.locate(view, want, mutating)  # the expected call failed: the change was never made
+    assert point.kind == "change_never_made" and point.pending == tuple(want)
+
+
+def test_unparsable_arguments_dont_crash():
+    msg = {"role": "assistant", "tool_calls": [{"id": "c0", "function": {"name": "x", "arguments": "{bad"}}]}
+    assert op.calls_in(msg) == [("x", {"<unparsed>": "{bad"})]
+
+
+def _val(tmp_path, domain, n, cut=False):
+    lines = [json.dumps({"domain": domain, "task_id": str(i)}) for i in range(n)]
+    f = tmp_path / f"P-{domain}-val.jsonl"
+    f.write_text("\n".join(lines) + ('\n{"domain": "' if cut else "\n"))
+    return str(f)
+
+
+def test_the_validation_exclusion_must_be_whole(tmp_path):
+    files = [_val(tmp_path, d, n) for d, n in op.VAL_TASKS.items()]
+    ids, problems = op.val_ids(files)
+    assert len(ids) == 30 and problems == []
+    _, problems = op.val_ids(files[:2])  # telecom missing
+    assert problems == ["telecom: 0 validation tasks in --exclude, expected 12"]
+    _, problems = op.val_ids([*files[:2], _val(tmp_path, "telecom", 12, cut=True)])
+    assert "not valid JSON" in problems[0]  # a cut-short file is an error, not a short read
+
+
+def test_two_samples_fixed_at_the_same_turn_get_different_ids(monkeypatch):
+    from reflexive import heal
+
+    class Teacher:
+        def __init__(self, attempts, extra_check):
+            self.tried = {}
+
+        def fix(self, failure):
+            return {"id": "heal/x", "source": {"teacher": "glm", "attempt": 1}}
+
+    monkeypatch.setattr(heal, "PrefixTeacher", Teacher)
+    point = op.FixPoint(5, "unexpected_change", "x", ())
+
+    class F:
+        task = ("airline", "7")
+
+        def __init__(self, sample):
+            self.record = {"sample": sample}
+
+    ids = {op.teach(F(s), point, mutating, 3)[0]["id"] for s in (0, 1)}
+    assert ids == {"onpolicy/glm/airline/7/s0/t5/a1", "onpolicy/glm/airline/7/s1/t5/a1"}

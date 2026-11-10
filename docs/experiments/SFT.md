@@ -338,7 +338,12 @@ Plan and rule fixed at 21:16 on 9 Nov, before any result: v4 replaces v2 if its 
 | No fix point (actions matched) | 3 | — |
 
 - **No stop-short fixes:** at those points the teacher looked something up or asked to confirm (which
-  the policy requires), but the rule demanded the change itself in that turn.
+  the policy requires), but the rule demanded the change itself in that turn. **Also a bug, fixed
+  after this run (review of #56):** at a change-never-made point the script counted the last turn's
+  own changes as already made, though that turn is the one rewritten, so a correct rewrite that
+  redid them was refused. Calls the environment rejected ("Error…") also counted as changes. Both
+  are fixed; a re-run would find different fix points and accept different fixes, so the 29 of 54
+  and v4's data are from the earlier version.
 - **OpenRouter credit ran out** at fix point 51: the last 3 were refused for that reason.
 - **A spot check of 8** found the accepted turns sound: they confirm, re-check or hold back instead of
   v2's premature or wrong change.
@@ -346,8 +351,10 @@ Plan and rule fixed at 21:16 on 9 Nov, before any result: v4 replaces v2 if its 
 **Data and training:** `just sft-v4-data` (v2's file + 29 on-policy, group `onpolicy`); trains on 175
 (112 + 34 + 29) for 74 steps; held-out loss tracked SL's and v3's.
 
-**Result** (validation, 2 samples each): retail **7.0**, airline **3.5** (best of any arm), telecom
-6.5, total **17.0** (samples 18, 16). **Not adopted:** total below 19.5, telecom −1.5 against v2. The
+**Result** (validation, 2 samples each, the runs' own verdicts): retail **7.0**, airline **3.5** (best
+of any arm), telecom 6.5, total **17.0** (samples 18, 16). **Not adopted:** total below 19.5, telecom
+−1.5 against v2. The rule's third part, Tool/Arg at or below 5%, isn't computed yet
+(`classify_record` on `S4-*-val.jsonl`); the decision holds whatever it is. The
 fixes moved the domains they target, and telecom fell as it did for v3: at a fixed 74 steps, more
 non-telecom examples mean fewer passes over telecom's (about 2.0 per example for v2, 1.7 for v4).
 
