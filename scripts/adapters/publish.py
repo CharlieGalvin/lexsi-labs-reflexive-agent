@@ -71,7 +71,7 @@ def main() -> int:
     state = ad.load_state()
     state.setdefault("revisions", {})[a.id] = info.oid
     ad.save_state(state)
-    print(f"uploaded to {repo} at revision {info.oid[:10]}; recorded in {shown(ad.STATE)}")
+    print(f"uploaded to {repo} at revision {info.oid[:10]}; recorded in {shown(ad.STATE)} (commit it)")
     return 0
 
 

@@ -9,6 +9,12 @@ revision, why, when). The adapter is downloaded at the revision ``just adapter-p
 (else the repo's latest) into ``runs/<repo>``. With ``--server`` it's loaded into the running vLLM
 as ``current`` without a restart (serve.sh enables vLLM's runtime LoRA loading), so the arm config
 ``configs/sft/arms.current.yaml`` always runs whichever adapter is current.
+
+**The server must have LoRA on:** serve.sh enables it (and sets the largest rank) only when it
+starts with at least one adapter, so start it with ``EXTRA_ADAPTERS="current=runs/<repo>"``; a
+base-only server refuses the load. **Rollback** undoes the last switch, so two rollbacks in a row
+return to where you started; ``just adapter-use <id>`` goes to any adapter. The state file is
+written where this runs: on a pod, commit ``results/adapters/state.json`` from there.
 """
 
 from __future__ import annotations
@@ -45,9 +51,14 @@ def main() -> int:
     p.add_argument("--why", required=True, help="the reason, kept in the history")
     p.add_argument("--server", help="also load it into this running vLLM, e.g. http://localhost:8000")
     p.add_argument("--no-download", action="store_true", help="record the switch only")
+    p.add_argument("--by", default=getpass.getuser(), help="who switched (default: the machine's user)")
     a = p.parse_args()
 
     reg, state = ad.load_registry(), ad.load_state()
+    problems = ad.check_registry(reg)
+    if problems:
+        print("⛔ fix configs/adapters.yaml first:\n  " + "\n  ".join(problems))
+        return 1
     by_id = ad.adapters_by_id(reg)
     to = ad.previous(state) if a.rollback else a.id
     if to is None:
@@ -71,8 +82,8 @@ def main() -> int:
     if a.server:
         load_into_server(a.server, str(local))
         print(f"vLLM at {a.server} now serves {to} as {SERVED_NAME!r}")
-    ad.save_state(ad.switch(state, to, a.why, by=getpass.getuser()))
-    print(f"current: {state.get('current')} → {to}; recorded in {shown(ad.STATE)}")
+    ad.save_state(ad.switch(state, to, a.why, by=a.by))
+    print(f"current: {state.get('current')} → {to}; recorded in {shown(ad.STATE)} (commit it)")
     return 0
 
 

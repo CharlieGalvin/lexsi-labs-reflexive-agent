@@ -109,9 +109,22 @@ def test_use_records_the_switch_without_downloading(tmp_path, monkeypatch):
     monkeypatch.setattr(ad, "load_state", lambda: {"current": "sft-v2", "revisions": {}, "history": []})
     saved = {}
     monkeypatch.setattr(ad, "save_state", lambda s: saved.update(s))
-    monkeypatch.setattr(sys, "argv", ["use.py", "sft-v3", "--why", "a drill", "--no-download"])
+    monkeypatch.setattr(
+        sys, "argv", ["use.py", "sft-v3", "--why", "a drill", "--no-download", "--by", "Charlie"]
+    )
     assert use.main() == 0
     assert saved["current"] == "sft-v3" and saved["history"][-1]["from"] == "sft-v2"
+    assert saved["history"][-1]["by"] == "Charlie"
+
+
+def test_use_refuses_a_broken_registry(monkeypatch, capsys):
+    use = _script("use")
+    monkeypatch.setattr(
+        ad, "check_registry", lambda reg: ["exactly one adapter must have status current (Arm B)"]
+    )
+    monkeypatch.setattr(sys, "argv", ["use.py", "sft-v2", "--why", "test", "--no-download"])
+    assert use.main() == 1
+    assert "fix configs/adapters.yaml" in capsys.readouterr().out
 
 
 def test_publish_dry_run_writes_the_card_and_provenance(tmp_path, monkeypatch):
