@@ -4,7 +4,8 @@
 #
 # Why: on the 30 validation tasks v2 beat v1 by +3 (within noise), with the gain in telecom, not
 # airline, so the extra steps (74 against 56) may explain it. SL (sft_aya32b_long.yaml: v1's data,
-# 74 steps) measures that. v3 keeps the steps fixed at 74 too, so SL, v2 and v3 differ only in data:
+# 74 steps) measures that. v3 keeps the steps fixed at 74 too, so SL, v2 and v3 differ in data and so in
+# passes over it (at 4 examples a step: SL ~2.6, v2 ~2.0, v3 ~1.8; v3 sees ~40 examples once):
 #   SL: v1's 112 · v2: + 34 airline · v3: + 34 airline + 20 retail (no telecom extras exist).
 # Everything below is v2's, except name, data and max_steps.
 

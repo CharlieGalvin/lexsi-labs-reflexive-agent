@@ -183,7 +183,7 @@ done
 
 **Validation** (the 30 unseen train tasks, 2 samples, runs' own verdicts):
 - P: 9.0/30 on average.
-- v1 (S): retail 6, 6 /13; airline 3, 1 /5; telecom 6, 3 of 8 scored (8 crashed, to re-run).
+- v1 (S), before its telecom crashes were re-run: retail 6, 6 /13; airline 3, 1 /5; telecom 6, 3 of 8 scored (8 crashed). Superseded by the table in the next section (telecom 7 and 5 of 12, all scored).
 - On these unseen tasks, **v1 equalled the base model on airline** (2/5 on average each), confirming its airline weakness without using dev.
 - v2 on validation is still to run: it's the dev-independent test of the airline fix (done 9 Nov: see the next section).
 
@@ -209,10 +209,25 @@ each, scored in-run (`just arm-samples P S S2 --split val`).
 
 Commands: the task list for each domain comes from `P-<domain>-val.jsonl`. A resume rewrites an
 arm's own file without its crashed records, so a task whose samples all crashed vanishes from it.
+Pass `--out`: the validation tasks are train tasks, so without it the file is named
+`<arm>-<domain>-train.jsonl`, which `--split val` doesn't read.
+
+```bash
+# Pod, one arm at a time (two at once crashed telecom); <arm> and its config, e.g. S2 configs/sft/arms.sft2.yaml
+for d in retail airline telecom; do
+  ids=$(jq -r '.task_id' results/episodes/arms/P-$d-val.jsonl | sort -u | tr '\n' ' ')
+  just rollout <arm> $d --task-ids $ids --samples 2 --config <config> \
+    --out results/episodes/arms/<arm>-$d-val.jsonl
+done
+# Mac: just arm-samples P S S2 SL S3 --split val
+```
 
 ## SL and v3 (SEL-72): plan fixed before any result
 
-Three arms at the same **74 steps**, so they differ only in data:
+Three arms at the same **74 steps**. They differ in data, and so in passes over it: at 4 examples
+a step, SL makes about 2.6 passes over its 112, v2 2.0 over its 146 and v3 1.8 over its 166 (v3
+sees about 40 examples only once, which ones set by the shuffle). Matching steps keeps the compute
+equal, not the epochs:
 
 | Arm | Data | Config |
 |---|---|---|
@@ -222,6 +237,19 @@ Three arms at the same **74 steps**, so they differ only in data:
 
 Telecom has no extra verified passes, so it stays at v1's 47. Tests check that SL differs from v1
 only in its steps, and v3 from v2 only in its data and steps.
+
+**Reproduce v3:**
+
+```bash
+# Mac (teacher via OpenRouter, judges via OpenAI): v3's retail extras need the retail fix run too
+python scripts/teacher/fixes.py --domains retail airline --tasks all --all-attempts
+# Pod, with results/fixes/glm53f.jsonl copied up:
+just sft-v3-data                                        # → data/train/sft-v3.jsonl: 166 (146 without the retail run)
+just sft-train configs/train/sft_aya32b_v3.yaml --dry-run
+just sft-train configs/train/sft_aya32b_v3.yaml --push
+EXTRA_ADAPTERS="sft2=runs/sft-aya32b-r16-v2 sftlong=runs/sft-aya32b-r16-long sft3=runs/sft-aya32b-r16-v3" just sft-serve
+# then the validation rollouts above, with S3 and configs/sft/arms.sft3.yaml
+```
 
 **Reading SL:** SL ≈ v2 means the steps explain v2's gain over v1; SL ≈ v1 means the airline data
 helped, just not where expected.
@@ -236,7 +264,7 @@ headline arm is declared before test (SEL-26), and every test run is reported.
 
 ## SL and v3: results (9 Nov)
 
-All six arms on the 30 validation tasks, 2 samples each (`just arm-samples P S S2 SL S3 --split val`;
+All five arms on the 30 validation tasks, 2 samples each (`just arm-samples P S S2 SL S3 --split val`;
 SL's and S3's telecom crashes came from running both arms at once and were re-run one arm at a time):
 
 | Arm | Data | Steps | Retail (13) | Airline (5) | Telecom (12) | Total, mean | Samples |
@@ -249,6 +277,15 @@ SL's and S3's telecom crashes came from running both arms at once and were re-ru
 
 **v3 isn't adopted:** its total (17.0) needed 19.5 or more, and telecom fell 1.5 against v2 (at most 1
 allowed). v2 stays Arm B and GRPO's starting adapter, as fixed at 19:24 in SEL-72.
+
+**These are the runs' own verdicts** (`just arm-samples`), not re-scored with `just oracle-score`,
+which `samples.py` says the reported numbers need; crashed conversations are counted apart, not as
+failures, and all were re-run. The telecom condition sits within 0.5 of its limit, so a re-score
+could change it, but the decision doesn't rest on it: the total misses 19.5 by 2.5. Re-score before
+these numbers go in the report.
+
+**Confound:** at a fixed 74 steps the arms also differ in passes over their data (above), so SL against
+v2 against v3, and v3's telecom drop, are data *and* epochs, not data alone.
 
 - **SL sits halfway between v1 and v2** (14.0 → 15.5 → 17.0). Each step of 1.5 is within v1's sample
   spread of 4, so the shares due to training longer and to the airline data can't be separated.
