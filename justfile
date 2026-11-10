@@ -211,6 +211,12 @@ arm-compare a b *args:
 rollout arm domain *args:
     python scripts/arms/rollout.py "$@"
 
+# An arm on the 30 validation tasks, 2 samples (task lists from P-<domain>-val.jsonl), e.g.
+# `just arm-val G configs/sft/arms.grpo.yaml`; then `just arm-samples S2 G --split val`
+[positional-arguments]
+arm-val arm config *args:
+    python scripts/arms/val_rollout.py "$@"
+
 # Experiment commands (train, evaluate…) are added by the Architect and Trainer.
 
 # Heal cycles (SEL-47): rollout → teacher fix → retrain → gate → swap, with an audit record.
