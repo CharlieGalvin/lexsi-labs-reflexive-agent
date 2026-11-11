@@ -127,6 +127,10 @@ each (`just arm-val H configs/sft/arms.grpo_heal.yaml`, `just arm-samples S2 H -
 2. **no domain drops by more than 1 task** against v2: retail ≥ 5.5, airline ≥ 1.5, telecom ≥ 7.0;
 3. **Tool/Arg hallucination is no higher than v2's:** at most 4 of 60 conversations.
 
+**Dev, whatever validation says** (SEL-49, the M2 exit criterion: does GRPO beat SFT v2 and Arm A
+on dev?): H on the 36 dev tasks, 2 samples each, oracle-scored; `just arm-compare` H against S2
+and H against Arm A, per domain, with 95% ranges; `just gate-check S2 H`.
+
 Reported alongside, not part of the rule: the Tool, Arg and Loop rates per domain against v2
 (`just arm-metrics`), and loops, steps and repeated calls (`just arm-compare`). If H passes, it
 runs on test (SEL-26) and whether it replaces v2 as Arm B is agreed with the team. If not, it is
