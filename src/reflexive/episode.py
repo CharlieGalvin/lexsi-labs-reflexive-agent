@@ -189,6 +189,7 @@ class Tau2Episode:
         }
         self.done = False
         self._overflowed = False
+        self._monitor_stopped = False
         self.started: float | None = None
         self.ended: float | None = None
 
@@ -363,6 +364,17 @@ class Tau2Episode:
         if not self.done:
             self._send_done()
 
+    def stop_for_monitor(self) -> None:
+        """End the conversation because the runtime monitor's guard stopped a loop (``monitor_stop``).
+
+        τ²-bench is sent the agent's stop, as `finish` does, and grades it that way
+        (`outcome.SCORED_AS`), but the termination says the harness ended it, not the agent: a
+        goodbye loop cut short after the task was done can pass, and that pass is the guard's.
+        """
+        if not self.done:
+            self._monitor_stopped = True
+            self._send_done()
+
     def _send_done(self) -> None:
         from tau2.data_model.message import AssistantMessage, ToolCall
 
@@ -415,7 +427,12 @@ class Tau2Episode:
         run = self._env._simulation_run if self._env else None
         if run is None:
             return "unexpected_error"
-        return run.termination_reason.value
+        reason = run.termination_reason.value
+        if self._monitor_stopped and reason == "agent_stop":
+            from reflexive.outcome import MONITOR_STOP
+
+            return MONITOR_STOP
+        return reason
 
     def trajectory(self) -> list[dict]:
         """The full conversation, including the customer's own tool calls, as OpenAI-style dicts.

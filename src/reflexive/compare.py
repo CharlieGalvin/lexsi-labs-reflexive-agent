@@ -43,7 +43,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from reflexive.hallucination import FailureType, agent_view_of, classify_record
-from reflexive.metrics import is_broken
+from reflexive.metrics import is_broken, monitor_stopped
 
 Record = dict[str, Any]
 Task = tuple[str, str]
@@ -194,6 +194,8 @@ class Comparison:
     shared_tasks: int
     reps: int
     seed: int
+    a_monitor_stopped: dict[str, Any] | None = None  # metrics.monitor_stopped: the guard's stops
+    b_monitor_stopped: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -205,6 +207,8 @@ class Comparison:
             "shared_tasks": self.shared_tasks,
             "reps": self.reps,
             "seed": self.seed,
+            "a_monitor_stopped": self.a_monitor_stopped,
+            "b_monitor_stopped": self.b_monitor_stopped,
             "method": "percentile bootstrap; difference paired on shared tasks (cluster by task)",
         }
 
@@ -252,7 +256,18 @@ def compare(
                 diff_ci=paired_bootstrap_diff(ta[m], tb[m], reps, seed + i),
             )
         )
-    return Comparison(rows, len(sa), len(sb), len(a) - len(sa), len(b) - len(sb), len(shared), reps, seed)
+    return Comparison(
+        rows,
+        len(sa),
+        len(sb),
+        len(a) - len(sa),
+        len(b) - len(sb),
+        len(shared),
+        reps,
+        seed,
+        monitor_stopped(sa),
+        monitor_stopped(sb),
+    )
 
 
 # --- Showing it --------------------------------------------------------------------------------
@@ -299,4 +314,11 @@ def to_markdown(c: Comparison, name_a: str, name_b: str) -> str:
         f"left out); the difference is paired on the {c.shared_tasks} tasks both ran. 95% percentile "
         f"bootstrap, {c.reps:,} resamples, seed {c.seed}. A mark means the difference's range excludes 0.",
     ]
+    for name, ms in ((name_a, c.a_monitor_stopped), (name_b, c.b_monitor_stopped)):
+        if ms and ms["conversations"]:
+            lines.append(
+                f"\n{name}: the runtime monitor's guard ended {ms['conversations']} conversations "
+                f"(termination monitor_stop), {ms['passed']} of them passed; counting those as "
+                f"failures, success is {ms['task_success_if_failed']:.1%}."
+            )
     return "\n".join(lines)

@@ -264,3 +264,38 @@ def test_a_half_written_last_line_from_a_stopped_rollout_is_skipped(tmp_path: Pa
 def test_the_cost_says_it_leaves_out_retried_first_attempts(tmp_path: Path, monkeypatch) -> None:
     m = json.loads(_run(tmp_path, monkeypatch, [rec(TRAIN[0], True)])[1].read_text())
     assert "lower bound" in m["note_cost"]
+
+
+def test_the_guards_stops_are_reported_on_their_own() -> None:
+    # SEL-69: a pass the guard ended is still a τ²-bench pass, but it's counted apart too
+    recs = [
+        rec("1", True),
+        rec("2", True, termination="monitor_stop"),
+        rec("3", False, termination="monitor_stop"),
+        rec("4", False),
+    ]
+    m = arm_metrics(recs)
+    assert m["task_success"] == 0.5 and m["termination"]["monitor_stop"] == 2
+    assert m["monitor_stopped"] == {"conversations": 2, "passed": 1, "task_success_if_failed": 0.25}
+    assert arm_metrics([rec("1", True)])["monitor_stopped"]["conversations"] == 0
+
+
+def test_a_guarded_run_is_named_as_its_own_run(tmp_path: Path, monkeypatch) -> None:
+    # SEL-69: the guard ablation's summary mustn't take the plain run's name (and file)
+    dev = splits.task_ids("retail", "dev")[:2]
+    recs = [rec(t, False, monitor={"mode": "act", "nudged_at": None}) for t in dev]
+    code, out = _run(tmp_path, monkeypatch, recs, name="A-retail-dev-guard")
+    m = json.loads(out.read_text())
+    assert code == 0 and m["run"] == "arm-A-retail-dev-guard" and m["monitor"].startswith("act")
+    code, out = _run(tmp_path, monkeypatch, [rec(t, False) for t in dev], "--force", name="A-retail-dev")
+    assert json.loads(out.read_text())["run"] == "arm-A-retail-dev"
+
+
+def test_name_gives_a_run_its_own_name(tmp_path: Path, monkeypatch) -> None:
+    # SEL-69 review: a second plain run on the same split mustn't take the baseline's name
+    dev = splits.task_ids("retail", "dev")[:2]
+    recs = [rec(t, False) for t in dev]
+    code, out = _run(
+        tmp_path, monkeypatch, recs, "--name", "arm-A-retail-dev-sel69", name="A-retail-dev-sel69"
+    )
+    assert code == 0 and json.loads(out.read_text())["run"] == "arm-A-retail-dev-sel69"
