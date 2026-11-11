@@ -207,7 +207,7 @@ def test_evaluate_keeps_the_crashes_spend(monkeypatch):
 
 
 def _script():
-    from tests._scripts import load_script
+    from _scripts import load_script
 
     return load_script("arms/evaluate")
 
