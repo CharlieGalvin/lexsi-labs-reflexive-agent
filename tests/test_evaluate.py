@@ -141,3 +141,109 @@ def test_evaluate_keeps_the_rerun(monkeypatch):
     b = rec([], outcome={"passed": True})
     rows, s = ev.evaluate([a, b], ev.saved_verdict)
     assert [r["verdict"] for r in rows] == ["success"] and s["crashed_not_scored"] == 0
+
+
+# --- review fixes -----------------------------------------------------------------------------
+
+
+def test_a_saved_pass_with_judges_off_is_unknown():
+    assert ev.saved_verdict(rec([], outcome={"passed": True, "skipped": ["NL_ASSERTION"]})) == "unknown"
+    assert ev.saved_verdict(rec([], outcome={"passed": True, "skipped": []})) == "success"
+    assert ev.saved_verdict(rec([], outcome={"passed": False, "skipped": ["NL_ASSERTION"]})) == "failure"
+
+
+def test_the_customers_phone_actions_arent_scored_as_the_agents():
+    customer_call = {
+        "role": "user",
+        "content": None,
+        "tool_calls": [
+            {"id": "c1", "type": "function", "function": {"name": "toggle_airplane_mode", "arguments": "{}"}}
+        ],
+    }
+    msgs = [
+        {"role": "user", "content": "my phone has no signal"},
+        customer_call,
+        {"role": "tool", "tool_call_id": "c1", "content": "Airplane mode off"},
+        customer_call,  # the customer repeats it: not the agent's redundancy
+        {"role": "tool", "tool_call_id": "c1", "content": "Airplane mode off"},
+        call("get_order", {"order_id": "#1"}),
+    ]
+    s = ev.agent_scores(rec(msgs), SCHEMAS)
+    assert s["tool_call_validity"] == 1.0 and s["redundant_tool_calls"] == 0.0
+
+
+def test_tool_schemas_need_no_tau2():
+    names = [t["function"]["name"] for t in ev.tool_schemas("telecom")]
+    assert names and "done" not in names
+    r = ev.evaluate_record({"task_id": "1", "messages": []}, ev.saved_verdict)  # no domain: no crash
+    assert r["tool_call_validity"] is None
+
+
+def test_customer_tokens_count_only_when_every_conversation_has_them():
+    s = ev.summarise([row("success"), row("failure", user_tokens=None, total_tokens=None)])
+    assert s["tokens_counted"] == "agent only"
+    assert s["successes_per_million_tokens"] == pytest.approx(1 / 2000 * 1e6, rel=1e-3)
+    assert ev.summarise([row("success")])["tokens_counted"] == "agent and customer"
+
+
+def test_no_efficiency_without_a_success_count():
+    s = ev.summarise([row("success"), row("unknown")])
+    assert s["successes_per_million_tokens"] is None and s["successes_per_dollar"] is None
+
+
+def test_crashed_spend_counts_in_the_cost():
+    s = ev.summarise([row("success")], crashed=1, crashed_cost=0.04)
+    assert s["cost_usd_total"] == pytest.approx(0.05) and s["successes_per_dollar"] == 20.0
+
+
+def test_evaluate_keeps_the_crashes_spend(monkeypatch):
+    monkeypatch.setattr(ev, "evaluate_record", lambda r, success, judge: row(success(r), task_id="retail:1"))
+    crash = rec([], error="crash", task_id="2", agent_usage={"est_cost": 0.03}, user_cost=0.01)
+    _, s = ev.evaluate([rec([], outcome={"passed": True}), crash], ev.saved_verdict)
+    assert s["crashed_not_scored"] == 1 and s["crashed_cost_usd"] == pytest.approx(0.04)
+
+
+# --- the script -------------------------------------------------------------------------------
+
+
+def _script():
+    from _scripts import load_script
+
+    return load_script("arms/evaluate")
+
+
+def test_a_task_in_no_split_is_unknown_not_a_crash():
+    from reflexive import splits
+
+    sc = _script()
+    dev = splits.task_ids("retail", "dev")[0]
+    assert sc.split_of([{"domain": "retail", "task_id": dev}]) == "dev"
+    assert sc.split_of([{"domain": "retail", "task_id": "no-such-task"}]) == "unknown"
+
+
+def _file(arm, task, sample=0, **kw):
+    r = {"domain": "retail", "task_id": task, "sample": sample, "arm": arm, "outcome": {"passed": True}, **kw}
+    return r, row("success", task_id=f"retail:{task}", sample=sample)
+
+
+def test_overall_refuses_different_arms():
+    sc = _script()
+    (a, ra), (s, rs) = _file("A", "1"), _file("S", "1")
+    got, why = sc.overall([([a], [ra], "dev"), ([s], [rs], "dev")])
+    assert got is None and "different arms" in why
+
+
+def test_overall_refuses_different_splits():
+    sc = _script()
+    (a, ra), (b, rb) = _file("A", "1"), _file("A", "2")
+    got, why = sc.overall([([a], [ra], "dev"), ([b], [rb], "test")])
+    assert got is None and "splits" in why
+
+
+def test_overall_counts_a_conversation_in_two_files_once():
+    sc = _script()
+    crash, _ = _file("A", "1", error="rate limit")
+    rerun, rr = _file("A", "1")
+    other, ro = _file("A", "2")
+    got, _ = sc.overall([([crash, other], [ro], "dev"), ([rerun], [rr], "dev")])
+    assert got["conversations"] == 2 and got["crashed_not_scored"] == 0

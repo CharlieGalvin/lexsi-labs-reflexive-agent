@@ -474,7 +474,9 @@ class Tau2Episode:
 
 
 def _user_usage(run: Any) -> dict[str, int] | None:
-    """The simulated customer's calls and tokens (TTC, SEL-38), from τ²-bench's messages."""
+    """The simulated customer's calls and tokens (TTC, SEL-38), from τ²-bench's messages.
+
+    None when no customer message carries usage: an unrecorded count, not zero tokens."""
     if run is None or not getattr(run, "messages", None):
         return None
     calls = prompt = completion = 0
@@ -484,6 +486,8 @@ def _user_usage(run: Any) -> dict[str, int] | None:
             calls += 1
             prompt += int(u.get("prompt_tokens") or 0)
             completion += int(u.get("completion_tokens") or 0)
+    if not calls:
+        return None
     return {"calls": calls, "prompt_tokens": prompt, "completion_tokens": completion}
 
 
