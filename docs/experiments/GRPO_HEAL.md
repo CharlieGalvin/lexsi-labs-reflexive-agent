@@ -1,7 +1,7 @@
 # Heal GRPO (arm H): the teacher's fixes at the student's Tool / Arg / Loop failures (SEL-75)
 
-**Status: plan, for the team to check (11 Nov).** Nothing here has run on the GPU yet. The rule in
-§6 is fixed before any H result.
+**Status: done (11 Nov). H fails its validation rule and doesn't beat SFT v2 on dev success; it
+halves loops and cuts repeated calls (§8).** The plan below (§1–§7) was fixed before any result.
 
 ## 1. Why a second GRPO run
 
@@ -214,3 +214,71 @@ as the teacher does), by failure type.
 
 **Cost:** teacher about $1; GPU about 3.5 h of training plus about 1.5 h of checks and evaluation
 on an H100 ($3.99/h): about $20.
+
+## 8. Results (11 Nov)
+
+**Summary.** H is far above Arm A and close to SFT v2, but not above it: it fails its validation
+rule (at most 17.0 of 30 against a bar of 19.5) and loses to v2 on dev success (18.5 against 21.5 of
+36; the gate rejects it). What it changes is how it fails: half as many loops as v2 on dev, and in
+telecom a sixth of v2's repeated calls (the one significant difference). Tool and Arg hallucination,
+already rare in v2, stay where they were.
+
+**Data and training.** The teacher fixed 177 of 178 points (TOOL 47/47, ARG 103/103, LOOP 62/63).
+The reward check passed on the real fixes (235 teacher turns at the maximum; every failed turn
+failed its own type's reward; canned replies 0.5 where the teacher called, 3.23 where it replied).
+SFT v2's precheck had something to learn on almost every prompt (`all_same` 12%, against G's 68%).
+Training ran all 100 steps (`b82e182`, 2.21 min/step, peak 64.2 GB); the drift guard didn't fire.
+In the training samples, Tool failures fell from 2.5% to 0 after step 40, Arg failures roughly
+halved (11% → 6%), and `fix` rose from 0.60 to 0.72; Loop failures in the samples rose (2% → 8–10%),
+mostly at Loop points. KL to SFT v2 peaked at about 0.04. Adapter `reagent-lexsi/grpo-heal-aya32b-v2`.
+
+**Held-out check** (30 prompts from 11 held-out train tasks, 4 samples): SFT v2 → H +0.11 reward (95%
+range −0.06 to +0.30): TOOL 3.72 → 3.89, LOOP 2.33 → 2.53, ARG 2.84 → 2.94; anchor turns unchanged
+(kind match 78% → 78%). No sign of G's collapse.
+
+**Validation** (30 tasks, 2 samples, the runs' own verdicts, as v2's 17.0). Serving check: v2 passed
+7 of 13 retail validation tasks on the same server (its earlier mean 6.5), so serving is fine.
+
+| | Retail (13) | Airline (5) | Telecom (12) | Total |
+|---|---:|---:|---:|---:|
+| SFT v2 | 6.5 | 2.5 | 8.0 | **17.0** |
+| H | 5.5 (11/26) | 2.5 (5/10) | ≥ 7.0 (14/20 scored, 4 crashed) | **≥ 15.0, ≤ 17.0** |
+| Rule | ≥ 5.5 ✓ | ≥ 1.5 ✓ | ≥ 7.0 ✓ | ≥ 19.5 **✗** |
+
+**H fails part 1**, whatever its 4 crashed telecom conversations would have scored. Part 3 (Tool/Arg
+on validation) wasn't printed by the evening run: `just arm-tool-arg H --split val`, no GPU needed.
+H doesn't run on test; SFT v2 stays Arm B.
+
+**Dev** (36 tasks, 2 samples, oracle-scored with judges on; SEL-49):
+
+| | Arm A | SFT v2 | H |
+|---|---:|---:|---:|
+| Success, mean of 2 samples | 2/36 (6%) | **21.5/36 (60%)** (24, 19) | 18.5/36 (51%) (19, 18) |
+| Tool or Arg (conversations) | — | 5/72 | 5/72 |
+| Loop (conversations) | — | 12/72 | **6/72** |
+| Classifier findings per conversation | — | 1.17 | **0.25** |
+
+| H − SFT v2, paired by task (95% range) | Retail | Airline | Telecom |
+|---|---:|---:|---:|
+| Success | −3.3 pts (−23.3 to +20.0) | −16.7 (−58.3 to +16.7) | −10.0 (−23.3 to +3.3) |
+| Tool or Arg | +3.3 (0.0 to +10.0) | 0.0 | −3.3 (−10.0 to 0.0) |
+| Loops | −10.0 (−23.3 to +3.3) | −8.3 (−25.0 to 0.0) | −6.7 (−20.0 to +6.7) |
+| Steps per task | −0.6 | +0.4 | −3.9 (−8.9 to +0.8) |
+| Repeated calls | −7.2 | −1.9 | **−38.5 (−58.8 to −1.0)** |
+
+`just gate-check S2 H` (sample 0): **REJECT**, 66.7% → 52.8%; 2 tasks only H passed, 7 only v2
+(McNemar p = 0.18); retail −1, airline −1, telecom −3. Against Arm A the comparison is unpaired
+(its dev conversations aren't on the volume; the committed metrics give 2/36): H's 18.5/36 is far
+above it.
+
+**Reading it.** The heal loop did what the rewards asked on single turns (held-out reward up on all
+three types, Tool failures gone in training, Arg halved) without G's collapse, and it carried over to
+whole conversations as *less looping*, not more success. v2 already made few Tool/Arg errors (5/72 on
+dev), so there was little of the targeted failure left to remove, and the Arg fixes taught asking
+rather than solving. Next, if there's time: train from base Aya (P, which fails by Tool/Arg 52/60),
+where the heal targets are common, or score whole conversations rather than single turns.
+
+**Not done:** the 4 crashed telecom validation conversations (they can't change the decision), H's
+Tool/Arg count on validation, and the paired comparison with Arm A (needs Charlie's and Chiara's
+`A-*-dev.jsonl`). All three run without a GPU except the first.
+
