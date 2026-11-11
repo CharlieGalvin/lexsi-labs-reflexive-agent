@@ -188,7 +188,7 @@ def build(
     fixes: Sequence[Record],
     golden: Sequence[Record],
     *,
-    anchors_per_fix: float = 1.0,
+    anchors_per_fix: float = 0.5,
     heldout_fraction: float = 0.1,
     seed: int = 0,
 ) -> tuple[list[Record], list[Record], Record]:

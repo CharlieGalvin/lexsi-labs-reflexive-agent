@@ -11,17 +11,19 @@ charts each one, ``rewards/<name>/mean``) with the weights from the config:
 * ``loop``: **no Loop failure** (``LOOP``): the turn doesn't repeat a call that already failed,
   doesn't make a call for the third time, doesn't send the same reply a third time, and isn't
   the failed turn again. Unless the teacher's fix does the same.
-* ``fix``: **agreement with the teacher's turn**: reply when the teacher replied, call when it
-  called (0.4), then the same tools (0.3) and arguments (0.3). For a reply, the kind is all
-  that's compared (1.0): there's no one right wording.
+* ``fix``: **agreement with the teacher's turn**. Where it called: a call (0.4), the same tools
+  (0.3) and arguments (0.3). Where it replied: a reply (0.2) and what it says (0.8, the F1 of its
+  content words against the teacher's: IDs, names, amounts, not filler), so a generic reply
+  ("Could you provide more details?") scores little.
 * ``guard``: the call is the whole reply (``format``) and the turn doesn't give up (a stop, a
   hand-off or a few words) unless the teacher did.
 
-A reply scores 1 on ``tool``, ``arg`` and ``loop``: it can't call a wrong tool. What stops the
-model from always replying is ``fix``: where the teacher called a tool, a reply gets 0 there.
-And where the student invented an ID, the teacher's fix usually *asks* the customer for it, so
-asking is what scores best. The first run (SEL-21) had only tool-call turns to learn from;
-here a reply is right wherever the teacher replied.
+**The failure rewards count only for the teacher's kind of turn** (Chiara's review, 11 Nov). A
+reply makes no call, so it can't fail ``tool``, ``arg`` or ``loop``; without this rule a reply
+would score 3.0 of 4.0 wherever the teacher called a tool, more than any call with one invented
+argument, and the model could learn "always ask" as G learned "always call". So a reply where
+the teacher called, or a call where it replied, scores 0 on all three (only ``guard`` remains).
+`just grpo-heal-reward-check` scores canned replies to show the reward can't be gamed that way.
 
 Every failure check applies to every prompt, whatever its label: a Loop prompt can still be
 answered with an invented argument. The label decides which prompts are in the data (the
@@ -35,6 +37,7 @@ Tool / Arg / Loop mix), and the weights decide what's optimised (Tool and Arg ab
 from __future__ import annotations
 
 import json
+import re
 import threading
 import time
 from collections import Counter
@@ -50,6 +53,35 @@ COMPONENTS = ("tool", "arg", "loop", "fix", "guard")
 DEFAULT_WEIGHTS = {"tool": 1.0, "arg": 1.0, "loop": 0.5, "fix": 1.0, "guard": 0.5}  # max 4.0
 ARG_KINDS = {"placeholder", "ungrounded", "unknown_param", "missing_param", "wrong_type"}
 LOOP_THRESHOLD = 3  # as the classifier's: the third identical call or reply is a loop
+REPLY_KIND = 0.2  # a reply where the teacher replied: 0.2 for the kind, 0.8 for what it says
+_WORD = re.compile(r"[#\w][\w.@#-]*\w|\w")
+STOPWORDS = frozenset(
+    "a an and are as at be but by can could do for from have how i if in is it its let me my "
+    "no not of on or our please so that the their them then there this to us was we what when "
+    "which will with would you your yes thank thanks sure hello hi help "
+    # customer-service filler: says nothing about this customer or task
+    "details information more provide look into moment anything else today assist understand "
+    "happy glad apologize sorry certainly okay ok just one".split()
+)
+
+
+def content_words(text: str) -> set[str]:
+    """The words that carry the reply's content: IDs, names, amounts, nouns; not filler."""
+    return {w for w in (m.group().casefold() for m in _WORD.finditer(text)) if w not in STOPWORDS}
+
+
+def word_overlap(text: str, target: str) -> float:
+    """F1 of the content words of a reply against the teacher's: 1.0 for the teacher's own reply,
+    low for a generic one ("Could you provide more details?") that names nothing it named."""
+    a, b = content_words(text), content_words(target)
+    if not b:
+        return 1.0 if not a else 0.5
+    hits = len(a & b)
+    if not hits:
+        return 0.0
+    precision, recall = hits / len(a), hits / len(b)
+    return 2 * precision * recall / (precision + recall)
+
 
 Record = dict[str, Any]
 
@@ -147,8 +179,8 @@ def score(
             fix = 0.4 + 0.3 * g._overlap(target_calls, calls) + 0.3 * args
         else:
             fix = 0.0
-    else:
-        fix = 0.0 if calls else 1.0
+    else:  # the teacher replied: a reply, scored on what it says
+        fix = 0.0 if calls else REPLY_KIND + (1 - REPLY_KIND) * word_overlap(text, target)
 
     # Guard: the call is the whole reply; no giving up unless the teacher did
     teacher_gave_up = g._gives_up(target, target_calls)
@@ -157,6 +189,13 @@ def score(
         1.0 if teacher_gave_up or not gives_up else 0.0
     )
 
+    # The failure rewards count only for the teacher's kind of turn (Chiara's review): otherwise a
+    # reply would score full marks on all three wherever the teacher called, and beat any call
+    # with one argument error.
+    kind_match = bool(calls) == bool(target_calls)
+    if not kind_match:
+        tool = arg = loop = 0.0
+
     return {
         "tool": tool,
         "arg": arg,
@@ -164,7 +203,7 @@ def score(
         "fix": round(fix, 4),
         "guard": guard,
         "kind": "call" if calls else "text",
-        "kind_match": bool(calls) == bool(target_calls),
+        "kind_match": kind_match,
         "tools": [c["name"] for c in calls],
         "wrong_tools": wrong_tools,
         "customer_tools": [n for n in wrong_tools if n in set(customer)],
@@ -249,8 +288,11 @@ class RewardFns:
                 with self.log.open("a") as f:
                     f.writelines(json.dumps(r, ensure_ascii=False) + "\n" for r in rows)
         if callable(log_metric := kwargs.get("log_metric")):  # TRL ≥ 1.x: extra charts
+            teacher_replies = sum(not _json(c, []) for c in kwargs["target_calls"]) / n
+            replies = sum(s["kind"] == "text" for s in scores) / n
             log_metric("heal/kind_match", sum(s["kind_match"] for s in scores) / n)
-            log_metric("heal/reply_share", sum(s["kind"] == "text" for s in scores) / n)
+            log_metric("heal/reply_share", replies)
+            log_metric("heal/reply_excess", replies - teacher_replies)  # the drift guard watches this
         return scores
 
     def _fn(self, component: str) -> Callable[..., list[float]]:

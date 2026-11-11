@@ -204,6 +204,10 @@ arm-metrics file *args:
 # Failed conversations: the expected state-changing actions against what the agent did (`--all`, `--out`)
 arm-failures +args:
     python scripts/arms/failure_diff.py {{args}}
+# Tool / Arg / Loop conversations per arm and domain, by the classifier (`--split val`: SEL-75's rule, part 3)
+arm-tool-arg +args:
+    python scripts/arms/tool_arg.py {{args}}
+
 # Passes per arm, domain and sample: the run-to-run spread (`--split val`)
 arm-samples +args:
     python scripts/arms/samples.py {{args}}

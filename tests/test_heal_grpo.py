@@ -264,13 +264,15 @@ def row_for(fix: dict[str, Any]) -> dict[str, Any]:
     return row
 
 
+# Fixes that are tool calls (grounded in the conversation), for the failure rewards to score against
+FIND_YUSUF = agent(call("f1", "find_user_id_by_email", email="yusuf.rossi@example.com"))
+PHONE = agent(call("f1", "get_customer_by_phone", phone_number="555-123-2002"))
+
+
 def test_each_failure_type_has_its_own_reward():
     t = train_task("retail")
-    arg_fix, loop_fix = fixes_for(retail_failure(t))
-    (tool_fix,) = fixes_for(
-        telecom_failure(train_task("telecom")),
-        agent(text="Could you open Settings and check the APN for me, please?"),
-    )
+    arg_fix, loop_fix = fixes_for(retail_failure(t), FIND_YUSUF)
+    (tool_fix,) = fixes_for(telecom_failure(train_task("telecom")), PHONE)
     tool = heal_rewards.score_row(action(("check_apn_settings", {})), row_for(tool_fix))
     assert tool["tool"] == 0.0 and tool["customer_tools"] == ["check_apn_settings"]
     arg = heal_rewards.score_row(action(("get_order_details", {"order_id": "<order_id>"})), row_for(arg_fix))
@@ -279,36 +281,49 @@ def test_each_failure_type_has_its_own_reward():
         action(("get_order_details", {"order_id": "<order_id>"})), row_for(loop_fix)
     )
     assert loop["loop"] == 0.0 and "repeated_failed_call" in loop["loop_kinds"]
+    right = heal_rewards.score_row(
+        action(("find_user_id_by_email", {"email": "yusuf.rossi@example.com"})), row_for(arg_fix)
+    )
+    assert heal_rewards.total(right, heal_rewards.DEFAULT_WEIGHTS) == 4.0
 
 
 def test_a_tool_docstring_example_counts_as_invented():
     t = train_task("retail")
-    arg_fix, _ = fixes_for(retail_failure(t))
+    arg_fix, _ = fixes_for(retail_failure(t), FIND_YUSUF)
     s = heal_rewards.score_row(
         action(("find_user_id_by_email", {"email": "something@example.com"})), row_for(arg_fix)
     )
     assert s["arg"] == 0.0 and s["arg_kinds"] == ["ungrounded"]
-    real = heal_rewards.score_row(
-        action(("find_user_id_by_email", {"email": "yusuf.rossi@example.com"})), row_for(arg_fix)
-    )
-    assert real["arg"] == 1.0
 
 
-def test_replying_where_the_teacher_called_loses_the_fix_reward_and_vice_versa():
+def test_the_failure_rewards_count_only_for_the_teachers_kind_of_turn():
+    """Chiara's review: a reply can't fail tool / arg / loop, so without this it scored 3.0 of 4.0
+    where the teacher called, more than a call with one invented argument."""
     t = train_task("retail")
-    anchors = heal_data.turn_rows(golden(t), heal_data.NONE)
-    call_row, text_row = anchors
-    reply = "Thanks! Let me know which order you mean and I'll look it up straight away."
-    assert heal_rewards.score_row(reply, call_row)["fix"] == 0.0
-    assert (
-        heal_rewards.score_row(action(("get_order_details", {"order_id": "#W2378156"})), call_row)["fix"]
-        == 1.0
+    call_row, text_row = heal_data.turn_rows(golden(t), heal_data.NONE)
+    w = heal_rewards.DEFAULT_WEIGHTS
+    generic = heal_rewards.score_row("Could you please provide more details?", call_row)
+    assert (generic["tool"], generic["arg"], generic["loop"], generic["fix"]) == (0.0, 0.0, 0.0, 0.0)
+    invented = heal_rewards.score_row(action(("get_order_details", {"order_id": "#W9999999"})), call_row)
+    assert heal_rewards.total(invented, w) > heal_rewards.total(
+        generic, w
+    )  # the right kind of turn beats a dodge
+    call_on_text = heal_rewards.score_row(action(("get_order_details", {"order_id": "#W2378156"})), text_row)
+    assert call_on_text["tool"] == call_on_text["fix"] == 0.0
+
+
+def test_what_a_reply_says_counts_where_the_teacher_replied():
+    t = train_task("retail")
+    _, text_row = heal_data.turn_rows(golden(t), heal_data.NONE)
+    teacher = heal_rewards.score_row(text_row["target"], text_row)
+    close = heal_rewards.score_row(
+        "Order #W2378156 was delivered. Do you want to return any items?", text_row
     )
-    assert heal_rewards.score_row(reply, text_row)["fix"] == 1.0
-    assert (
-        heal_rewards.score_row(action(("get_order_details", {"order_id": "#W2378156"})), text_row)["fix"]
-        == 0.0
-    )
+    generic = heal_rewards.score_row("Could you please provide more details?", text_row)
+    assert teacher["fix"] == 1.0 > close["fix"] > generic["fix"] == heal_rewards.REPLY_KIND
+    filler = "Let me look into that. One moment, please."
+    assert heal_rewards.word_overlap(filler, "Could you provide details?") == 1.0  # both say nothing
+    assert heal_rewards.word_overlap("Your order #W2378156 shipped.", "Could you provide details?") == 0.5
 
 
 def test_the_third_identical_call_and_message_are_loops_but_the_teacher_may_repeat():
@@ -349,11 +364,14 @@ def test_the_reward_functions_score_a_batch_once_and_log_every_sample(tmp_path: 
         f(completions=completions, prompts=[row["prompt"]] * 2, log_metric=seen.__setitem__, **cols)
         for f in rf.fns
     ]
-    assert outs[0] == [1.0, 1.0] and outs[1] == [1.0, 0.0]  # tool, then arg
+    assert outs[0] == [1.0, 0.0] and outs[1] == [
+        1.0,
+        0.0,
+    ]  # tool, then arg: the call isn't the teacher's kind
     assert rf.calls == 1  # scored once for all five
     logged = [json.loads(x) for x in (tmp_path / "rewards.jsonl").read_text().splitlines()]
     assert len(logged) == 2 and logged[0]["failure_type"] == "ARG" and logged[0]["reward"] == 4.0
-    assert seen["heal/reply_share"] == 0.5
+    assert seen["heal/reply_share"] == 0.5 and seen["heal/reply_excess"] == -0.5  # the teacher replied twice
 
 
 def test_the_reward_check_script_on_built_data(tmp_path: Path, capsys: pytest.CaptureFixture):
@@ -364,6 +382,7 @@ def test_the_reward_check_script_on_built_data(tmp_path: Path, capsys: pytest.Ca
     data.write_text("".join(json.dumps(r) + "\n" for r in train))
     assert check_script.main(["--data", str(data)]) == 0
     out = capsys.readouterr().out
+    assert "canned replies" in out
     assert "fails the arg reward at 4/4" in out and "fails the loop reward at 4/4" in out
 
 
@@ -484,3 +503,33 @@ def test_one_real_grpo_step_with_the_heal_rewards(tmp_path: Path):
     assert {r["failure_type"] for r in logged} <= {"ARG", "LOOP", "NONE"}
     metrics = trainer.state.log_history[0]
     assert all(f"rewards/{c}/mean" in metrics for c in heal_rewards.COMPONENTS)
+    assert "heal/reply_excess" in metrics  # what the drift guard watches
+
+
+def test_the_reward_check_fails_when_a_canned_reply_scores_too_well(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+):
+    t = train_task("retail")
+    train, _, _ = heal_data.build(
+        fixes_for(retail_failure(t)), [golden(t)], heldout_fraction=0, anchors_per_fix=1
+    )
+    data = tmp_path / "grpo-heal.jsonl"
+    data.write_text("".join(json.dumps(r) + "\n" for r in train))
+    monkeypatch.setattr(check_script, "CANNED_WHERE_CALLED", 0.0)  # a canned reply gets 0.5 there (guard)
+    assert check_script.main(["--data", str(data)]) == 1
+    assert "a canned reply scores too well" in capsys.readouterr().out
+
+
+def test_the_drift_guard_stops_when_replies_drift_from_the_teacher():
+    guard = ts.ReplyDrift(max_drift=0.10, window=3, after_step=5)
+    steps = [0.05, -0.05, 0.0, 0.05, 0.0, 0.1, 0.05]  # baseline ~0, small wobble: carry on
+    assert all(guard.update(i + 1, {"heal/reply_excess": v}) is None for i, v in enumerate(steps))
+    why = None
+    for i, v in enumerate([0.3, 0.3, 0.3]):  # replying 30 points more than the teacher
+        why = why or guard.update(len(steps) + i + 1, {"heal/reply_excess": v})
+    assert why and why.startswith("step 8:")  # the first step that pushes the average over
+    assert guard.update(99, {"heal/reply_excess": 0.0}) == why  # stays stopped
+    g = ts.ReplyDrift(window=2, after_step=1)
+    for i, v in enumerate([-0.2, -0.2, -0.2, -0.45, -0.45]):  # G's way: far fewer replies
+        g.update(i + 1, {"heal/reply_excess": v})
+    assert g.stopped and g.update(9, {"loss": 1.0}) == g.stopped

@@ -1,7 +1,7 @@
 """Heal GRPO prompts from the teacher's fixes, plus anchor turns (SEL-75).
 
     just grpo-heal-data                         # fixes + anchors → data/train/grpo-heal*.jsonl
-    just grpo-heal-data --anchors-per-fix 0.5   # fewer ordinary turns
+    just grpo-heal-data --anchors-per-fix 1     # as many ordinary turns as fixes (default 0.5)
 
 Each accepted fix (`just heal-fixes`) becomes one prompt: the student's conversation up to its
 failing turn, with the teacher's fix as the reference turn (a tool call or a reply), labelled
@@ -37,7 +37,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--fixes", type=Path, default=FIXES, help=f"default: {shown(FIXES)}")
     p.add_argument("--golden", type=Path, default=GOLDEN, help=f"anchors from (default: {shown(GOLDEN)})")
     p.add_argument("--out", type=Path, default=OUT)
-    p.add_argument("--anchors-per-fix", type=float, default=1.0)
+    p.add_argument("--anchors-per-fix", type=float, default=0.5)  # Chiara: more of each step on fixes
     p.add_argument("--heldout-fraction", type=float, default=0.1)
     p.add_argument("--seed", type=int, default=0)
     a = p.parse_args(argv)

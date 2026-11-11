@@ -23,6 +23,11 @@ reward_weights:                 # max 4.0; Tool and Arg are what we optimise, Lo
   fix: 1.0                      # the teacher's choice: reply or call, then its tools and arguments
   guard: 0.5                    # the call is the whole reply; no giving up unless the teacher did
 
+drift_guard:                    # stop if the model replies far more or less than the teacher (Chiara's review)
+  max_drift: 0.10               # 10 points further from the teacher's reply share than SFT v2 started
+  window: 10                    # steps averaged; the first 10 are the baseline
+  after_step: 20
+
 quantization:
   load_in_4bit: true
   quant_type: nf4

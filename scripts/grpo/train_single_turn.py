@@ -260,6 +260,43 @@ def prepare_for_training(base: Any) -> None:
     base.enable_input_require_grads()
 
 
+class ReplyDrift:
+    """The heal run's drift guard (SEL-75, Chiara's review): stop training if the model starts
+    replying much more, or much less, than the teacher did on the same prompts.
+
+    Watches ``heal/reply_excess`` (the samples' share of replies minus the teacher's, per step,
+    `reflexive.heal_rewards`). The first ``window`` logged steps are the baseline: SFT v2's own
+    habit. From ``after_step`` on, if the mean of the last ``window`` steps is more than
+    ``max_drift`` further from zero than the baseline was, training stops: G drifted to replying
+    almost never; a reward that rewarded generic questions would drift the other way."""
+
+    def __init__(self, max_drift: float = 0.10, window: int = 10, after_step: int = 20) -> None:
+        self.max_drift, self.window, self.after_step = max_drift, window, after_step
+        self.values: list[float] = []
+        self.baseline: float | None = None
+        self.stopped: str | None = None
+
+    def update(self, step: int, logs: dict[str, Any]) -> str | None:
+        """Feed one step's logs; returns why to stop, or None."""
+        if "heal/reply_excess" not in logs or self.stopped:
+            return self.stopped
+        self.values.append(float(logs["heal/reply_excess"]))
+        if self.baseline is None:
+            if len(self.values) >= self.window:
+                self.baseline = statistics.fmean(self.values[: self.window])
+            return None
+        if step < self.after_step:
+            return None
+        recent = statistics.fmean(self.values[-self.window :])
+        if abs(recent) - abs(self.baseline) > self.max_drift:
+            self.stopped = (
+                f"step {step}: reply share minus the teacher's averaged {recent:+.2f} over the last "
+                f"{self.window} steps, against {self.baseline:+.2f} at the start "
+                f"(limit ±{self.max_drift:g} more)"
+            )
+        return self.stopped
+
+
 def no_gqa_in_sdpa() -> None:
     """Make transformers expand Aya's key/value heads itself instead of asking SDPA for GQA.
 
@@ -326,11 +363,20 @@ def main() -> int:  # noqa: PLR0915 - one linear script: check, load, train, sav
     out.mkdir(parents=True, exist_ok=True)
     log = (out / "log.jsonl").open("w")
 
+    guard = ReplyDrift(**cfg["drift_guard"]) if cfg.get("drift_guard") else None
+
     class Log(TrainerCallback):
         def on_log(self, args, state, control, logs=None, **kw) -> None:  # noqa: ANN001, ANN003
             if logs:
                 log.write(json.dumps({"step": state.global_step, **logs}) + "\n")
                 log.flush()
+                if (
+                    guard
+                    and (why := guard.update(state.global_step, logs))
+                    and not control.should_training_stop
+                ):
+                    print(f"⛔ drift guard: {why}; stopping and saving the adapter")
+                    control.should_training_stop = True
 
     Trainer = releasing_trainer(GRPOTrainer)
     weights = {**reward_set(cfg).DEFAULT_WEIGHTS, **(cfg.get("reward_weights") or {})}
@@ -372,6 +418,7 @@ def main() -> int:  # noqa: PLR0915 - one linear script: check, load, train, sav
         "reward_weights": weights,
         "trainer": {k: v for k, v in args.items() if isinstance(v, str | int | float | bool)},
         "train_loss": result.training_loss,
+        "stopped_by_drift_guard": guard.stopped if guard else None,
         "steps": result.global_step,
         "minutes": round(minutes, 1),
         "minutes_per_step": round(minutes / max(result.global_step, 1), 2),
