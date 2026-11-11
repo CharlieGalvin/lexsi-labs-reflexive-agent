@@ -11,6 +11,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+import _tiny
 import pytest
 from _scripts import load_script
 
@@ -140,41 +141,13 @@ def test_sdpa_is_never_asked_for_gqa_so_float32_attention_stays_memory_efficient
 
 
 def test_one_real_grpo_step_on_a_tiny_model(tmp_path: Path):
-    torch = pytest.importorskip("torch")
-    transformers = pytest.importorskip("transformers")
-    peft = pytest.importorskip("peft")
+    pytest.importorskip("torch")
+    pytest.importorskip("peft")
     trl = pytest.importorskip("trl")
     from datasets import Dataset
-    from tokenizers import Tokenizer, decoders, models, pre_tokenizers
 
-    bytes_ = pre_tokenizers.ByteLevel.alphabet()  # a byte-level tokenizer built here: no download
-    vocab = {t: i for i, t in enumerate(["<pad>", "</s>", *sorted(bytes_)])}
-    raw = Tokenizer(models.BPE(vocab=vocab, merges=[]))
-    raw.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=False)
-    raw.decoder = decoders.ByteLevel()
-    tok = transformers.PreTrainedTokenizerFast(
-        tokenizer_object=raw, pad_token="<pad>", eos_token="</s>", padding_side="left"
-    )
-    tok.chat_template = (
-        "{% for m in messages %}<|{{ m['role'] }}|>{{ m['content'] }}</s>{% endfor %}"
-        "{% if add_generation_prompt %}<|assistant|>{% endif %}"
-    )
-    torch.manual_seed(0)
-    small = transformers.LlamaConfig(
-        vocab_size=len(tok),
-        hidden_size=32,
-        intermediate_size=64,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        num_key_value_heads=2,
-    )
-    base = transformers.AutoModelForCausalLM.from_config(small)
-    lora = peft.LoraConfig(r=4, lora_alpha=8, target_modules=["q_proj", "v_proj"], task_type="CAUSAL_LM")
-    peft.get_peft_model(base, lora).save_pretrained(tmp_path / "sft")  # stands in for SFT v2's adapter
-    tiny = transformers.AutoModelForCausalLM.from_config(small).to(torch.bfloat16)
-    ts.prepare_for_training(tiny)  # as the script does: frozen base, checkpointing, bfloat16 kept
-    assert all(p.dtype == torch.bfloat16 and not p.requires_grad for p in tiny.parameters())
-    model = peft.PeftModel.from_pretrained(tiny, tmp_path / "sft", is_trainable=True)
+    tok = _tiny.tokenizer()
+    model = _tiny.adapter_model(tmp_path, tok, ts.prepare_for_training)  # SFT v2 stand-in, bfloat16
 
     cfg = _data(tmp_path, _row(), _row())
     rows = ts.prompts(cfg)

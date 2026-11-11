@@ -32,7 +32,7 @@ from typing import Any
 
 import yaml
 
-from reflexive import grpo_data, grpo_rewards, splits
+from reflexive import grpo_data, grpo_rewards, heal_rewards, splits
 from reflexive.files import ROOT, read_jsonl, sha256, shown
 from reflexive.sft import relax_chat_template
 
@@ -40,6 +40,15 @@ HUB_ORG = "reagent-lexsi"
 CONFIG = ROOT / "configs" / "train" / "grpo_aya32b_v2.yaml"
 REQUIRED = ("name", "model", "adapter", "data", "trainer")
 COLUMNS = ("prompt", "target", "target_calls", "domain", "id")  # what the reward reads
+HEAL_COLUMNS = (*COLUMNS, "failure_type", "failed", "history")  # `rewards: heal` (SEL-75) reads these too
+JSON_COLUMNS = ("target_calls", "failed", "history")  # as JSON text: Arrow can't hold dicts of varying shape
+REWARD_SETS = {"single_turn": grpo_rewards, "heal": heal_rewards}
+
+
+def reward_set(cfg: dict[str, Any]) -> Any:
+    """The reward module the config names (``rewards:``): the first run's single-turn reward by
+    default, or ``heal``: one reward per failure type plus the teacher-fix agreement (SEL-75)."""
+    return REWARD_SETS[cfg.get("rewards", "single_turn")]
 
 
 def load(path: Path) -> dict[str, Any]:
@@ -47,8 +56,11 @@ def load(path: Path) -> dict[str, Any]:
     for key in REQUIRED:
         if key not in cfg:
             raise SystemExit(f"⛔ {shown(path)} has no {key!r}")
-    if bad := sorted(set(cfg.get("reward_weights") or {}) - set(grpo_rewards.COMPONENTS)):
-        raise SystemExit(f"⛔ unknown reward component(s) {bad}: expected some of {grpo_rewards.COMPONENTS}")
+    if cfg.get("rewards", "single_turn") not in REWARD_SETS:
+        raise SystemExit(f"⛔ unknown rewards {cfg['rewards']!r}: expected one of {sorted(REWARD_SETS)}")
+    components = reward_set(cfg).COMPONENTS
+    if bad := sorted(set(cfg.get("reward_weights") or {}) - set(components)):
+        raise SystemExit(f"⛔ unknown reward component(s) {bad}: expected some of {components}")
     return cfg
 
 
@@ -73,7 +85,10 @@ def prompts(cfg: dict[str, Any]) -> list[dict[str, Any]]:
     """The training rows, as the dataset's columns. ``target_calls`` as JSON text: Arrow can't
     hold argument dicts of different shapes in one column."""
     rows = read_rows(cfg["data"])
-    return [{**{k: r[k] for k in COLUMNS}, "target_calls": json.dumps(r["target_calls"])} for r in rows]
+    columns = HEAL_COLUMNS if cfg.get("rewards") == "heal" else COLUMNS
+    if missing := [c for c in columns if c not in rows[0]]:
+        raise SystemExit(f"⛔ {cfg['data']} has no {missing}: build it with `just grpo-heal-data`")
+    return [{k: json.dumps(r[k]) if k in JSON_COLUMNS else r[k] for k in columns} for r in rows]
 
 
 def grpo_args(cfg: dict[str, Any], out: Path, overrides: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -318,10 +333,15 @@ def main() -> int:  # noqa: PLR0915 - one linear script: check, load, train, sav
                 log.flush()
 
     Trainer = releasing_trainer(GRPOTrainer)
-    reward = grpo_rewards.make_reward_fn(cfg.get("reward_weights"), log_path=out / "rewards.jsonl")
+    weights = {**reward_set(cfg).DEFAULT_WEIGHTS, **(cfg.get("reward_weights") or {})}
+    if cfg.get("rewards") == "heal":  # one TRL reward function per component, weighted by TRL
+        reward_funcs = heal_rewards.RewardFns(out / "rewards.jsonl", weights).fns
+        args["reward_weights"] = [weights[c] for c in heal_rewards.COMPONENTS]
+    else:
+        reward_funcs = [grpo_rewards.make_reward_fn(weights, log_path=out / "rewards.jsonl")]
     trainer = Trainer(
         model=model,
-        reward_funcs=[reward],
+        reward_funcs=reward_funcs,
         args=GRPOConfig(**args),
         train_dataset=Dataset.from_list(rows),
         processing_class=tok,
@@ -348,7 +368,8 @@ def main() -> int:  # noqa: PLR0915 - one linear script: check, load, train, sav
             "max": max(lengths),
             "cap": cfg.get("max_prompt_tokens"),
         },
-        "reward_weights": {**grpo_rewards.DEFAULT_WEIGHTS, **(cfg.get("reward_weights") or {})},
+        "rewards": cfg.get("rewards", "single_turn"),
+        "reward_weights": weights,
         "trainer": {k: v for k, v in args.items() if isinstance(v, str | int | float | bool)},
         "train_loss": result.training_loss,
         "steps": result.global_step,

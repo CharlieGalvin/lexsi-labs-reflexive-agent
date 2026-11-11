@@ -106,6 +106,18 @@ grpo-train *args:
 grpo-heldout *args:
     python scripts/grpo/heldout_check.py {{args}}
 
+# Heal GRPO (SEL-75): the teacher's fixes at the student's Tool / Arg / Loop failures → data/heal/ (`--dry-run`: no API)
+heal-fixes *args:
+    python scripts/heal/make_fixes.py {{args}}
+
+# Heal GRPO prompts (SEL-75): the fixes plus anchor turns → data/train/grpo-heal*.jsonl
+grpo-heal-data *args:
+    python scripts/data/build_grpo_heal_data.py {{args}}
+
+# Heal rewards on the real data (SEL-75): teacher turns at the maximum, each failed turn caught by its type's reward
+grpo-heal-reward-check *args:
+    python scripts/data/check_heal_rewards.py {{args}}
+
 # Indicative SFT run on the GPU pod (SEL-65): QLoRA on Aya 32B, the agent's turns as targets → runs/
 sft-train *args:
     python scripts/sft/train_sft.py {{args}}

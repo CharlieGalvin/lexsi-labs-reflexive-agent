@@ -39,7 +39,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import train_single_turn as ts  # noqa: E402 - the trainer's config, data checks and model loading
 
-from reflexive import grpo_rewards  # noqa: E402
+from reflexive import grpo_rewards, heal_rewards  # noqa: E402
 from reflexive.compare import paired_bootstrap_diff  # noqa: E402
 from reflexive.files import ROOT, sha256, shown  # noqa: E402
 
@@ -88,23 +88,33 @@ def parse_adapters(specs: Sequence[str] | None, cfg: dict[str, Any]) -> dict[str
 
 
 def score_samples(
-    rows: list[dict[str, Any]], texts: list[list[str]], weights: dict[str, float]
+    rows: list[dict[str, Any]], texts: list[list[str]], weights: dict[str, float], rewards: Any = grpo_rewards
 ) -> list[dict[str, Any]]:
-    """One record per sample: the prompt's id and task, each reward part, the total, the text."""
+    """One record per sample: the prompt's id and task, each reward part, the total, the text.
+
+    ``rewards``: the config's reward module. With the heal rewards (SEL-75), ``exact`` is a full
+    ``fix`` score (the teacher's tools and arguments, or a reply where it replied), and each record
+    keeps ``kind_match`` (replied or called as the teacher did) and the prompt's ``failure_type``."""
     if len(texts) != len(rows):
         raise ValueError(f"{len(texts)} sample lists for {len(rows)} prompts")
     out = []
     for r, samples in zip(rows, texts, strict=True):
         for k, text in enumerate(samples):
-            s = grpo_rewards.score(text, r["target_calls"], r["domain"], r["prompt"], r["target"])
+            if rewards is heal_rewards:
+                s = heal_rewards.score_row(text, r)
+                exact = s["fix"] == 1.0
+            else:
+                s = grpo_rewards.score(text, r["target_calls"], r["domain"], r["prompt"], r["target"])
+                exact = s["tool_match"] == 1.0 and s["args_match"] == 1.0
             out.append(
                 {
                     "id": r["id"],
                     "domain": r["domain"],
                     "task_id": str(r["task_id"]),
+                    "failure_type": r.get("failure_type"),
                     "sample": k,
-                    "reward": grpo_rewards.total(s, weights),
-                    "exact": s["tool_match"] == 1.0 and s["args_match"] == 1.0,
+                    "reward": rewards.total(s, weights),
+                    "exact": exact,
                     **s,
                     "completion": text[:2000],
                 }
@@ -131,9 +141,15 @@ def _mean(xs: Sequence[float]) -> float:
     return round(statistics.fmean(xs), 4) if xs else 0.0
 
 
-def summarise(scored: dict[str, list[dict[str, Any]]], max_reward: float) -> dict[str, Any]:
+def summarise(
+    scored: dict[str, list[dict[str, Any]]],
+    max_reward: float,
+    components: Sequence[str] = grpo_rewards.COMPONENTS,
+) -> dict[str, Any]:
     """Per adapter: mean reward, each part's mean, exact-match share, the share of prompts whose
-    samples all scored the same, the mean by domain; and each adapter against the first."""
+    samples all scored the same, the mean by domain; and each adapter against the first. With the
+    heal rewards also ``kind_match`` (replied or called as the teacher did), the share of replies,
+    and reward, kind match and exact match by failure type."""
     adapters: dict[str, Any] = {}
     for name, rows in scored.items():
         groups = _by_prompt(rows)
@@ -146,9 +162,24 @@ def summarise(scored: dict[str, list[dict[str, Any]]], max_reward: float) -> dic
             "reward_share": round(_mean([r["reward"] for r in rows]) / max_reward, 4) if max_reward else None,
             "exact": _mean([float(r["exact"]) for r in rows]),
             "all_same": _mean([float(len({g["reward"] for g in grp}) == 1) for grp in groups.values()]),
-            "parts": {k: _mean([r[k] for r in rows]) for k in grpo_rewards.COMPONENTS},
+            "parts": {k: _mean([r[k] for r in rows]) for k in components},
             "by_domain": {d: _mean([r["reward"] for r in rows if r["domain"] == d]) for d in domains},
         }
+        if rows and "kind_match" in rows[0]:
+            types = sorted({str(r.get("failure_type")) for r in rows})
+            adapters[name]["kind_match"] = _mean([float(r["kind_match"]) for r in rows])
+            adapters[name]["reply_share"] = _mean([float(r["kind"] == "text") for r in rows])
+            adapters[name]["by_failure_type"] = {
+                t: {
+                    "samples": len(sub),
+                    "reward": _mean([r["reward"] for r in sub]),
+                    "kind_match": _mean([float(r["kind_match"]) for r in sub]),
+                    "exact": _mean([float(r["exact"]) for r in sub]),
+                    **{k: _mean([r[k] for r in sub]) for k in components},
+                }
+                for t in types
+                if (sub := [r for r in rows if str(r.get("failure_type")) == t])
+            }
     names = list(scored)
     diffs = {}
     for name in names[1:]:
@@ -161,17 +192,49 @@ def summarise(scored: dict[str, list[dict[str, Any]]], max_reward: float) -> dic
             "ci95": [round(ci[0], 4), round(ci[1], 4)] if ci else None,
             "tasks": len(a.keys() & b.keys()),
         }
-    return {"max_reward": max_reward, "adapters": adapters, "differences": diffs}
+    return {
+        "max_reward": max_reward,
+        "components": list(components),
+        "adapters": adapters,
+        "differences": diffs,
+    }
 
 
 def to_markdown(summary: dict[str, Any]) -> str:
-    parts = list(grpo_rewards.COMPONENTS)
-    head = ["adapter", "prompts", "reward", "exact", "all_same", *parts]
+    parts = summary.get("components") or list(grpo_rewards.COMPONENTS)
+    kinds = any("kind_match" in a for a in summary["adapters"].values())
+    head = [
+        "adapter",
+        "prompts",
+        "reward",
+        "exact",
+        "all_same",
+        *(["kind_match", "replies"] if kinds else []),
+        *parts,
+    ]
     lines = ["| " + " | ".join(head) + " |", "|" + "---|" * len(head)]
     for name, a in summary["adapters"].items():
         cells = [name, str(a["prompts"]), f"{a['reward']:.3f} / {summary['max_reward']:g}"]
-        cells += [f"{a['exact']:.0%}", f"{a['all_same']:.0%}", *(f"{a['parts'][k]:.2f}" for k in parts)]
+        cells += [f"{a['exact']:.0%}", f"{a['all_same']:.0%}"]
+        if kinds:
+            cells += [f"{a.get('kind_match', 0):.0%}", f"{a.get('reply_share', 0):.0%}"]
+        cells += [f"{a['parts'][k]:.2f}" for k in parts]
         lines.append("| " + " | ".join(cells) + " |")
+    if kinds:
+        lines += ["", "By failure type (NONE = anchor turns):", ""]
+        lines += ["| adapter | type | samples | reward | kind_match | exact | " + " | ".join(parts) + " |"]
+        lines += ["|" + "---|" * (6 + len(parts))]
+        for name, a in summary["adapters"].items():
+            for t, b in (a.get("by_failure_type") or {}).items():
+                cells = [
+                    name,
+                    t,
+                    str(b["samples"]),
+                    f"{b['reward']:.3f}",
+                    f"{b['kind_match']:.0%}",
+                    f"{b['exact']:.0%}",
+                ]
+                lines.append("| " + " | ".join(cells + [f"{b[k]:.2f}" for k in parts]) + " |")
     for name, d in summary["differences"].items():
         ci = f"95% range {d['ci95'][0]:+.3f} to {d['ci95'][1]:+.3f}" if d["ci95"] else "no range"
         diff = f"{d['reward_diff']:+.3f} reward ({ci}, resampling {d['tasks']} tasks)"
@@ -238,17 +301,18 @@ def run(
     sampler: Sampler,
     weights: dict[str, float],
     out: Path,
+    rewards: Any = grpo_rewards,
 ) -> dict[str, Any]:
     """Sample and score every adapter, writing each one's samples as it finishes; then the summary."""
     out.mkdir(parents=True, exist_ok=True)
     scored = {}
     for name, path in adapters.items():
         print(f"{name} ({path}): sampling {len(rows)} prompts")
-        scored[name] = score_samples(rows, sampler(rows, name, path), weights)
+        scored[name] = score_samples(rows, sampler(rows, name, path), weights, rewards)
         (out / f"{name}.jsonl").write_text(
             "".join(json.dumps(s, ensure_ascii=False) + "\n" for s in scored[name])
         )
-    return summarise(scored, max_reward=sum(weights.values()))
+    return summarise(scored, max_reward=sum(weights.values()), components=rewards.COMPONENTS)
 
 
 def main() -> int:
@@ -268,7 +332,8 @@ def main() -> int:
     data = a.data or heldout_data(cfg)
     rows = read_eval_rows(cfg, data, a.limit)
     adapters = parse_adapters(a.adapter, cfg)
-    weights = {**grpo_rewards.DEFAULT_WEIGHTS, **(cfg.get("reward_weights") or {})}
+    rewards = ts.reward_set(cfg)  # the run's own reward: single-turn (SEL-21) or heal (SEL-75)
+    weights = {**rewards.DEFAULT_WEIGHTS, **(cfg.get("reward_weights") or {})}
     t = cfg["trainer"]
     temperature = a.temperature if a.temperature is not None else t.get("temperature", 1.0)
     out = a.out or ROOT / "runs" / cfg["name"] / "heldout"
@@ -283,7 +348,7 @@ def main() -> int:
         return 0
 
     sampler = make_sampler(cfg, a.samples, temperature, t.get("max_completion_length", 384), a.seed)
-    summary = run(rows, adapters, sampler, weights, out)
+    summary = run(rows, adapters, sampler, weights, out, rewards)
     summary["inputs"] = {
         "config": shown(a.config),
         "data": {"file": data, "sha256": sha256(ROOT / data), "prompts": len(rows)},

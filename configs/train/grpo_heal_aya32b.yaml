@@ -1,0 +1,50 @@
+# Heal GRPO from SFT v2 (SEL-75), arm H: the teacher's fixes at the student's own Tool / Arg / Loop
+# failures, one reward per failure type. The README's loop: Detect & Classify -> teacher fix -> retrain.
+# Build the prompts:  just heal-fixes && just grpo-heal-data
+# On the pod:         just grpo-train configs/train/grpo_heal_aya32b.yaml --dry-run
+#                     just grpo-train configs/train/grpo_heal_aya32b.yaml --max-steps 3 --report-to none
+#                     just grpo-train configs/train/grpo_heal_aya32b.yaml --push
+#                     just grpo-heldout configs/train/grpo_heal_aya32b.yaml
+#
+# Everything but `data`, `rewards` and `reward_weights` is as in grpo_aya32b_v2.yaml (arm G, SEL-21),
+# so H differs from G only in what it learns from and how it's scored.
+
+name: grpo-heal-aya32b-v2
+model: CohereLabs/aya-expanse-32b
+adapter: reagent-lexsi/sft-aya32b-r16-v2   # SFT v2, as for G: H continues it
+data: data/train/grpo-heal.jsonl            # `just grpo-heal-data`: fixes (Tool/Arg/Loop) + anchor turns
+max_prompt_tokens: null
+
+rewards: heal                   # reflexive.heal_rewards: one TRL reward function per component
+reward_weights:                 # max 4.0; Tool and Arg are what we optimise, Loop counts half
+  tool: 1.0                     # no call to a tool the agent doesn't have (customer-only, unknown)
+  arg: 1.0                      # no placeholder, invented ID or schema error in the arguments
+  loop: 0.5                     # no repeat of a failed call, no third identical call or reply
+  fix: 1.0                      # the teacher's choice: reply or call, then its tools and arguments
+  guard: 0.5                    # the call is the whole reply; no giving up unless the teacher did
+
+quantization:
+  load_in_4bit: true
+  quant_type: nf4
+  double_quant: true
+
+trainer:                        # as G's (grpo_aya32b_v2.yaml)
+  max_steps: 100
+  per_device_train_batch_size: 1
+  gradient_accumulation_steps: 16
+  steps_per_generation: 8       # one prompt's 8 samples at a time (G's trials ran out of memory otherwise)
+  num_generations: 8
+  max_completion_length: 384
+  temperature: 1.0
+  beta: 0.04
+  learning_rate: 1.0e-5
+  lr_scheduler_type: constant_with_warmup
+  warmup_steps: 5
+  max_grad_norm: 1.0
+  optim: paged_adamw_8bit
+  logging_steps: 1
+  save_strategy: steps
+  save_steps: 25
+  save_total_limit: 4
+  log_completions: true
+  seed: 0
