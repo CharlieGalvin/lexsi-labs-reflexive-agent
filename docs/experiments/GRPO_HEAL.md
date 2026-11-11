@@ -202,7 +202,7 @@ just grpo-heldout configs/train/grpo_heal_aya32b.yaml --data data/train/grpo-hea
 just grpo-train configs/train/grpo_heal_aya32b.yaml --dry-run
 just grpo-train configs/train/grpo_heal_aya32b.yaml --max-steps 3 --report-to none
 just grpo-train configs/train/grpo_heal_aya32b.yaml --push --force && just grpo-heldout configs/train/grpo_heal_aya32b.yaml
-huggingface-cli download reagent-lexsi/sft-aya32b-r16-v2 --local-dir runs/sft-aya32b-r16-v2
+python -c "from huggingface_hub import snapshot_download as s; s('reagent-lexsi/sft-aya32b-r16-v2', local_dir='runs/sft-aya32b-r16-v2')"   # no huggingface-cli on the pod
 ADAPTER= EXTRA_ADAPTERS="heal=runs/grpo-heal-aya32b-v2 sft2=runs/sft-aya32b-r16-v2" just sft-serve   # then, in another tab:
 just arm-val S2 configs/sft/arms.sft2.yaml --domains retail --samples 1 --out results/episodes/arms/S2check-retail-val.jsonl
 just arm-val H configs/sft/arms.grpo_heal.yaml && just arm-samples S2 H --split val && just arm-tool-arg H --split val
