@@ -42,9 +42,8 @@ def main() -> int:
     samples = [json.loads(line) for line in (a.run / "rewards.jsonl").open()]
     g = groups(samples)
     comps = [c for c in COMPONENTS if c in samples[0]]
-    print(
-        f"{len(samples)} samples in {len(g)} groups (prompt x step), {len(samples) / max(len(g), 1):.1f} per group\n"
-    )
+    per = len(samples) / max(len(g), 1)
+    print(f"{len(samples)} samples in {len(g)} groups (prompt x step), {per:.1f} per group\n")
 
     print("Groups with NO variance (all samples score the same: no gradient from that prompt):")
     print(f"  total reward: {sum(sd([s['reward'] for s in v]) < 1e-9 for v in g.values()) / len(g):.0%}")
