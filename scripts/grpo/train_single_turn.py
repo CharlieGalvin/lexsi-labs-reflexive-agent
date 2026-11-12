@@ -86,9 +86,16 @@ def prompts(cfg: dict[str, Any]) -> list[dict[str, Any]]:
     hold argument dicts of different shapes in one column."""
     rows = read_rows(cfg["data"])
     columns = HEAL_COLUMNS if cfg.get("rewards") == "heal" else COLUMNS
+    if cfg.get("rewards") == "heal" and "decision" in rows[0]:  # arm H2: `just grpo-decision-data`
+        columns = (*columns, "decision")
+    if (cfg.get("reward_weights") or {}).get("decision") and "decision" not in columns:
+        raise SystemExit(
+            f"⛔ decision is weighted but {cfg['data']} has no decision column: `just grpo-decision-data`"
+        )
     if missing := [c for c in columns if c not in rows[0]]:
         raise SystemExit(f"⛔ {cfg['data']} has no {missing}: build it with `just grpo-heal-data`")
-    return [{k: json.dumps(r[k]) if k in JSON_COLUMNS else r[k] for k in columns} for r in rows]
+    as_json = (*JSON_COLUMNS, "decision")  # decision: arm H2
+    return [{k: json.dumps(r[k]) if k in as_json else r[k] for k in columns} for r in rows]
 
 
 def grpo_args(cfg: dict[str, Any], out: Path, overrides: dict[str, Any] | None = None) -> dict[str, Any]:

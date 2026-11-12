@@ -17,6 +17,10 @@ charts each one, ``rewards/<name>/mean``) with the weights from the config:
   ("Could you provide more details?") scores little.
 * ``guard``: the call is the whole reply (``format``) and the turn doesn't give up (a stop, a
   hand-off or a few words) unless the teacher did.
+* ``decision`` (arm H2, `reflexive.decision_data`): every state-changing call matches an expected
+  change still pending at this turn, checked against τ²-bench's expected actions; where the
+  teacher made the change, the sample makes it too. Weight 0 by default and 1.0 for rows without
+  a ``decision`` column, so H's rewards are unchanged.
 
 **The failure rewards count only for the teacher's kind of turn** (Chiara's review, 11 Nov). A
 reply makes no call, so it can't fail ``tool``, ``arg`` or ``loop``; without this rule a reply
@@ -46,11 +50,13 @@ from pathlib import Path
 from typing import Any
 
 from reflexive import grpo_rewards as g
+from reflexive.decision_data import decision_score
 from reflexive.hallucination import ACTION_TEXT, _arg_findings, domain_tools
 from reflexive.heal_data import call_key, norm_text
 
-COMPONENTS = ("tool", "arg", "loop", "fix", "guard")
-DEFAULT_WEIGHTS = {"tool": 1.0, "arg": 1.0, "loop": 0.5, "fix": 1.0, "guard": 0.5}  # max 4.0
+COMPONENTS = ("tool", "arg", "loop", "fix", "guard", "decision")
+# max 4.0; decision is H2's (0 here, so H is unchanged)
+DEFAULT_WEIGHTS = {"tool": 1.0, "arg": 1.0, "loop": 0.5, "fix": 1.0, "guard": 0.5, "decision": 0.0}
 ARG_KINDS = {"placeholder", "ungrounded", "unknown_param", "missing_param", "wrong_type"}
 LOOP_THRESHOLD = 3  # as the classifier's: the third identical call or reply is a loop
 REPLY_KIND = 0.2  # a reply where the teacher replied: 0.2 for the kind, 0.8 for what it says
@@ -118,6 +124,7 @@ def score(
     prompt: Sequence[Record],
     failed: Record | None = None,
     history: Record | None = None,
+    decision: Record | None = None,
 ) -> Record:
     """Score one sampled turn. Returns each component (0–1) plus what it found, for the log."""
     failed = failed or {"calls": [], "text": ""}
@@ -192,6 +199,9 @@ def score(
     # The failure rewards count only for the teacher's kind of turn (Chiara's review): otherwise a
     # reply would score full marks on all three wherever the teacher called, and beat any call
     # with one argument error.
+    # Decision: the state changes against the task's expected actions still pending (H2)
+    decision_value, decision_found = decision_score(calls, target_calls, decision)
+
     kind_match = bool(calls) == bool(target_calls)
     if not kind_match:
         tool = arg = loop = 0.0
@@ -202,6 +212,8 @@ def score(
         "loop": loop,
         "fix": round(fix, 4),
         "guard": guard,
+        "decision": decision_value,
+        "decision_found": decision_found,
         "kind": "call" if calls else "text",
         "kind_match": kind_match,
         "tools": [c["name"] for c in calls],
@@ -226,6 +238,7 @@ def score_row(text: str, row: Record) -> Record:
         prompt=row.get("prompt") or [],
         failed=_json(row.get("failed"), None),
         history=_json(row.get("history"), None),
+        decision=_json(row.get("decision"), None),
     )
 
 
@@ -264,7 +277,7 @@ class RewardFns:
         for i in range(n):
             row = {
                 k: kwargs[k][i]
-                for k in ("target", "target_calls", "domain", "failed", "history")
+                for k in ("target", "target_calls", "domain", "failed", "history", "decision")
                 if k in kwargs
             }
             row["prompt"] = prompts[i] if prompts is not None and isinstance(prompts[i], list) else []

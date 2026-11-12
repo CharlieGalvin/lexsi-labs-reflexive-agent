@@ -1,0 +1,28 @@
+# Arm H2: Aya Expanse 32B + SFT v2 + decision GRPO (H plus the decision reward), served as "decision":
+#   ADAPTER= EXTRA_ADAPTERS="decision=runs/grpo-decision-aya32b-v2" just sft-serve
+# Same harness, prompt, decoding and customer as S2 and G; only the adapter differs.
+# Run on the pod, one arm at a time:
+#   just arm-val H2 configs/sft/arms.grpo_decision.yaml                    # the 30 validation tasks, 2 samples
+#   just rollout H2 <domain> --split dev --samples 2 --config configs/sft/arms.grpo_decision.yaml
+# Test only if H2 passes its validation rule, fixed before any H2 result.
+
+student:
+  name: aya32-grpo-decision-v2
+  model: decision
+  api_base: http://localhost:8000/v1
+  api_key_env: null
+  mode: prompted          # the data contract (SEL-35): don't change these two
+  style: cohere
+  temperature: 0.0
+  max_tokens: 1024
+  max_context: 32768      # = serve.sh MAX_LEN
+  reserve: 4096
+  rpm: 0
+
+customer: null            # GPT-4.1, as for every arm
+
+arms:
+  H2:
+    name: grpo-decision-v2
+    description: "SFT v2 + heal GRPO with the decision reward (state changes against the expected actions)"
+    prompt_variant: default

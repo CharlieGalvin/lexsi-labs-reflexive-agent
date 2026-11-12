@@ -114,6 +114,10 @@ heal-fixes *args:
 grpo-heal-data *args:
     python scripts/data/build_grpo_heal_data.py {{args}}
 
+# Decision GRPO prompts (arm H2): H's prompts + the teacher's decision points, with pending expected changes
+grpo-decision-data *args:
+    python scripts/data/build_grpo_decision_data.py {{args}}
+
 # Heal rewards on the real data (SEL-75): teacher turns at the maximum, each failed turn caught by its type's reward
 grpo-heal-reward-check *args:
     python scripts/data/check_heal_rewards.py {{args}}
