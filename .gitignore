@@ -23,6 +23,10 @@ data/*
 results/*
 !results/.gitkeep
 !results/*.metrics.json
+# the adapter lifecycle's state (SEL-22): which adapter is Arm B, and every switch
+!results/adapters/
+results/adapters/*
+!results/adapters/state.json
 *.safetensors
 *.bin
 *.db
