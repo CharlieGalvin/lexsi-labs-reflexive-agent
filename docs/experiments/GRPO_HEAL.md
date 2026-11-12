@@ -302,9 +302,11 @@ failures aren't covered by this diff, so read it as a direction.
 **Reading it.** The heal loop did what the rewards asked on single turns (held-out reward up on all
 three types, Tool failures gone in training, Arg halved) without G's collapse, and it carried over to
 whole conversations as *less looping*, not more success. v2 already made few Tool/Arg errors (5/72 on
-dev), so there was little of the targeted failure left to remove, and the Arg fixes taught asking
-rather than solving. Next, if there's time: train from base Aya (P, which fails by Tool/Arg 52/60),
-where the heal targets are common, or score whole conversations rather than single turns.
+dev), so there was little of the targeted failure left to remove, and what replaced the error
+spirals was over-action (above): valid calls the rewards had no way to call wrong. Next, if there's
+time: add a decision check to the reward (the change matches one the task still expects, as in
+SEL-73), train from base Aya (P, which fails by Tool/Arg 52/60) where the heal targets are common,
+or score whole conversations rather than single turns.
 
 **Not done:** the 4 crashed telecom validation conversations (they can't change the decision), H's
 Tool/Arg count on validation, and the paired comparison with Arm A (needs Charlie's and Chiara's
