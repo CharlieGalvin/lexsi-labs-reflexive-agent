@@ -271,6 +271,34 @@ H doesn't run on test; SFT v2 stays Arm B.
 (its dev conversations aren't on the volume; the committed metrics give 2/36): H's 18.5/36 is far
 above it.
 
+**What H lost on, against v2** (dev; per-check verdicts and `scripts/arms/failure_diff.py`, 12 Nov):
+
+* **Which checks failed.** Retail: v2 had 3 conversations ended by tool errors or the step limit,
+  H none (1 context overflow); wrong final database 11 → 13. Airline: wrong database 5 → 7.
+  Telecom: customer's device not fixed (`ENV_ASSERTION`) 4 → 7; step limit and missing actions
+  unchanged (3 and 3). Of the 12 conversations v2 passed and H failed (same task and sample), 7
+  have a wrong database, 3 an unfixed device, 1 the step limit, 1 a judged message; H's are mostly
+  *longer* than v2's (retail/76: 50 messages against 30; telecom: 152 against 62), so it didn't give up.
+* **What went wrong in the database** (retail and airline failures, expected actions against what
+  the agent did). Missing changes 11 (v2) against 10 (H); wrong details 10 against 10; unrequested
+  changes 26 against 26, but of a different kind. **v2's extras are error spirals**: 16 of the 26
+  are one failing `modify_pending_order_items` retried 9 and 7 times (retail/112, retail/35) until
+  `too_many_errors`. H has none. **H's extras are valid, unrequested state changes**: 12 airline
+  `cancel_reservation` calls (task 39: the 3 asked for plus 4 more; 41 and 43: the wrong ones), an
+  unrequested `send_certificate` (36), cancelling a retail order that should have been modified
+  (78), returning extra items (82).
+
+So **H didn't stop acting; it acted where it shouldn't.** The hallucinations went down (no invented
+IDs, no error spirals, half the loops) and over-action came back, mostly in airline: the failure
+SFT v2 was built to fix (SEL-71: unwarranted airline cancellations 14 → 2). The Tool / Arg / Loop
+rewards check *how* a call is made, not *whether* it should be made: a cancellation with a real
+reservation ID passes all three, and Chiara's classifier doesn't flag a wrong decision either.
+GRPO pushed towards confident, valid calls, and the only brake on a wrong one was the single-turn
+`fix` reward. This matches SEL-73: v2's remaining failures are wrong decisions, not hallucinations.
+A heal reward needs a decision check (for example the expected-action matching SEL-73 uses for its
+fix points), not only a structural one. Small numbers (airline has 6 tasks) and telecom's extra
+failures aren't covered by this diff, so read it as a direction.
+
 **Reading it.** The heal loop did what the rewards asked on single turns (held-out reward up on all
 three types, Tool failures gone in training, Arg halved) without G's collapse, and it carried over to
 whole conversations as *less looping*, not more success. v2 already made few Tool/Arg errors (5/72 on
