@@ -35,7 +35,14 @@ def test_serve_uses_the_context_the_pod_arms_expect():
     found = re.search(r'MAX_LEN="\$\{MAX_LEN:-(\d+)\}"', text)
     assert found, "serve.sh sets no default MAX_LEN"
     default = int(found.group(1))
-    for f in ("arms.base.yaml", "arms.sft.yaml", "arms.sft2.yaml", "arms.sftlong.yaml", "arms.sft3.yaml"):
+    for f in (
+        "arms.base.yaml",
+        "arms.sft.yaml",
+        "arms.sft2.yaml",
+        "arms.sftlong.yaml",
+        "arms.sft3.yaml",
+        "arms.sft4.yaml",
+    ):
         cfg = yaml.safe_load((ROOT / "configs" / "sft" / f).read_text())
         assert cfg["student"]["max_context"] == default
 

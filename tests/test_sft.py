@@ -211,6 +211,7 @@ def test_the_config_trains_on_healable_and_holds_out_solved_by_aya():
         ("S2", "arms.sft2.yaml", "sft2"),
         ("SL", "arms.sftlong.yaml", "sftlong"),
         ("S3", "arms.sft3.yaml", "sft3"),
+        ("S4", "arms.sft4.yaml", "sft4"),
     ],
 )
 def test_the_pod_arms_match_arm_a_except_for_the_student_endpoint(key, file, model):
@@ -241,6 +242,15 @@ def test_v3_differs_from_v2_only_in_name_data_and_its_fixed_74_steps():
     v2, v3 = _train_cfg("sft_aya32b_v2.yaml"), _train_cfg("sft_aya32b_v3.yaml")
     assert v3["data"] == "data/train/sft-v3.jsonl" and v3["trainer"]["max_steps"] == 74
     assert _without(v3, "name", "data", "trainer.max_steps") == _without(v2, "name", "data")
+
+
+def test_v4_differs_from_v2_only_in_name_data_its_onpolicy_group_and_74_steps():
+    v2, v4 = _train_cfg("sft_aya32b_v2.yaml"), _train_cfg("sft_aya32b_v4.yaml")
+    assert v4["data"] == "data/train/sft-v4.jsonl" and v4["trainer"]["max_steps"] == 74
+    assert v4["train_group"] == [*v2["train_group"], "onpolicy"]
+    assert _without(v4, "name", "data", "train_group", "trainer.max_steps") == _without(
+        v2, "name", "data", "train_group"
+    )
 
 
 def test_sl_is_v1_trained_for_v2s_74_steps():
