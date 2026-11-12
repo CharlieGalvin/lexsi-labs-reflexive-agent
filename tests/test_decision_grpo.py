@@ -125,3 +125,15 @@ def test_the_trainer_keeps_the_decision_column(tmp_path, monkeypatch):
     data.write_text(json.dumps(row) + "\n")
     out = ts.prompts({"data": str(data), "rewards": "heal", "reward_weights": {"decision": 2.0}})
     assert json.loads(out[0]["decision"]) == COLUMN
+
+
+def test_wrong_only_scores_acting_and_holding_off_the_same():
+    column = {**COLUMN, "mode": dd.WRONG_ONLY}
+    teacher = [call("cancel_pending_order", order_id="#W1", reason="no longer needed")]
+    assert dd.decision_score(teacher, teacher, column) == (1.0, ["made"])
+    assert dd.decision_score([], teacher, column) == (1.0, [])  # held off: no longer 0.4
+    assert dd.decision_score(teacher, [], column) == (1.0, ["made"])  # early: no longer 0.5
+    assert (
+        dd.decision_score([call("cancel_pending_order", order_id="#W7", reason="x")], teacher, column)[0]
+        == 0.0
+    )

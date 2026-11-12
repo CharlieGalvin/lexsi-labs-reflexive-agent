@@ -26,6 +26,8 @@ from reflexive.heal_data import _RESULT
 
 Record = dict[str, Any]
 DECISION = "DECISION"  # the failure_type of a decision prompt
+DECISION_FIX = "DECISION_FIX"  # a teacher fix at the student's own wrong change (SEL-73's on-policy fixes)
+WRONG_ONLY = "wrong_only"  # H3: only a wrong change is penalised; acting and holding off score the same
 HOLD_OFF = 0.4  # no wrong change, but not the change the teacher made here (e.g. asked first)
 EARLY = 0.5  # a pending change made where the teacher didn't make one yet (e.g. before confirming)
 
@@ -100,9 +102,15 @@ def pending(expected: Sequence[Sequence[Any]], prompt: Sequence[Record]) -> list
     return left
 
 
-def decision_column(domain: str, task_id: str, prompt: Sequence[Record]) -> Record:
-    """The ``decision`` column of a GRPO row."""
-    return {"pending": pending(expected_writes(domain, task_id), prompt), "writes": write_tools(domain)}
+def decision_column(domain: str, task_id: str, prompt: Sequence[Record], mode: str | None = None) -> Record:
+    """The ``decision`` column of a GRPO row (``mode``: `WRONG_ONLY` for H3, else H2's scoring)."""
+    column: Record = {
+        "pending": pending(expected_writes(domain, task_id), prompt),
+        "writes": write_tools(domain),
+    }
+    if mode:
+        column["mode"] = mode
+    return column
 
 
 def decision_score(
@@ -116,6 +124,10 @@ def decision_score(
       `HOLD_OFF` (it changed nothing wrongly, but didn't do what was needed).
     * Where the teacher made no change: **1**; `EARLY` if the sample makes a pending change
       anyway (τ²-bench's policies want the customer's confirmation first).
+
+    With ``mode: wrong_only`` (H3): **0** for a wrong change, else **1**, so making a pending change,
+    asking first and replying all score the same, and the only thing rewarded is not changing the
+    wrong thing. (H2's 1-against-0.4 for making the teacher's change pushed it to act more.)
 
     No column (H's rows): 1.0, so H's rewards are unchanged."""
     if not column:
@@ -137,6 +149,8 @@ def decision_score(
             made.append(hit)
     if found:
         return 0.0, found
+    if column.get("mode") == WRONG_ONLY:
+        return 1.0, ["made"] if made else []
     teacher_writes = [c for c in target_calls if c["name"] in writes]
     if teacher_writes:
         return (1.0, ["made"]) if made else (HOLD_OFF, ["held off"])

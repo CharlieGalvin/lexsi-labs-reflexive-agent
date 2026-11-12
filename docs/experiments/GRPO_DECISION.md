@@ -52,3 +52,35 @@ scores. **Cut-off: if validation isn't scored by 22:00 on 12 Nov, H2 is reported
 This is the seventh model scored on the same 30 validation tasks (v1–v4, SL, G, H), and the rule
 was set after looking at v2's dev and validation failures. A pass is a strong hint, not proof; the
 test run would be the check.
+
+## H2's training (12 Nov, 01:12–03:38)
+
+Stopped by the drift guard at **step 53 of 100**: the reply share fell 0.17 below the teacher's over
+the last 10 steps (−0.06 at the start; limit 0.10 more). Peak 56 GB, 2.75 min a step. Over the
+training samples, `decision` didn't rise (0.97 in steps 0–7, between 0.81 and 0.97 after, 0.83 in
+steps 48–52), wrong or unexpected changes came in spikes, and **calls went from about 50–57% of turns
+to 80%** in the last steps. The step-53 adapter is the one judged on validation, as fixed above.
+
+**Why, as far as we can tell:** the decision reward paid 1.0 for making the teacher's change and
+0.4 for holding off (asking first, replying), so it pushed towards acting; and v2 already scored
+0.97 on the teacher's decision points, so there was little else to learn from.
+
+## H3: wrong-only reward, at the student's own wrong changes
+
+**Fixed 12 Nov, 08:40, before any H3 result and before H2's validation result.**
+
+Two changes from H2 (`configs/train/grpo_decision_h3_aya32b.yaml`):
+
+1. **Wrong-only decision reward** (`mode: wrong_only` in the data): a state change matching no
+   pending expected change scores 0; everything else (making a pending change, asking first,
+   replying) scores 1. Nothing pays for acting, so the only lesson is not to change the wrong thing,
+   which is most of v2's failures (about 29 of 55: wrong arguments or a change nobody asked for).
+2. **Prompts at v2's own wrong changes:** SEL-73's teacher fixes on SFT v2's train-pool
+   conversations (`onpolicy-fixes.jsonl`, the turns where v2 made a change it shouldn't have), each
+   twice, plus H2's prompts sampled to **100 in all**; **50 steps** (a checkpoint every 10). Built
+   with `just grpo-decision-data --name grpo-decision-h3 --wrong-only --onpolicy <file> --total 100`.
+
+Everything else as H2. **Rule:** the same three parts as H2 above (validation total ≥ 19.5; no
+domain more than 1 below v2; Tool/Arg at most 4 of 60), on the adapter at the end of training or
+where the drift guard stops it. Same 22:00 cut-off. H3 is the eighth model scored on these 30
+validation tasks: a pass is a hint, and test (as its own arm) the check.

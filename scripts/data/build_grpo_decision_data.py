@@ -89,6 +89,15 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--decisions-per-fix", type=float, default=1.0)
     p.add_argument("--heldout-fraction", type=float, default=0.1)  # as H
     p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--name", default=NAME, help=f"output file stem (default {NAME})")
+    p.add_argument("--wrong-only", action="store_true", help="H3: only a wrong change is penalised")
+    p.add_argument(
+        "--onpolicy", type=Path, help="H3: teacher fixes at the student's own wrong changes (SEL-73)"
+    )
+    p.add_argument("--onpolicy-repeat", type=int, default=2, help="each on-policy prompt this many times")
+    p.add_argument(
+        "--total", type=int, help="H3: train prompts in all (on-policy ones kept, the rest sampled)"
+    )
     a = p.parse_args(argv)
 
     for path, how in ((a.fixes, "just heal-fixes"), (a.golden, "just train-data")):
@@ -131,8 +140,32 @@ def main(argv: list[str] | None = None) -> int:
         )
         extra = [r for r in extra if r["id"] not in ids][: round(a.decisions_per_fix * n_fix[side])]
         rows += extra
+    if a.onpolicy:
+        own = [e for e in read_jsonl(a.onpolicy) if (e["domain"], str(e["task_id"])) not in banned]
+        dropped["onpolicy_on_validation_tasks"] = len(read_jsonl(a.onpolicy)) - len(own)
+        own_rows = []
+        for e in own:
+            for r in heal_data.turn_rows(e, dd.DECISION_FIX):
+                r["failed"] = heal_data.failed_of(e)  # the student's own wrong turn
+                own_rows.append(r)
+        held += [r for r in own_rows if (r["domain"], str(r["task_id"])) in held_tasks]
+        own_train = [r for r in own_rows if (r["domain"], str(r["task_id"])) not in held_tasks]
+        repeated = [
+            {**r, "id": r["id"] if k == 0 else f"{r['id']}~{k + 1}"}
+            for r in own_train
+            for k in range(a.onpolicy_repeat)
+        ]
+        if a.total:
+            import random as _random
+
+            rest = list(train)
+            _random.Random(a.seed).shuffle(rest)
+            train = repeated + rest[: max(0, a.total - len(repeated))]
+        else:
+            train += repeated
+    mode = dd.WRONG_ONLY if a.wrong_only else None
     for r in [*train, *held]:
-        r["decision"] = dd.decision_column(r["domain"], r["task_id"], r["prompt"])
+        r["decision"] = dd.decision_column(r["domain"], r["task_id"], r["prompt"], mode)
     for t in (*train, *held):
         if (t["domain"], str(t["task_id"])) in banned:
             print(f"⛔ {t['id']} is a validation task: refusing to write")
@@ -142,7 +175,7 @@ def main(argv: list[str] | None = None) -> int:
 
     random.Random(a.seed).shuffle(train)
     a.out.mkdir(parents=True, exist_ok=True)
-    out, held_out = a.out / f"{NAME}.jsonl", a.out / f"{NAME}.heldout.jsonl"
+    out, held_out = a.out / f"{a.name}.jsonl", a.out / f"{a.name}.heldout.jsonl"
     write_jsonl(out, train)
     write_jsonl(held_out, held)
     counts = {
@@ -165,7 +198,9 @@ def main(argv: list[str] | None = None) -> int:
         "seed": a.seed,
         "files": {out.name: sha256(out), held_out.name: sha256(held_out)},
     }
-    (a.out / f"{NAME}.report.json").write_text(json.dumps(full, indent=1) + "\n")
+    full["mode"] = mode
+    full["onpolicy"] = {"file": shown(a.onpolicy), "sha256": sha256(a.onpolicy)} if a.onpolicy else None
+    (a.out / f"{a.name}.report.json").write_text(json.dumps(full, indent=1) + "\n")
     for side in ("train", "heldout"):
         print(f"{side}: {sum(counts[side].values())} prompts: {counts[side]}")
     for label, c in full["check"]["train"].items():
@@ -174,7 +209,7 @@ def main(argv: list[str] | None = None) -> int:
             f"failed turn {c['failed_turn_decision_mean']}, pending at {c['with_pending_changes']}, "
             f"teacher changes state at {c['teacher_makes_a_change']}"
         )
-    print(f"wrote {shown(out)}, {held_out.name} and {NAME}.report.json")
+    print(f"wrote {shown(out)}, {held_out.name} and {a.name}.report.json")
     return 0
 
 
