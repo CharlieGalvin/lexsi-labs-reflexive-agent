@@ -16,7 +16,7 @@ for k in HF_TOKEN RUNPOD_API_KEY RUNPOD_POD_ID; do
   [ -n "$v" ] && export "$k=$v"
 done
 echo "=== waiting for h2eval ($(date +%T))"
-while tmux has-session -t h2eval 2>/dev/null; do sleep 60; done
+while tmux has-session -t "=h2eval" 2>/dev/null; do sleep 60; done
 echo "=== h2eval ended ($(date +%T)); uploading"
 
 STAGE=/workspace/h2-upload && rm -rf "$STAGE" && mkdir -p "$STAGE"

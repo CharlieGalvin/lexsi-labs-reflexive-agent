@@ -26,7 +26,7 @@ done
 say() { echo "=== $* ($(date +%T))"; echo "$* ($(date +%T))" >>"$OUT"; }
 
 say "H2 overnight started; waiting for training (tmux h2)"
-while tmux has-session -t h2 2>/dev/null; do sleep 60; done
+while tmux has-session -t "=h2" 2>/dev/null; do sleep 60; done
 if [ ! -f "$RUN/adapter_config.json" ]; then
   say "STOPPED: no adapter in $RUN, training failed: see tail /workspace/h2-train.log"
   exit 1
@@ -46,7 +46,7 @@ EXTRA="decision=$RUN"
 tmux new -d -s serve "ADAPTER= EXTRA_ADAPTERS='$EXTRA' bash $KATIE/scripts/pod/serve.sh >/workspace/h2-serve.log 2>&1"
 until curl -sf localhost:8000/v1/models >/dev/null; do
   sleep 15
-  if ! tmux has-session -t serve 2>/dev/null; then
+  if ! tmux has-session -t "=serve" 2>/dev/null; then
     say "STOPPED: the server died: tail /workspace/h2-serve.log"
     exit 1
   fi
