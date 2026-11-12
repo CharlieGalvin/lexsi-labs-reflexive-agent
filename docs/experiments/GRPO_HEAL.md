@@ -8,8 +8,8 @@ v2 on dev success. It halves loops, but makes more wrong *decisions*. SFT v2 sta
 | Dev: 36 tasks × 2 samples, oracle-scored | Arm A | SFT v2 (S2) | H |
 |---|---:|---:|---:|
 | Success, mean of 2 samples | 2/36 (6%) | **21.5/36 (60%)** | 18.5/36 (51%) |
-| Conversations with a Tool or Arg failure | — | 5/72 | 5/72 |
-| Conversations with a loop | — | 12/72 | **6/72** |
+| Conversations with a Tool or Arg failure | 50/51 | 5/72 | 5/72 |
+| Conversations with a loop | 31/51 | 12/72 | **6/72** |
 | Classifier findings per conversation | — | 1.17 | **0.25** |
 
 **H against SFT v2, paired by task** (95% range in brackets):
@@ -24,7 +24,18 @@ v2 on dev success. It halves loops, but makes more wrong *decisions*. SFT v2 sta
   only v2 passed 7 (McNemar p = 0.18).
 * **The one clear difference:** telecom's repeated calls, 45% → 7%. No success difference is clear
   on its own, but H is lower in every domain.
-* **Against Arm A:** far above (18.5 against 2 of 36). *The paired comparison is pending; see §7.*
+* **Against Arm A, paired by task:** H is clearly better in every domain on hallucination and
+  better on success:
+
+  | H − Arm A | Retail | Airline | Telecom |
+  |---|---:|---:|---:|
+  | Success (points) | **+43.3** (+20 to +67) | +25.0 (0 to +58) | **+46.7** (+17 to +73) |
+  | Tool/Arg | **−76.7** | **−100** | **−100** |
+  | Loops | **−46.7** | −33.3 | **−56.7** |
+
+  H takes more steps per task (+5 to +14), because Arm A's conversations end early on tool errors.
+  Arm A's telecom figures come from its 9 Nov rerun (SEL-69, 3/30), as the 6 Nov baseline (0/15)
+  kept no conversations. Arm A ran 1 sample on retail and airline.
 
 **Validation** (the rule, §5): H passed at most 17.0 of 30 against a bar of 19.5, so it **fails**.
 
@@ -152,7 +163,6 @@ just gate-check S2 H && just arm-why S2 H --domain telecom
 ```
 
 **Open:**
-* **The paired comparison with Arm A:** Arm A's dev files arrived on 12 Nov.
 * **4 crashed telecom validation conversations,** and H's Tool/Arg count on validation. Neither can
   change the decision.
 
