@@ -166,14 +166,22 @@ def test_act_mode_nudges_first_then_stops():
     actions = [(i, act) for i, new in enumerate(loop_alarms(a68)) if (act := guard.react(new))]
     assert [a for _, a in actions] == ["nudge", "stop"]
     assert (guard.nudged_at, guard.stopped_at) == (22, 27)
-    assert guard.nudged([SYS])[-1] == {"role": "user", "content": NUDGE}
+    assert guard.nudged([SYS, HI])[-1] == {"role": "user", "content": NUDGE}
+    # SEL-69: the nudge is kept in the record, with where it went
+    assert guard.to_dict()["nudge"] == {
+        "text": NUDGE,
+        "role": "user",
+        "after_view_index": 1,
+        "after_role": "user",  # after the customer's message: two user turns in a row
+        "before_agent_turn": 23,
+    }
 
 
 def test_log_mode_never_changes_the_conversation():
     a68 = view_of(next(c for c in CASES if c["id"] == "A68"))
     guard = Guard("log")
     assert all(guard.react(new) is None for new in loop_alarms(a68))
-    assert guard.to_dict() == {"mode": "log", "nudged_at": None, "stopped_at": None}
+    assert guard.to_dict() == {"mode": "log", "nudged_at": None, "stopped_at": None, "nudge": None}
     with pytest.raises(ValueError, match="mode"):
         Guard("loud")
 

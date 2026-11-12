@@ -1,0 +1,74 @@
+{
+  "run": "arm-A-telecom-dev-sel69",
+  "monitor": "log or off",
+  "date": "2026-11-09",
+  "owner": "unknown",
+  "commit": "e3194b3",
+  "config": "configs/arms.yaml",
+  "arm": "A",
+  "prompt_variant": "default",
+  "prompt_version": "tau2/default",
+  "student": "c4ai-aya-expanse-32b (Cohere API, prompted, cohere Action: format)",
+  "customer": "gpt-4.1-2025-04-14",
+  "domain": "telecom",
+  "split": "dev (frozen splits, configs/splits.json)",
+  "samples_per_task": 2,
+  "judges": false,
+  "note_judges": "telecom has no LLM judges: scores are complete",
+  "note_cost": "the saved records' spend: a resumed rollout drops crashed conversations before retrying them, so their first attempts aren't counted (a lower bound)",
+  "records": "results/episodes/arms/A-telecom-dev-sel69.jsonl (not committed)",
+  "note_samples": "the 95% range counts every conversation as independent: too narrow",
+  "conversations": 30,
+  "crashed": 0,
+  "passed": 3,
+  "task_success": 0.1,
+  "task_success_wilson95": [
+    0.0346,
+    0.2562
+  ],
+  "by_issue": {
+    "mms_issue": {
+      "passed": 0,
+      "n": 16
+    },
+    "mobile_data_issue": {
+      "passed": 1,
+      "n": 6
+    },
+    "service_issue": {
+      "passed": 2,
+      "n": 8
+    }
+  },
+  "termination": {
+    "user_stop": 21,
+    "too_many_errors": 9
+  },
+  "monitor_stopped": {
+    "conversations": 0,
+    "passed": 0,
+    "task_success_if_failed": 0.1
+  },
+  "context_overflow": 0,
+  "conversations_flagged": {
+    "tool_unknown_tool": 28,
+    "arg_unseen_id_like_argument": 4,
+    "loop_repeated_failed_call": 21,
+    "tool_or_arg": 28
+  },
+  "flag_method": "heuristic diagnostics (reflexive.teacher.unseen_arguments / tool_errors), not the SEL-12 classifier",
+  "hallucination_rate_tool_or_arg": 0.9333,
+  "transferred_to_human": 10,
+  "judged": 0,
+  "skipped_checks": 0,
+  "student_calls": 309,
+  "student_calls_per_success": 103.0,
+  "student_replies_cut_off": 0,
+  "tool_calls_per_conversation": 8.7,
+  "student_tokens_per_conversation_median": 76784,
+  "cost_usd": {
+    "customer": 1.6,
+    "student_est": 1.36,
+    "total": 2.96
+  }
+}
