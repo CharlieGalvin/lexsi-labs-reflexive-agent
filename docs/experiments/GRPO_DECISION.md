@@ -84,3 +84,23 @@ Everything else as H2. **Rule:** the same three parts as H2 above (validation to
 domain more than 1 below v2; Tool/Arg at most 4 of 60), on the adapter at the end of training or
 where the drift guard stops it. Same 22:00 cut-off. H3 is the eighth model scored on these 30
 validation tasks: a pass is a hint, and test (as its own arm) the check.
+
+### H3 amended before it ran (12 Nov, 08:50), still before any H3 or H2 validation result
+
+SEL-73's on-policy fixes aren't on the pod's volume, so change 2 above can't be built. H2's own
+training logs (`scripts/grpo/diagnose_run.py runs/grpo-decision-aya32b-v2`) gave a better target:
+
+| Where H2's learning signal went | |
+|---|---|
+| Prompt groups with no variance in the total reward | 21% |
+| ... in the decision reward | **76%** (48% on decision prompts) |
+| Share of within-group variance, weighted by the reward weights | tool and arg about 56%, decision about 32% |
+| Mean tool / arg reward of the samples (temperature 1.0) | 0.83 / 0.82 |
+| Reply share, steps 1–10 → 51–53 | 0.54 → 0.08 |
+
+Most of the signal went to invalid calls sampled at temperature 1.0, which SFT v2 rarely makes
+when served at temperature 0, and most decision prompts taught nothing. So H3 is instead:
+**prompts where H2's samples disagreed about what to change** (decision varied or fell below 1;
+from H2's training samples, never validation), each twice, filled to 100 with H2's others
+(`scripts/data/build_grpo_focus_data.py`); the **wrong-only** decision reward; decision **3.0**,
+tool and arg **0.5**; sampling temperature **0.8**; 50 steps. Rule and cut-off unchanged.

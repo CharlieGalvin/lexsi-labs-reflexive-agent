@@ -1,28 +1,30 @@
-# Decision GRPO, arm H3: H2 with two changes, after H2's run drifted towards acting (calls 50% -> 80%)
-# and its decision reward never rose:
-# 1. wrong-only decision reward: only a wrong change scores 0; making a pending change, asking
-#    first and replying all score 1 (H2 paid 1.0 for acting against 0.4 for holding off);
-# 2. prompts at the student's own wrong changes: SEL-73's teacher fixes on SFT v2's train-pool
-#    conversations, each twice, plus H2's prompts sampled to 100 in all (50 steps x 2 prompts).
-# Build:     just grpo-decision-data --name grpo-decision-h3 --wrong-only --onpolicy <onpolicy-fixes.jsonl> --total 100
+# Decision GRPO, arm H3: H2 changed where its training logs say the signal went (diagnose_run.py):
+# * 76% of H2's prompt groups had no variance in the decision reward, and decision carried only
+#   about a third of the weighted within-group differences; tool and arg carried most, from invalid
+#   calls sampled at temperature 1.0 that v2 rarely makes when served at temperature 0;
+# * the decision reward paid for acting (1.0 against 0.4 for holding off), and calls went 50% -> 80%.
+# Changes: (1) prompts focused on where H2's samples disagreed about what to change, twice each
+# (build_grpo_focus_data.py); (2) wrong-only decision reward; (3) decision 3.0, tool and arg 0.5;
+# (4) sampling temperature 0.8; (5) 50 steps.
+# Build:      python scripts/data/build_grpo_focus_data.py runs/grpo-decision-aya32b-v2 --total 100
 # On the pod: python scripts/grpo/train_single_turn.py configs/train/grpo_decision_h3_aya32b.yaml --push
 #
-# Everything else is as H2 (grpo_decision_aya32b.yaml), with 50 steps and a checkpoint every 10.
+# Everything else is as H2 (grpo_decision_aya32b.yaml), with a checkpoint every 10 steps.
 
 name: grpo-decision-h3-aya32b-v2
 model: CohereLabs/aya-expanse-32b
 adapter: reagent-lexsi/sft-aya32b-r16-v2   # SFT v2, as for G and H
-data: data/train/grpo-decision-h3.jsonl     # `just grpo-decision-data --name grpo-decision-h3 --wrong-only --onpolicy <file> --total 100`
+data: data/train/grpo-decision-h3.jsonl     # build_grpo_focus_data.py runs/grpo-decision-aya32b-v2 --total 100
 max_prompt_tokens: null
 
 rewards: heal                   # reflexive.heal_rewards, with the decision component
-reward_weights:                 # max 5.5; decision is what we optimise, the rest hold v2's behaviour
-  tool: 1.0                     # no call to a tool the agent doesn't have
-  arg: 1.0                      # no placeholder, invented ID or schema error
+reward_weights:                 # max 5.5; decision is what we optimise, the rest hold v2's behaviour (H3: tool, arg 0.5; decision 3.0)
+  tool: 0.5                     # no call to a tool the agent doesn't have
+  arg: 0.5                      # no placeholder, invented ID or schema error
   loop: 0.5                     # no repeat of a failed call, no third identical call or reply
   fix: 0.5                      # the teacher's choice and wording (H: 1.0)
   guard: 0.5                    # the call is the whole reply; no giving up unless the teacher did
-  decision: 2.0                 # wrong_only (in the data): a state change matching nothing pending scores 0, all else 1
+  decision: 3.0                 # wrong_only (in the data): a state change matching nothing pending scores 0, all else 1
 
 drift_guard:                    # as H
   max_drift: 0.10
@@ -41,7 +43,7 @@ trainer:                        # as H's (grpo_heal_aya32b.yaml)
   steps_per_generation: 8
   num_generations: 8
   max_completion_length: 384
-  temperature: 1.0
+  temperature: 0.8             # H2: 1.0, whose invalid calls took most of the signal
   beta: 0.04
   learning_rate: 1.0e-5
   lr_scheduler_type: constant_with_warmup
