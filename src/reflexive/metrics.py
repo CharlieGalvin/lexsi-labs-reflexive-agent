@@ -28,6 +28,7 @@ import statistics
 from collections.abc import Iterable
 from typing import Any
 
+from reflexive.outcome import MONITOR_STOP
 from reflexive.stats import wilson
 
 Record = dict[str, Any]
@@ -54,6 +55,22 @@ def record_cost(rec: Record) -> float | None:
         c for c in ((rec.get("agent_usage") or {}).get("est_cost"), rec.get("user_cost")) if c is not None
     ]
     return sum(costs) if costs else None
+
+
+def monitor_stopped(scored: list[Record]) -> dict[str, Any]:
+    """The conversations the runtime monitor's guard ended (``monitor_stop``), on their own.
+
+    τ²-bench grades them as if the agent had stopped, so a goodbye loop cut short after the task
+    was done can pass. ``task_success_if_failed`` counts those as failures instead: the success
+    rate with no help from the harness ending conversations (SEL-69)."""
+    stopped = [r for r in scored if r.get("termination") == MONITOR_STOP]
+    k = sum(bool(r["outcome"]["passed"]) for r in scored)
+    k_stopped = sum(bool(r["outcome"]["passed"]) for r in stopped)
+    return {
+        "conversations": len(stopped),
+        "passed": k_stopped,
+        "task_success_if_failed": round((k - k_stopped) / len(scored), 4) if scored else None,
+    }
 
 
 def _transferred(rec: Record) -> bool:
@@ -109,6 +126,7 @@ def arm_metrics(records: list[Record]) -> dict[str, Any]:
         "task_success_wilson95": [round(lo, 4), round(hi, 4)],
         "by_issue": by_issue(scored),
         "termination": dict(collections.Counter(r.get("termination") for r in scored).most_common()),
+        "monitor_stopped": monitor_stopped(scored),
         "context_overflow": sum(bool((r.get("flags") or {}).get("context_overflow")) for r in scored),
         "conversations_flagged": {
             name: flagged[name]

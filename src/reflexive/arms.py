@@ -183,8 +183,8 @@ def run_episode(
                 ep.end_for_context()
             act = watch.after_turn(ep.messages())
             nudge = act == "nudge"
-            if act == "stop":
-                ep.finish()
+            if act == "stop":  # the guard's stop, recorded as termination monitor_stop
+                ep.stop_for_monitor()
     except Exception as e:  # noqa: BLE001 - one bad conversation shouldn't stop the run
         error = f"{type(e).__name__}: {str(e)[:300]}"
         if ep.has_env and not ep.done:
