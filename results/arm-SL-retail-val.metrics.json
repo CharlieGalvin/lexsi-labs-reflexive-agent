@@ -1,0 +1,62 @@
+{
+  "run": "arm-SL-retail-val",
+  "monitor": "log or off",
+  "date": "2026-11-12",
+  "owner": "Charlie",
+  "commit": "d2fe483",
+  "config": "configs/arms.yaml",
+  "arm": "SL",
+  "prompt_variant": "default",
+  "prompt_version": "tau2/default",
+  "student": "sftlong (http://localhost:8000/v1, prompted, cohere Action: format)",
+  "customer": "gpt-4.1-2025-04-14",
+  "domain": "retail",
+  "split": "train (frozen splits, configs/splits.json)",
+  "samples_per_task": 2,
+  "judges": true,
+  "note_judges": "τ²-bench's LLM judges ran where a score needed one (25 of 26 conversations; the others ended early or have no judged check): scores are complete",
+  "note_cost": "the saved records' spend: a resumed rollout drops crashed conversations before retrying them, so their first attempts aren't counted (a lower bound)",
+  "records": "results/episodes/arms/SL-retail-val.jsonl (not committed)",
+  "note_samples": "the 95% range counts every conversation as independent: too narrow",
+  "conversations": 26,
+  "crashed": 0,
+  "passed": 13,
+  "task_success": 0.5,
+  "task_success_wilson95": [
+    0.3206,
+    0.6794
+  ],
+  "by_issue": null,
+  "termination": {
+    "user_stop": 25,
+    "max_steps": 1
+  },
+  "monitor_stopped": {
+    "conversations": 0,
+    "passed": 0,
+    "task_success_if_failed": 0.5
+  },
+  "context_overflow": 0,
+  "conversations_flagged": {
+    "tool_unknown_tool": 0,
+    "arg_unseen_id_like_argument": 3,
+    "loop_repeated_failed_call": 4,
+    "tool_or_arg": 3
+  },
+  "flag_method": "heuristic diagnostics (reflexive.teacher.unseen_arguments / tool_errors), not the SEL-12 classifier",
+  "hallucination_rate_tool_or_arg": 0.1154,
+  "transferred_to_human": 3,
+  "judged": 25,
+  "skipped_checks": 0,
+  "student_calls": 421,
+  "student_calls_per_success": 32.4,
+  "student_replies_cut_off": 0,
+  "tool_calls_per_conversation": 11.6,
+  "student_tokens_per_conversation_median": 71485,
+  "cost_usd": {
+    "customer": 0.35,
+    "student_est": 0.0,
+    "total": 0.35
+  },
+  "history": "Validation: the 30 train tasks no arm trained on (13 retail, 5 airline, 12 telecom), 2 samples each; the runs' own verdicts (judges on during the run)"
+}

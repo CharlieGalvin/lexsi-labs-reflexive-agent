@@ -133,3 +133,12 @@ def test_to_openai_expands_a_bundle_of_tool_results():
         {"role": "tool", "tool_call_id": "a", "content": "1"},
         {"role": "tool", "tool_call_id": "b", "content": "2"},
     ]
+
+
+def test_a_monitor_stop_is_scored_as_the_agents_stop():
+    # SEL-69: τ²-bench has no monitor_stop; the guard sends the agent's stop, and it's graded so
+    sc = scorer("retail")
+    gold = sc.gold_trajectory("0")
+    ours = sc.score("0", gold, "monitor_stop", judges=False)
+    agent = sc.score("0", gold, "agent_stop", judges=False)
+    assert (ours.passed, ours.reward, ours.checks) == (agent.passed, agent.reward, agent.checks)
