@@ -1,0 +1,117 @@
+{
+ "a": {
+  "name": "S2-airline-dev",
+  "file": "results/episodes/arms/S2-airline-dev.jsonl"
+ },
+ "b": {
+  "name": "H-airline-dev",
+  "file": "results/episodes/arms/H-airline-dev.jsonl"
+ },
+ "commit": "b82e182",
+ "date": "2026-11-11",
+ "rows": [
+  {
+   "metric": "success_rate",
+   "a": 0.5833333333333334,
+   "a_ci95": [
+    0.3333333333333333,
+    0.8333333333333334
+   ],
+   "b": 0.4166666666666667,
+   "b_ci95": [
+    0.16666666666666666,
+    0.6666666666666666
+   ],
+   "diff_b_minus_a": -0.16666666666666669,
+   "diff_ci95": [
+    -0.5833333333333333,
+    0.16666666666666669
+   ],
+   "clear": false
+  },
+  {
+   "metric": "hallucination_rate",
+   "a": 0.0,
+   "a_ci95": [
+    0.0,
+    0.0
+   ],
+   "b": 0.0,
+   "b_ci95": [
+    0.0,
+    0.0
+   ],
+   "diff_b_minus_a": 0.0,
+   "diff_ci95": [
+    0.0,
+    0.0
+   ],
+   "clear": false
+  },
+  {
+   "metric": "loop_rate",
+   "a": 0.08333333333333333,
+   "a_ci95": [
+    0.0,
+    0.25
+   ],
+   "b": 0.0,
+   "b_ci95": [
+    0.0,
+    0.0
+   ],
+   "diff_b_minus_a": -0.08333333333333333,
+   "diff_ci95": [
+    -0.25,
+    0.0
+   ],
+   "clear": false
+  },
+  {
+   "metric": "steps_per_task",
+   "a": 14.75,
+   "a_ci95": [
+    12.25,
+    17.333333333333332
+   ],
+   "b": 15.166666666666666,
+   "b_ci95": [
+    12.333333333333334,
+    18.083333333333332
+   ],
+   "diff_b_minus_a": 0.4166666666666661,
+   "diff_ci95": [
+    -0.3333333333333339,
+    1.1666666666666679
+   ],
+   "clear": false
+  },
+  {
+   "metric": "redundant_call_rate",
+   "a": 0.028037383177570093,
+   "a_ci95": [
+    0.0,
+    0.054945054945054944
+   ],
+   "b": 0.009009009009009009,
+   "b_ci95": [
+    0.0,
+    0.0297029702970297
+   ],
+   "diff_b_minus_a": -0.019028374168561082,
+   "diff_ci95": [
+    -0.049019607843137254,
+    0.019994232432952033
+   ],
+   "clear": false
+  }
+ ],
+ "a_scored": 12,
+ "b_scored": 12,
+ "a_crashed": 0,
+ "b_crashed": 0,
+ "shared_tasks": 6,
+ "reps": 10000,
+ "seed": 0,
+ "method": "percentile bootstrap; difference paired on shared tasks (cluster by task)"
+}
