@@ -288,7 +288,20 @@ above it.
   unrequested `send_certificate` (36), cancelling a retail order that should have been modified
   (78), returning extra items (82).
 
-So **H didn't stop acting; it acted where it shouldn't.** The hallucinations went down (no invented
+* **Telecom** (`just arm-why S2 H --domain telecom`, which re-scores each failed conversation for
+  its unmet device assertions and missed actions). H gets the customer to do *more* on the phone
+  (19.5 phone actions per conversation, v2 16.6) but misses **its own account-side fix** more often:
+  7 missed agent actions against 2 (`enable_roaming` 5 against 2, plus `refuel_data` and
+  `resume_line`), against 1 missed customer action (v2 3); the phone still can't send MMS in 6
+  failures against 3. Of the 4 telecom conversations v2 passed and H failed, 3 miss an account
+  action (`enable_roaming` twice, `resume_line` after an overdue bill), with far more customer
+  steps than v2 (29 against 9, 26 against 15; 49 against 23 in the one that hit the step limit).
+  All 47 Tool fixes taught "don't call the customer's phone tools, tell the customer what to do";
+  H learned that, and in some conversations walked the customer through phone steps that can't
+  fix an account-side cause.
+
+So **H didn't stop acting; it acted where it shouldn't** (airline, retail), **or fixed the wrong side**
+(telecom). Its lost conversations are decision errors, not hallucinations. The hallucinations went down (no invented
 IDs, no error spirals, half the loops) and over-action came back, mostly in airline: the failure
 SFT v2 was built to fix (SEL-71: unwarranted airline cancellations 14 → 2). The Tool / Arg / Loop
 rewards check *how* a call is made, not *whether* it should be made: a cancellation with a real
