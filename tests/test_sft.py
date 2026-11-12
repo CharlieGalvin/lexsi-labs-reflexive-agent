@@ -205,7 +205,13 @@ def test_the_config_trains_on_healable_and_holds_out_solved_by_aya():
 
 @pytest.mark.parametrize(
     ("key", "file", "model"),
-    [("P", "arms.base.yaml", "CohereLabs/aya-expanse-32b"), ("S", "arms.sft.yaml", "sft")],
+    [
+        ("P", "arms.base.yaml", "CohereLabs/aya-expanse-32b"),
+        ("S", "arms.sft.yaml", "sft"),
+        ("S2", "arms.sft2.yaml", "sft2"),
+        ("SL", "arms.sftlong.yaml", "sftlong"),
+        ("S3", "arms.sft3.yaml", "sft3"),
+    ],
 )
 def test_the_pod_arms_match_arm_a_except_for_the_student_endpoint(key, file, model):
     pod, a = get_arm(key, ROOT / "configs" / "sft" / file), get_arm("A")
@@ -213,6 +219,34 @@ def test_the_pod_arms_match_arm_a_except_for_the_student_endpoint(key, file, mod
     assert pod.student["api_key_env"] is None and pod.prompt_variant == a.prompt_variant == "default"
     same = ("mode", "style", "temperature", "max_tokens", "reserve")
     assert {k: pod.student[k] for k in same} == {k: a.student[k] for k in same} and pod.customer == a.customer
+
+
+def _train_cfg(name: str) -> dict:
+    return yaml.safe_load((ROOT / "configs" / "train" / name).read_text())
+
+
+def _without(cfg: dict, *keys: str) -> dict:
+    """The config with these keys left out (``trainer.max_steps`` for a nested one)."""
+    out = {k: (dict(v) if isinstance(v, dict) else v) for k, v in cfg.items()}
+    for k in keys:
+        top, _, sub = k.partition(".")
+        if sub:
+            out[top].pop(sub, None)
+        else:
+            out.pop(top, None)
+    return out
+
+
+def test_v3_differs_from_v2_only_in_name_data_and_its_fixed_74_steps():
+    v2, v3 = _train_cfg("sft_aya32b_v2.yaml"), _train_cfg("sft_aya32b_v3.yaml")
+    assert v3["data"] == "data/train/sft-v3.jsonl" and v3["trainer"]["max_steps"] == 74
+    assert _without(v3, "name", "data", "trainer.max_steps") == _without(v2, "name", "data")
+
+
+def test_sl_is_v1_trained_for_v2s_74_steps():
+    v1, sl = _train_cfg("sft_aya32b.yaml"), _train_cfg("sft_aya32b_long.yaml")
+    assert sl["trainer"]["max_steps"] == 74
+    assert _without(sl, "name", "trainer.max_steps") == _without(v1, "name")
 
 
 # --- Aya's chat template: the agent speaks first --------------------------------------------------
