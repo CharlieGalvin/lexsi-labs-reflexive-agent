@@ -204,6 +204,10 @@ arm-metrics file *args:
 # Failed conversations: the expected state-changing actions against what the agent did (`--all`, `--out`)
 arm-failures +args:
     python scripts/arms/failure_diff.py {{args}}
+# Why conversations failed: unmet device assertions and missed actions, re-scored (`just arm-why S2 H --domain telecom`)
+arm-why +args:
+    python scripts/arms/why_failed.py {{args}}
+
 # Tool / Arg / Loop conversations per arm and domain, by the classifier (`--split val`: SEL-75's rule, part 3)
 arm-tool-arg +args:
     python scripts/arms/tool_arg.py {{args}}
