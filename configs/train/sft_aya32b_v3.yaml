@@ -29,7 +29,7 @@ quantization:
 
 trainer:
   num_train_epochs: 2
-  max_steps: 74                        # v2's and SL's step count: only the data differs
+  max_steps: 74                        # v2's and SL's step count (data and passes over it differ: see above)
   learning_rate: 1.0e-4
   lr_scheduler_type: cosine
   warmup_ratio: 0.05
