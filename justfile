@@ -173,6 +173,9 @@ oracle-score *files:
 # Summarise a rollout file as results/arm-<arm>-<domain>-<split>.metrics.json (no API calls; `--only dev`)
 arm-metrics file *args:
     python scripts/arms/metrics.py {{file}} {{args}}
+# All headline metrics for an arm (SEL-38): oracle success, AuditKIT agent scorers, TTC; any split
+arm-eval +args:
+    python scripts/arms/evaluate.py {{args}}
 # Failed conversations: the expected state-changing actions against what the agent did (`--all`, `--out`)
 arm-failures +args:
     python scripts/arms/failure_diff.py {{args}}

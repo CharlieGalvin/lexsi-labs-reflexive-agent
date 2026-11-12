@@ -49,6 +49,14 @@ def is_broken(rec: Record) -> bool:
     return bool(rec.get("error")) or rec.get("termination") in BROKEN_ENDINGS
 
 
+def record_cost(rec: Record) -> float | None:
+    """One conversation's API spend: the agent's estimate plus the customer's cost (None if neither)."""
+    costs = [
+        c for c in ((rec.get("agent_usage") or {}).get("est_cost"), rec.get("user_cost")) if c is not None
+    ]
+    return sum(costs) if costs else None
+
+
 def monitor_stopped(scored: list[Record]) -> dict[str, Any]:
     """The conversations the runtime monitor's guard ended (``monitor_stop``), on their own.
 
