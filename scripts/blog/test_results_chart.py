@@ -9,8 +9,9 @@ metrics files: `results/arm-*-test.eval.metrics.json` and
 `results/arm-*-test-vs-arm-S2-test.compare.metrics.json`.
 
 Needs matplotlib, which isn't a project dependency: run it with any Python that has it.
-Colours: the first three slots of the data-viz reference palette, in fixed order
-(validated: worst adjacent colour-blind ΔE 9.1, normal-vision ΔE 19.6, light mode).
+Colours (scripts/blog/style.py): the two controls in muted greys, the healed arm in Lexsi orange
+(checked: worst colour-blind ΔE 12.9, normal-vision ΔE 18.7; Arm A's light grey is low-contrast
+on white, so every bar group carries a value label and the post has the table).
 """
 
 from __future__ import annotations
@@ -25,15 +26,18 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 from matplotlib.patches import FancyBboxPatch  # noqa: E402
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from style import CARD, FONTS, GREY_1, GREY_2, INK, LEXSI, MUTED, PAGE, caps  # noqa: E402
+
 ROOT = Path(__file__).resolve().parents[2]
 RESULTS = ROOT / "results"
 OUT = ROOT / "docs" / "blog" / "img" / "test-results.png"
 
 # Arms in the order they're read: the two controls, then the healed model
 ARMS = [
-    ("A", "Arm A · untuned", "#2a78d6"),
-    ("C", "Arm C · “be careful” prompt", "#eb6834"),
-    ("S2", "Arm B · healed (SFT on verified fixes)", "#1baf7a"),
+    ("A", "Arm A · untuned", GREY_1),
+    ("C", "Arm C · “be careful” prompt", GREY_2),
+    ("S2", "Arm B · healed (SFT on verified fixes)", LEXSI),
 ]
 DOMAINS = [
     ("overall", "All 100 tasks"),
@@ -41,7 +45,7 @@ DOMAINS = [
     ("airline", "Airline (20)"),
     ("telecom", "Telecom (40)"),
 ]
-SURFACE, INK, INK_2, GRID = "#fcfcfb", "#0b0b0b", "#52514e", "#e4e3df"
+SURFACE, INK_2, GRID = CARD, MUTED, "#ece9e2"  # panels are white cards on the warm page
 
 
 def success(arm: str) -> dict[str, tuple[float, float, float]]:
@@ -96,14 +100,14 @@ def rounded_bar(ax, x: float, width: float, height: float, colour: str, radius_p
 
 
 def style(ax, title: str) -> None:  # noqa: ANN001
-    ax.set_facecolor(SURFACE)
+    ax.set_facecolor("none")  # the white card behind the panel shows through
     for side in ("top", "right", "left"):
         ax.spines[side].set_visible(False)
     ax.spines["bottom"].set_color(INK_2)
     ax.spines["bottom"].set_linewidth(0.8)
     ax.grid(axis="y", color=GRID, linewidth=0.8, zorder=0)
     ax.tick_params(axis="both", colors=INK_2, labelsize=9, length=0)
-    ax.set_title(title, loc="left", fontsize=11, color=INK, fontweight="bold", pad=10)
+    ax.set_title(title, loc="left", fontsize=12, color=INK, fontweight="bold", pad=12)
     ax.set_ylim(0, 1.12)  # headroom above 100% for the value labels
     ax.set_yticks([0, 0.25, 0.5, 0.75, 1.0])
     ax.set_yticklabels(["0%", "25%", "50%", "75%", "100%"])
@@ -113,11 +117,11 @@ def main() -> int:
     succ = {arm: success(arm) for arm, _, _ in ARMS}
     hall = hallucination()
 
-    plt.rcParams["font.family"] = "DejaVu Sans"
+    plt.rcParams["font.family"] = FONTS
     fig, (left, right) = plt.subplots(
-        1, 2, figsize=(11, 4.6), dpi=200, gridspec_kw={"width_ratios": [3.2, 1.3]}
+        1, 2, figsize=(11, 5.2), dpi=200, gridspec_kw={"width_ratios": [3.2, 1.3]}
     )
-    fig.patch.set_facecolor(SURFACE)
+    fig.patch.set_facecolor(PAGE)
     style(left, "Task success on the test split")
     style(right, "Conversations with a Tool\nor Arg hallucination")
 
@@ -169,8 +173,8 @@ def main() -> int:
     fig.legend(
         handles,
         [label for _, label, _ in ARMS],
-        loc="upper left",
-        bbox_to_anchor=(0.012, 0.995),
+        loc="upper right",
+        bbox_to_anchor=(0.985, 0.985),
         ncol=3,
         frameon=False,
         fontsize=9.5,
@@ -180,16 +184,59 @@ def main() -> int:
         columnspacing=1.6,
     )
     fig.text(
-        0.012,
-        0.012,
+        0.025,
+        0.952,
+        caps("Result 1 · the test split"),
+        fontsize=9.5,
+        color=INK_2,
+        fontweight="bold",
+        va="center",
+    )
+    fig.text(
+        0.025,
+        0.025,
         "τ²-bench test split, 100 tasks × 2 samples, Aya Expanse 32B. Success oracle-verified; "
         "lines show 95% bootstrap ranges over tasks. Hallucination: Chiara's Tool / Arg classifier.",
         fontsize=7.5,
         color=INK_2,
     )
-    fig.subplots_adjust(left=0.05, right=0.985, top=0.83, bottom=0.13, wspace=0.16)
+    fig.subplots_adjust(left=0.075, right=0.97, top=0.74, bottom=0.16, wspace=0.24)
+    aspect = fig.get_figwidth() / fig.get_figheight()
+    for ax in (left, right):  # each panel sits on a white card with a soft shadow
+        bb = ax.get_position()
+        x0, y0, w = bb.x0 - 0.05, bb.y0 - 0.075, bb.width + 0.065
+        h = 0.885 - y0  # both cards share a top edge, with room for a two-line title
+        for k in range(4):
+            g = 0.003 * (k + 1)
+            fig.add_artist(
+                FancyBboxPatch(
+                    (x0 - g / aspect, y0 - g - 0.004),
+                    w + 2 * g / aspect,
+                    h + 2 * g,
+                    boxstyle=f"round,pad=0,rounding_size={0.03 + g}",
+                    mutation_aspect=aspect,
+                    transform=fig.transFigure,
+                    facecolor="black",
+                    edgecolor="none",
+                    alpha=0.02,
+                    zorder=-2,
+                )
+            )
+        fig.add_artist(
+            FancyBboxPatch(
+                (x0, y0),
+                w,
+                h,
+                boxstyle="round,pad=0,rounding_size=0.03",
+                mutation_aspect=aspect,
+                transform=fig.transFigure,
+                facecolor=CARD,
+                edgecolor="none",
+                zorder=-1,
+            )
+        )
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(OUT, facecolor=SURFACE)
+    fig.savefig(OUT, facecolor=PAGE)
     print(f"wrote {OUT.relative_to(ROOT)}")
     return 0
 

@@ -45,7 +45,7 @@ model, and the manager is a benchmark with a rulebook fixed in advance.
 
 ### The loop: detect, fix, retrain, gate
 
-![The self-healing loop: the student agent fails a conversation; a classifier detects and labels the failing turn; a teacher model rewrites it; the student is retrained on the verified fixes; and a gate promotes the new adapter only if it solves more dev tasks](img/heal-loop.png)
+![The self-healing loop: the student agent fails a conversation; a classifier detects and labels the failing turn; a teacher model rewrites it; the student is retrained on the verified fixes; and a gate promotes the new adapter only if it solves more dev tasks](img/heal-loop.gif)
 
 1. **Detect.** A classifier finds the first failing turn and its type: Tool, Arg or Loop.
 2. **Fix.** The teacher sees the conversation exactly as the student did, up to that turn, and
