@@ -312,10 +312,11 @@ record csv run *args:
 blog-check:
     python scripts/blog/check_numbers.py
 
-# Blog figures: redraw the test-results chart and the loop diagram (matplotlib, fetched by uv on the fly)
+# Blog figures: redraw the chart, the animated loop and the example graphics (matplotlib, fetched by uv on the fly)
 blog-figures:
     uv run --no-project --with matplotlib python scripts/blog/test_results_chart.py
     uv run --no-project --with matplotlib python scripts/blog/loop_diagram.py
+    uv run --no-project --with matplotlib python scripts/blog/examples.py
 
 # Walk through the blog's experiments and reproduce each result from results/ (no GPU or keys): `just reproduce 3`, `--list`
 reproduce *args:

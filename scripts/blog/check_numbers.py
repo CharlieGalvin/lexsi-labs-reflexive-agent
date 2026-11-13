@@ -81,7 +81,7 @@ def claims() -> list[tuple[str, Callable[[], str], str]]:
 
     def test_row(metric: str, label: str) -> str:
         a, b, c = row(ab, metric)["a"], row(ab, metric)["b"], row(ac, metric)["b"]
-        return f"| {label} | {pct(a)} | {pct(c)} | **{pct(b)}** |"
+        return f"{label}: Arm A {pct(a)}, Arm C {pct(c)}, Arm B {pct(b)}"  # the test-table image's alt text
 
     def hall_b() -> float:
         return row(ab, "hallucination_rate")["b"]
