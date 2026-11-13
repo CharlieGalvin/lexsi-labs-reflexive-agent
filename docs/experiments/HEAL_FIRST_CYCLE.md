@@ -106,14 +106,15 @@ The cycle took three attempts on 13 Nov. Nothing in the analysis changed between
 | Attempt | What happened | Fix |
 |---|---|---|
 | 1 (04:34) | Heal rollouts ran, but **all 28 teacher calls failed: OpenRouter 403**, "Key limit exceeded ($50 of $50)". The cycle stopped: "the teacher fixed none of the failures". Kept as `results/heal/first-cycle-403-keylimit` | Raised the key's limit |
-| 2 (04:54) | Teacher fixed 12; **training failed: "Disk quota exceeded"**. `train_sft.py` started downloading the 32B model a second time, into the heal service's `HF_HOME` (`/workspace/.cache/huggingface`), while vLLM uses `/workspace/hf_cache` | Restarted the heal service with `HF_HOME=/workspace/hf_cache` |
+| 2 (04:54) | Teacher fixed 12; **training failed: "Disk quota exceeded"**. `train_sft.py` started downloading the 32B model a second time, into `/workspace/.cache/huggingface` (the container's default `HF_HOME`). The heal service had been started without sourcing `/workspace/.pod_env`, which `setup.sh` writes with `HF_HOME=/workspace/hf_cache` and `serve.sh` loads for vLLM: a setup mistake on this run, not in the code | Restarted the heal service with `HF_HOME=/workspace/hf_cache` |
 | 3 (05:18) | Trained and served the adapter, but **`train_and_serve.sh` couldn't see vLLM come up**: its readiness check (`curl -sf .../v1/models`) sends no API key, so a vLLM started with `VLLM_API_KEY` answers 401 until the 20-minute timeout | Put the key in a temporary `/root/.curlrc`, removed straight after; the job finished `done` and the gate ran |
 
 Also on this pod: nginx (the template's "vscode server" proxy) holds port 8001, so the heal
-service ran on 8003 and nginx's 8001 block was pointed at it. Two fixes for the SEL-68 branch:
+service ran on 8003 and nginx's 8001 block was pointed at it. For the SEL-68 branch:
 
-1. `train_and_serve.sh`: send `Authorization: Bearer $VLLM_API_KEY` in the readiness check when it's set.
-2. Training should use vLLM's `HF_HOME` (or the heal service should set it), so it never downloads the model again.
+1. **Bug:** `train_and_serve.sh`'s readiness check should send `Authorization: Bearer $VLLM_API_KEY` when it's set.
+2. **Hardening:** `train_and_serve.sh` should source `$WORKSPACE/.pod_env` itself, as `serve.sh` does, so training
+   uses vLLM's model cache however the heal service was started.
 
 ## Files
 
