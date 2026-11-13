@@ -1,91 +1,70 @@
 ---
 title: "Reflexive Agents: Teaching a 32B Model to Heal Its Own Hallucinations"
-thumbnail: /blog/assets/reflexive-agents/test-results.png  # the chart below; upload it with the post
+thumbnail: /blog/assets/reflexive-agents/test-results.png
 authors:
-- user: TODO   # Katie Kitchen: TODO Hugging Face handle
-- user: TODO   # Chiara Picardi: TODO Hugging Face handle
-- user: TODO   # Charlie Galvin: TODO Hugging Face handle
+- user: katiemarieek
+- user: cp89
+- user: cg3849
 ---
 
 # Reflexive Agents: Teaching a 32B Model to Heal Its Own Hallucinations
 
-*Katie Kitchen, Chiara Picardi and Charlie Galvin*
+Agents are increasingly trusted with write access: cancelling orders, changing flights, editing
+accounts. When they hallucinate, the result isn't a wrong sentence but a wrong action. They call a
+tool they don't have, invent an order ID, or retry a failing call until the conversation runs out.
 
-Customer-service agents are being trusted with real write access: cancelling orders, changing
-flights, editing accounts. When they hallucinate, it isn't a wrong sentence; it's a wrong action.
-They call a tool they don't have, invent an order ID, or retry the same failing call until the
-conversation runs out. Most systems treat these as terminal failures that need a human to step in.
-
-We wanted to know whether an agent can **heal itself**: detect how it went wrong, get a stronger
-model to correct the failing turn, retrain on the correction, and only keep the result if it
-passes a gate. We built that loop for the hackathon on [τ²-bench](https://github.com/sierra-research/tau2-bench),
-with **Aya Expanse 32B** as the student and **GLM-5.3-Flash** as the teacher, using the Lexsi Labs
-stack ([AgentTune](https://github.com/Lexsi-Labs/AgentTune), AuditKIT and DECIDE).
+We wanted to know whether an agent can **heal itself**: detect how it went wrong, have a stronger
+model correct the failing turn, retrain on the correction, and keep the result only if it passes a
+gate. We built this loop on [τ²-bench](https://github.com/sierra-research/tau2-bench), with
+**Aya Expanse 32B** as the student and **GLM-5.3-Flash** as the teacher, using the Lexsi Labs stack
+([AgentTune](https://github.com/Lexsi-Labs/AgentTune), AuditKIT and DECIDE).
 
 **What we found:**
 
-* **Healing works, and it's mostly about data.** Fine-tuning on the teacher's verified fixes took
-  the student from **14.5% to 51.5%** of the 100 test tasks, and cut conversations with a
-  hallucinated tool or argument from **95% to 10%**.
-* **Asking nicely doesn't.** A "be careful not to hallucinate" instruction made no difference
-  (13.0%, with 95.5% of conversations still hallucinating).
-* **Reinforcement learning was harder than it looked.** Our GRPO runs on top of the fine-tuned
-  model didn't beat it, but they showed exactly what a healing reward has to measure: not only
-  *how* the agent acts, but *whether* it should.
-* **We're releasing** the verified teacher fixes, labelled by failure type, as a dataset.
+* **Healing works, and it's mostly about data.** Fine-tuning on the teacher's verified fixes took the
+  student from **14.5% to 51.5%** of test tasks, and cut conversations with a hallucinated tool or
+  argument from **95% to 10%**.
+* **Asking nicely doesn't.** A "be careful not to hallucinate" instruction changed nothing.
+* **Reinforcement learning didn't beat fine-tuning,** but it showed what a healing reward has to
+  measure: not just *how* the agent acts, but *whether* it should.
 
-### The setup: a student, a teacher, and a benchmark that checks the database
+### The setup
 
-τ²-bench gives an agent a customer (simulated by GPT-4.1), a policy, and real tools over a
-database in three domains: **retail**, **airline** and **telecom**. A conversation only passes if
-the final database (and, in telecom, the customer's phone) ends up in exactly the right state.
-That's what makes it a good test of hallucination: an invented argument doesn't just read badly,
-it changes the wrong record.
+τ²-bench gives an agent a simulated customer, a policy and real tools over a database, in three
+domains: retail, airline and telecom. A conversation passes only if the database (and in telecom,
+the customer's phone) ends in exactly the right state. That makes it a good test of hallucination:
+an invented argument doesn't just read badly, it changes the wrong record.
 
-We froze the splits on day two (**train 142 tasks, dev 36, test 100**) and gave each one a single
-job: train tasks for training, a held-out slice of train for choosing between versions, dev for the
-deployment gate, and test only for arms declared in advance.
+We froze the splits early (train 142 tasks, dev 36, test 100) and gave each one a single job. Train
+is for training, a held-out slice of train for choosing between versions, dev for the deployment
+gate, and test only for models declared in advance.
 
-**Choosing the teacher.** We screened 12 models on 30 train tasks, then ran the two finalists on
-every train task. GLM-5.3-Flash passed **88% on the first try**, produced a verified fix for **158
-of 178 tasks**, and cost **$11** in total. It tied Qwen3.8 27B on retail and airline and won on
-telecom, the hardest domain, by **89% to 49%**.
+To pick the teacher, we screened 12 models, then ran the two finalists on every train task.
+GLM-5.3-Flash passed 88% on the first try and produced verified fixes for 158 of 178 tasks, for
+**$11** in total.
 
-![Teacher pass rate by domain](../experiments/img/phase2_by_domain.png)
+### What a hallucinating agent looks like
 
-*Aya Expanse 32B itself started as the teacher in our proposal, but unaided it solved 1 of 30
-train tasks, so it became the student instead. Its 128K context also fits telecom's long
-conversations.*
+Untuned, the student passed 7 of 30 train tasks. Its tool-call format was fine (0 unreadable calls
+in 266 replies), so every failure was behaviour. It called tools it didn't have, invented IDs,
+retried calls that had already failed, and batched calls that depended on each other.
 
-### What does a hallucinating agent look like?
-
-Before training anything, we read the student's conversations. Aya passed **7 of 30** train tasks,
-and the format wasn't the problem: there were **0 unreadable tool calls in 266 replies**. Every
-failure was behaviour:
-
-* calling tools it doesn't have (in telecom, the customer's own phone tools);
-* inventing IDs, or passing placeholders like `"<order_id>"`;
-* retrying calls that had already failed;
-* batching calls that depended on each other.
-
-To measure this at scale, we wrote a deterministic classifier that reads a conversation as the
-agent saw it and labels every structural failure:
+To measure this at scale, we wrote a classifier that labels every structural failure in a
+conversation:
 
 | Type | What it means | Example |
 |---|---|---|
 | **Tool** | a call to a tool the agent doesn't have | `check_apn_settings`, a phone tool only the customer can run |
-| **Arg** | the right tool with invented, placeholder or ill-typed arguments | `find_user_id_by_email(email="something@example.com")` |
-| **Loop** | repeating a failed call, the same call three times, or the same reply | a failing `modify_pending_order_items` sent 9 times |
+| **Arg** | invented, placeholder or ill-typed arguments | `find_user_id_by_email(email="something@example.com")` |
+| **Loop** | repeating a failed call, the same call, or the same reply | one failing call sent 9 times |
 
-On the test split, the untuned student (**Arm A**) had a Tool or Arg failure in **95% of
-conversations**.
+On the test split, the untuned student had a Tool or Arg failure in **95% of conversations**.
 
 ### Can you just tell it to be careful?
 
-The cheapest fix is a prompt. **Arm C** is Arm A with a fixed instruction not to hallucinate. On
-the 100 test tasks it scored **13.0%** against Arm A's **14.5%** (difference −1.5 points, 95% range
-−7.0 to +4.0), and still hallucinated in **95.5%** of conversations. The model knows the rule; it
-doesn't follow it.
+The cheapest fix is a prompt. With a fixed instruction not to hallucinate, the student scored 13.0%
+against 14.5% without it (a difference of −1.5 points, 95% range −7.0 to +4.0), and still
+hallucinated in 95.5% of conversations. The model knows the rule; it doesn't follow it.
 
 ### The loop: detect, fix, retrain, gate
 
@@ -96,140 +75,88 @@ doesn't follow it.
         GATE (dev split) ◄──── RETRAIN (LoRA) ◄──── FIX: the teacher rewrites the failing turn
 ```
 
-1. **Detect & classify.** The classifier finds the first failing turn and its type.
-2. **Fix.** The teacher sees the conversation *exactly as the student saw it*, up to the failing
-   turn, and writes that turn again. A fix is only accepted if it's a real turn, doesn't give up
-   (no "I'll transfer you to a human"), and contains no Tool, Arg or Loop failure. On a first
-   sample, the teacher fixed **6 of 6** failures on its first try, for about **$0.001** each.
+1. **Detect.** The classifier finds the first failing turn and its type.
+2. **Fix.** The teacher sees the conversation exactly as the student did, up to that turn, and
+   rewrites it. A fix is kept only if it's a real turn, doesn't give up, and has no Tool, Arg or Loop
+   failure of its own. Fixes cost about $0.001 each.
 3. **Retrain** the student's LoRA adapter on the fixes.
-4. **Gate.** The new adapter is promoted only if it beats the current one on the dev split, under
-   a rule agreed before any result.
+4. **Gate.** The new adapter replaces the old one only if it does better on the dev split, under a
+   rule agreed in advance.
 
-Alongside the loop, a **runtime monitor** watches conversations as they run and flags
-`no_progress`: three agent turns in a row that only repeat what it already said. On telecom it
-fired on all 7 conversations that looped to the step limit and on none of the 7 that passed.
+A runtime monitor also watches live conversations for loops. On telecom it flagged all 7 that looped
+to the step limit, and none of those that passed.
 
-**Does the whole loop run on its own?** Yes. We ran one full cycle end to end on the self-hosted
-base model: 30 train conversations, 24 of 26 failures with a turn to fix, **24 of 24 fixed** by the
-teacher on the first try, an adapter trained on the fixes and served, and the gate run on all 36 dev
-tasks. The healed adapter made **71% fewer Tool / Arg / Loop findings** per conversation (Tool −86%,
-Arg −62%, Loop −63%), but solved the same number of dev tasks (4 against 4). **The gate rejected
-it**, as agreed: fewer hallucinations isn't the goal on its own, solving tasks is. One cycle of 16
-fixes, mostly at the student's opening turn, is a small signal; the bigger healing came from training
-on many verified conversations at once (next section).
+We ran one full cycle end to end. The teacher fixed **24 of 24** failures, and the healed adapter
+made **71% fewer** Tool, Arg and Loop errors per conversation. But it solved the same number of dev
+tasks, 4 against 4, so the gate rejected it. Fewer hallucinations isn't the goal on its own; solving
+tasks is. One cycle of 16 fixes was too small a signal, so we trained on many verified
+conversations at once.
 
-### Result 1: fine-tuning on verified fixes heals the hallucinations
+### Result 1: fine-tuning on verified fixes
 
-Our first training method was the simplest one: supervised fine-tuning (QLoRA, rank 16) on the
-teacher's verified fixes. Version 1 trained on 112 conversations and lifted dev success from **11%
-to 38%**, but the gate rejected it on airline, where it now made changes customers hadn't asked
-for. Version 2 added 34 verified airline conversations and reached **60% on dev**. On 30 train
-tasks no version had seen, success went from **9.0** (base model) to **17.0** of 30.
-
-We declared v2 as **Arm B** and ran all three arms on the test split, 2 samples per task:
-
-| Test split, 100 tasks × 2 samples | Arm A (untuned) | Arm C (careful prompt) | **Arm B (healed)** |
-|---|---:|---:|---:|
-| Success (mean of 2 samples) | 14.5% | 13.0% | **51.5%** |
-| 95% range | 9.5–20.0% | 7.5–19.0% | 43.5–59.5% |
-| Conversations with a Tool or Arg failure | 95.0% | 95.5% | **10.0%** |
-| Conversations with a loop (classifier) | 49.0% | 49.5% | **27.0%** |
-
-**Arm B beats Arm A by 37.0 points** (95% range +28.0 to +45.5, paired on the 100 tasks). Every
-success was re-checked by an independent scorer with no disagreements. The gain is largest in
-retail (12.5% → 60%) and telecom (15% → 53.8%), and smallest in airline (17.5% → 30%), where the
-remaining failures are about policy decisions rather than hallucinations.
+We fine-tuned the student (QLoRA, rank 16) on the teacher's verified conversations. A first
+version raised dev success from 11% to 38%. The gate rejected it on airline, where it now made
+changes nobody had asked for. Adding 34 airline conversations fixed that, and reached **60% on
+dev**. We declared this version as **Arm B** and ran it on the 100 test tasks, against the untuned
+student (**Arm A**) and the careful prompt (**Arm C**):
 
 ![Test results: task success by domain and hallucination rate for arms A, C and B](img/test-results.png)
 
-### Result 2: reinforcement learning, and what reward design taught us
-
-The proposal was to heal with reinforcement learning (GRPO). We tried three reward designs, all on
-top of the fine-tuned v2 and all as single-turn GRPO: each training prompt is a conversation up to one agent turn,
-the model samples that turn 8 times, and a reward scores each sample.
-
-**The first run failed instructively.** We trained only on the teacher's *tool-call* turns. The
-model learned that calling a tool was always rewarded, stopped replying to customers, and looped:
-**0.5 of 30** on the validation tasks, against v2's 17.0. Its own training metrics looked healthy
-throughout, because they only ever scored tool-call turns.
-
-**The second run (H) followed the loop properly.** We took 178 points where the base model failed
-(Tool 47, Arg 103, Loop 63), had the teacher fix each one (**177 of 178 accepted**), and gave each
-failure type its own reward: `tool`, `arg` and `loop`, plus agreement with the teacher's fix and a
-guard against giving up. A teammate's review caught a way to game it (generic replies scored
-almost as well as correct calls), so the failure rewards only count when the model picks the
-teacher's kind of turn, and a drift guard watched the share of replies during training.
-
-It did what we asked of it on single turns, and it didn't collapse. On whole conversations
-(dev split):
-
-| Dev, 36 tasks × 2 | Arm A | v2 (SFT) | v2 + GRPO |
+| Test split, 100 tasks × 2 samples | Arm A | Arm C | **Arm B** |
 |---|---:|---:|---:|
-| Success | 6% | **60%** | 51% |
-| Conversations with a loop | 61%* | 17% | **8%** |
+| Success | 14.5% | 13.0% | **51.5%** |
+| Conversations with a Tool or Arg failure | 95.0% | 95.5% | **10.0%** |
+| Conversations with a loop | 49.0% | 49.5% | **27.0%** |
 
-*\*Arm A's dev loop rate includes its telecom rerun of 9 November; the other numbers are its original dev runs.*
+**Arm B beats Arm A by 37 points** (95% range +28 to +46). The gain is largest in retail and telecom,
+and smallest in airline, where the remaining failures are policy decisions rather than
+hallucinations.
 
-GRPO **halved the loops** and cut repeated calls in telecom from **45% to 7%**, but lost to v2 on
-success, and the gate rejected it. So we looked at the conversations it lost, and they weren't
-hallucinations at all. They were **decisions**:
+### Result 2: what reinforcement learning taught us
 
-* in airline, it cancelled reservations nobody asked it to cancel (12 unrequested cancellations);
-* in telecom, it walked customers through more steps on their phone, but skipped the fix on its
-  own side of the account (turning on roaming, resuming a suspended line).
+We then tried to heal further with GRPO, starting from Arm B. Each training prompt is a conversation
+up to one agent turn; the model writes that turn 8 times, and a reward scores each attempt.
 
-The rewards checked *how* a call was made: a real tool, real IDs, no repeats. A cancellation with a
-real reservation ID passes all three, whether or not it should happen. **Hallucination rewards
-taught the model to act confidently, not to act correctly.**
+**Our first run trained only on the teacher's tool calls.** The model learned that calling a tool
+was always rewarded, stopped replying to customers, and collapsed: 0.5 of 30 on held-out tasks,
+against Arm B's 17.0.
 
-**The third design (H2) added that decision check:** a sixth reward comparing each change against
-the changes τ²-bench still expected at that point in the task. It was harder than it sounds. The
-reward paid more for acting than for holding off, so the model drifted towards calling tools (from
-about half of its turns to 80%), and the drift guard stopped training at step 53 of 100. It scored
-**14.5 of 30** on validation against v2's 17.0, so it wasn't adopted.
+**Our second run followed the loop:** 177 teacher fixes at real failures, with one reward per
+failure type (Tool, Arg and Loop), plus agreement with the teacher's fix. It didn't collapse, halved
+loops, and cut repeated calls in telecom from 45% to 7%. But it solved fewer tasks than Arm B (51%
+against 60% on dev), and the gate rejected it.
 
-TODO (Charlie): H3, the revised decision reward (only a wrong change scores 0), when its
-validation result is in.
+The conversations it lost weren't hallucinations. They were **decisions**. It cancelled airline
+reservations nobody asked it to cancel, and in telecom it walked customers through phone settings
+but skipped the fix on its own side of the account. A cancellation with a real reservation ID passes
+every hallucination check, whether or not it should happen. **Rewarding the absence of hallucination
+taught the model to act confidently, not correctly.**
+
+**Our third run added a decision reward,** checking each change against the changes the task still
+expected. It drifted towards calling tools, and a guard we'd built to watch the share of replies
+stopped training early. It scored 14.5 of 30, below Arm B's 17.0.
+
+TODO (Charlie): H3, the revised decision reward, when its result is in.
 
 ### What we learned
 
-* **Verified data beats instructions.** The fix that worked was showing the model hundreds of
-  correct turns, each checked by the benchmark's own evaluator.
-* **Decide the rule before you see the result.** Every version (SFT v1–v4, every GRPO run) was
-  judged by a rule written down before it ran. Several promising ideas didn't pass, and the rules
-  kept us honest.
-* **Give each split one job.** Choosing between versions on dev and reporting dev too would have
-  overstated everything.
-* **Watch what kind of turn the model takes,** not just whether its tool calls are valid. Every
-  GRPO surprise was about *when* to act, not *how*, and the drift guard that watched the share of
-  replies caught one run before it went too far.
-* **Hallucination and decision errors are different problems.** Once the hallucinations were
-  gone, the remaining failures were about policy: what to change, and when. That's the next frontier
-  for self-healing agents.
+* **Verified data beats instructions.** What healed the agent was hundreds of correct turns, each
+  checked by the benchmark's own evaluator.
+* **Decide the rule before you see the result.** Every model we trained was judged by a rule written
+  down before it ran. Several promising ideas didn't pass, and the rules kept us honest.
+* **Fewer hallucinations isn't the same as more success.** The gate caught this twice.
+* **Hallucinations and decision errors are different problems.** Once the hallucinations were gone,
+  the remaining failures were about what to change, and when. That's the next frontier for
+  self-healing agents.
 
 ### What's next
 
-TODO (Charlie, Chiara): the additional full self-healing loop now running, H3, and any further
-tests. Possibly also: Chiara's error analysis of the remaining failures (SEL-28) and the demo
-notebook (SEL-53), if they're done in time.
+The next step is a reward that judges decisions as well as structure, and scores whole conversations
+rather than single turns. We'd love to hear how others approach it.
 
-The obvious next step for the loop is a reward that checks decisions as well as structure, and
-scoring whole conversations rather than single turns.
-
-### Try it
-
-* **Dataset:** [`reagent-lexsi/tau2-golden-trajectories`](https://huggingface.co/datasets/reagent-lexsi/tau2-golden-trajectories)
-  (v1.1): 127 verified teacher conversations for τ²-bench train tasks, 31 dev reference
-  conversations, and a "hard subset" of 142 student conversations labelled Tool / Arg / Loop.
-  TODO: it's private today, and its card says the licence must be settled before a public release
-  (GLM-5.3-Flash outputs, τ²-bench data and GPT-4.1 customer turns).
-* **Code:** TODO: public repository link.
-* **Adapters:** TODO: decide which adapters to publish (v2 is Arm B).
-
-We'd love to hear what you try with it, especially other ways to reward the *decision* rather than
-the call.
+TODO: links to the code and any published adapters.
 
 ### Acknowledgements
 
-TODO: thanks to Lexsi Labs for the hackathon and the stack, and the feedback for Lexsi Labs that
-SEL-29 asks for (what worked in AgentTune, AuditKIT and DECIDE, and what we'd like to see).
+TODO: thanks to Lexsi Labs for the hackathon and the stack, with our feedback on AgentTune,
+AuditKIT and DECIDE.
