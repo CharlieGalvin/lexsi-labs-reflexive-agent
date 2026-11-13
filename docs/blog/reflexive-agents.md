@@ -1,13 +1,15 @@
 ---
 title: "Reflexive Agents: Teaching a 32B Model to Heal Its Own Hallucinations"
-thumbnail: /blog/assets/reflexive-agents/thumbnail.png  # TODO: choose a thumbnail (e.g. the test-results chart)
+thumbnail: /blog/assets/reflexive-agents/test-results.png  # the chart below; upload it with the post
 authors:
-- user: TODO-katie        # TODO: confirm names and Hugging Face handles
-- user: TODO-charlie
-- user: TODO-chiara
+- user: TODO   # Katie Kitchen: TODO Hugging Face handle
+- user: TODO   # Chiara Picardi: TODO Hugging Face handle
+- user: TODO   # Charlie Galvin: TODO Hugging Face handle
 ---
 
 # Reflexive Agents: Teaching a 32B Model to Heal Its Own Hallucinations
+
+*Katie Kitchen, Chiara Picardi and Charlie Galvin*
 
 Customer-service agents are being trusted with real write access: cancelling orders, changing
 flights, editing accounts. When they hallucinate, it isn't a wrong sentence; it's a wrong action.
@@ -27,9 +29,9 @@ stack ([AgentTune](https://github.com/Lexsi-Labs/AgentTune), AuditKIT and DECIDE
   hallucinated tool or argument from **95% to 10%**.
 * **Asking nicely doesn't.** A "be careful not to hallucinate" instruction made no difference
   (13.0%, with 95.5% of conversations still hallucinating).
-* **Reinforcement learning was harder than it looked.** Two GRPO runs on top of the fine-tuned
-  model taught us more about reward design than they improved scores, and the second one
-  showed something we didn't expect (below).
+* **Reinforcement learning was harder than it looked.** Our GRPO runs on top of the fine-tuned
+  model didn't beat it, but they showed exactly what a healing reward has to measure: not only
+  *how* the agent acts, but *whether* it should.
 * **We're releasing** the verified teacher fixes, labelled by failure type, as a dataset.
 
 ### The setup: a student, a teacher, and a benchmark that checks the database
@@ -107,6 +109,15 @@ Alongside the loop, a **runtime monitor** watches conversations as they run and 
 `no_progress`: three agent turns in a row that only repeat what it already said. On telecom it
 fired on all 7 conversations that looped to the step limit and on none of the 7 that passed.
 
+**Does the whole loop run on its own?** Yes. We ran one full cycle end to end on the self-hosted
+base model: 30 train conversations, 24 of 26 failures with a turn to fix, **24 of 24 fixed** by the
+teacher on the first try, an adapter trained on the fixes and served, and the gate run on all 36 dev
+tasks. The healed adapter made **71% fewer Tool / Arg / Loop findings** per conversation (Tool −86%,
+Arg −62%, Loop −63%), but solved the same number of dev tasks (4 against 4). **The gate rejected
+it**, as agreed: fewer hallucinations isn't the goal on its own, solving tasks is. One cycle of 16
+fixes, mostly at the student's opening turn, is a small signal; the bigger healing came from training
+on many verified conversations at once (next section).
+
 ### Result 1: fine-tuning on verified fixes heals the hallucinations
 
 Our first training method was the simplest one: supervised fine-tuning (QLoRA, rank 16) on the
@@ -126,15 +137,15 @@ We declared v2 as **Arm B** and ran all three arms on the test split, 2 samples 
 
 **Arm B beats Arm A by 37.0 points** (95% range +28.0 to +45.5, paired on the 100 tasks). Every
 success was re-checked by an independent scorer with no disagreements. The gain is largest in
-retail (12.5% → 60%) and telecom (15% → 54%), and smallest in airline (17.5% → 30%), where the
+retail (12.5% → 60%) and telecom (15% → 53.8%), and smallest in airline (17.5% → 30%), where the
 remaining failures are about policy decisions rather than hallucinations.
 
-TODO: a chart of this table for the post (and the thumbnail).
+![Test results: task success by domain and hallucination rate for arms A, C and B](img/test-results.png)
 
 ### Result 2: reinforcement learning, and what reward design taught us
 
-The proposal was to heal with reinforcement learning (GRPO). We ran it twice, on top of the
-fine-tuned v2, using single-turn GRPO: each training prompt is a conversation up to one agent turn,
+The proposal was to heal with reinforcement learning (GRPO). We tried three reward designs, all on
+top of the fine-tuned v2 and all as single-turn GRPO: each training prompt is a conversation up to one agent turn,
 the model samples that turn 8 times, and a reward scores each sample.
 
 **The first run failed instructively.** We trained only on the teacher's *tool-call* turns. The
@@ -142,7 +153,7 @@ model learned that calling a tool was always rewarded, stopped replying to custo
 **0.5 of 30** on the validation tasks, against v2's 17.0. Its own training metrics looked healthy
 throughout, because they only ever scored tool-call turns.
 
-**The second run followed the loop properly.** We took 178 points where the base model failed
+**The second run (H) followed the loop properly.** We took 178 points where the base model failed
 (Tool 47, Arg 103, Loop 63), had the teacher fix each one (**177 of 178 accepted**), and gave each
 failure type its own reward: `tool`, `arg` and `loop`, plus agreement with the teacher's fix and a
 guard against giving up. A teammate's review caught a way to game it (generic replies scored
@@ -169,37 +180,49 @@ hallucinations at all. They were **decisions**:
 
 The rewards checked *how* a call was made: a real tool, real IDs, no repeats. A cancellation with a
 real reservation ID passes all three, whether or not it should happen. **Hallucination rewards
-taught the model to act confidently, not to act correctly.** A healing reward needs a decision check
-too, for example only rewarding changes the task still expects.
+taught the model to act confidently, not to act correctly.**
+
+**The third design (H2) added that decision check:** a sixth reward comparing each change against
+the changes τ²-bench still expected at that point in the task. It was harder than it sounds. The
+reward paid more for acting than for holding off, so the model drifted towards calling tools (from
+about half of its turns to 80%), and the drift guard stopped training at step 53 of 100. It scored
+**14.5 of 30** on validation against v2's 17.0, so it wasn't adopted.
+
+TODO (Charlie): H3, the revised decision reward (only a wrong change scores 0), when its
+validation result is in.
 
 ### What we learned
 
 * **Verified data beats instructions.** The fix that worked was showing the model hundreds of
   correct turns, each checked by the benchmark's own evaluator.
-* **Decide the rule before you see the result.** Every version (SFT v1–v4, both GRPO runs) was
+* **Decide the rule before you see the result.** Every version (SFT v1–v4, every GRPO run) was
   judged by a rule written down before it ran. Several promising ideas didn't pass, and the rules
   kept us honest.
 * **Give each split one job.** Choosing between versions on dev and reporting dev too would have
   overstated everything.
-* **Watch what kind of turn the model takes,** not just whether its tool calls are valid. Both of
-  our GRPO surprises were about *when* to act, not *how*.
+* **Watch what kind of turn the model takes,** not just whether its tool calls are valid. Every
+  GRPO surprise was about *when* to act, not *how*, and the drift guard that watched the share of
+  replies caught one run before it went too far.
 * **Hallucination and decision errors are different problems.** Once the hallucinations were
   gone, the remaining failures were about policy: what to change, and when. That's the next frontier
   for self-healing agents.
 
 ### What's next
 
-TODO: Charlie's additional full self-healing loop (in progress), and any further tests from
-Charlie and Chiara.
+TODO (Charlie, Chiara): the additional full self-healing loop now running, H3, and any further
+tests. Possibly also: Chiara's error analysis of the remaining failures (SEL-28) and the demo
+notebook (SEL-53), if they're done in time.
 
 The obvious next step for the loop is a reward that checks decisions as well as structure, and
 scoring whole conversations rather than single turns.
 
 ### Try it
 
-* **Dataset:** [`reagent-lexsi/tau2-golden-trajectories`](https://huggingface.co/datasets/reagent-lexsi/tau2-golden-trajectories):
-  verified teacher fixes for τ²-bench train tasks, labelled Tool / Arg / Loop. TODO: confirm it's
-  public before publishing.
+* **Dataset:** [`reagent-lexsi/tau2-golden-trajectories`](https://huggingface.co/datasets/reagent-lexsi/tau2-golden-trajectories)
+  (v1.1): 127 verified teacher conversations for τ²-bench train tasks, 31 dev reference
+  conversations, and a "hard subset" of 142 student conversations labelled Tool / Arg / Loop.
+  TODO: it's private today, and its card says the licence must be settled before a public release
+  (GLM-5.3-Flash outputs, τ²-bench data and GPT-4.1 customer turns).
 * **Code:** TODO: public repository link.
 * **Adapters:** TODO: decide which adapters to publish (v2 is Arm B).
 
