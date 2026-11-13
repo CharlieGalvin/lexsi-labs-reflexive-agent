@@ -201,6 +201,9 @@ oracle-score *files:
 # Summarise a rollout file as results/arm-<arm>-<domain>-<split>.metrics.json (no API calls; `--only dev`)
 arm-metrics file *args:
     python scripts/arms/metrics.py {{file}} {{args}}
+# All headline metrics for an arm (SEL-38): oracle success, AuditKIT agent scorers, TTC; any split
+arm-eval +args:
+    python scripts/arms/evaluate.py {{args}}
 # Failed conversations: the expected state-changing actions against what the agent did (`--all`, `--out`)
 arm-failures +args:
     python scripts/arms/failure_diff.py {{args}}
@@ -221,6 +224,31 @@ gate-check baseline candidate *args:
 # SFT v2 data (SEL-71): v1's examples + the teacher's extra verified passes for these domains
 sft-v2-data *args="--domains airline":
     python scripts/data/build_extra_fixes.py {{args}}
+
+# Adapter lifecycle (SEL-22): configs/adapters.yaml; state and history in results/adapters/state.json
+[positional-arguments]
+adapter-publish id *args:
+    python scripts/adapters/publish.py "$@"
+[positional-arguments]  # quoted: --why "a reason in words" must stay one argument
+adapter-use id *args:
+    python scripts/adapters/use.py "$@"
+[positional-arguments]
+adapter-rollback *args:
+    python scripts/adapters/use.py --rollback "$@"
+
+# On-policy teacher fixes (SEL-73): where the student's changes leave the expected ones on train tasks
+# (v2's train-pool rollouts are always the input; extra arguments are added, e.g. --dry-run)
+onpolicy-fixes *args:
+    python scripts/heal/onpolicy_fixes.py results/episodes/arms/S2-retail-trainpool.jsonl results/episodes/arms/S2-airline-trainpool.jsonl results/episodes/arms/S2-telecom-trainpool.jsonl {{args}}
+
+# SFT v4 data (SEL-73): v2's file + the on-policy fixes (group "onpolicy")
+sft-v4-data fixes="results/heal/onpolicy-fixes.jsonl":
+    cat data/train/sft-v2.jsonl {{fixes}} > data/train/sft-v4.jsonl
+    @echo "data/train/sft-v4.jsonl: $(wc -l < data/train/sft-v4.jsonl) examples ($(wc -l < {{fixes}}) on-policy)"
+
+# SFT v3 data (SEL-72): v1's examples + the extra verified retail and airline passes
+sft-v3-data *args:
+    python scripts/data/build_extra_fixes.py --domains retail airline --out data/train/sft-v3.jsonl {{args}}
 
 # Compare two rollout files with 95% bootstrap CIs (SEL-27): success, hallucination, loops, steps, redundant calls
 arm-compare a b *args:

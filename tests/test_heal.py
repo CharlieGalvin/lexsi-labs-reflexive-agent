@@ -319,3 +319,19 @@ def test_run_metrics_sum_up_a_cycle_from_its_audit_and_conversations(tmp_path):
         "total": 0.451,
         "note": "judge calls not included",
     }
+
+
+def test_extra_check_refuses_a_turn_check_fix_accepts():
+    teacher = PrefixTeacher(
+        make_agent=FakeModel([GOOD, ASK]), extra_check=lambda t: [] if t == ASK else ["no"]
+    )
+    ex = teacher.fix(failure())
+    assert ex is not None and teacher.tried[TRAIN[0]][0]["problems"] == ["no"]
+
+
+def test_running_out_of_credits_stops_instead_of_refusing():
+    from reflexive.runner import OutOfCredits
+
+    teacher = PrefixTeacher(make_agent=FakeModel([OutOfCredits("402"), GOOD]))
+    with pytest.raises(OutOfCredits):
+        teacher.fix(failure())

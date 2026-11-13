@@ -69,6 +69,25 @@ def paired_bootstrap[K: SupportsRichComparison](
     return diffs[int(0.025 * reps)], diffs[int(0.975 * reps) - 1]
 
 
+def cluster_bootstrap[K](
+    clusters: Mapping[K, list[bool]], reps: int = 10_000, seed: int = 0
+) -> tuple[float, float] | None:
+    """95% percentile-bootstrap range of a pass rate, resampling whole clusters (a task's samples).
+
+    Two samples of one task aren't independent, so resampling them separately would make the
+    range too narrow. None when there is nothing to resample."""
+    groups = [g for g in clusters.values() if g]
+    if not groups:
+        return None
+    rng = random.Random(seed)
+    rates = []
+    for _ in range(reps):
+        pick = rng.choices(groups, k=len(groups))
+        rates.append(sum(map(sum, pick)) / sum(map(len, pick)))
+    rates.sort()
+    return rates[int(0.025 * reps)], rates[min(int(0.975 * reps), reps - 1)]
+
+
 def mcnemar_power(p_a: float, p_b: float, n: int, sims: int = 4000, seed: int = 1) -> float:
     """Power of the exact McNemar test at alpha 0.05, by simulation (independent tasks)."""
     rng = random.Random(seed)

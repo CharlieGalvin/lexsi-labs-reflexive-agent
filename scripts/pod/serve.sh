@@ -74,6 +74,8 @@ export VLLM_USE_FLASHINFER_SAMPLER="${VLLM_USE_FLASHINFER_SAMPLER:-0}"
 
 # vLLM's compiled graphs, kept on the volume: a restarted pod reuses them instead of compiling again
 export VLLM_CACHE_ROOT="${VLLM_CACHE_ROOT:-$WORKSPACE/.cache/vllm}"
+# Lets `just adapter-use --server` load or swap an adapter without a restart (SEL-22, SEL-63)
+export VLLM_ALLOW_RUNTIME_LORA_UPDATING="${VLLM_ALLOW_RUNTIME_LORA_UPDATING:-True}"
 
 exec "$VLLM" serve "$MODEL" \
   --port "$PORT" \
