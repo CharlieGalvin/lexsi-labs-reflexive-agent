@@ -2,9 +2,9 @@
 title: "Reflexive Agents: Teaching a 32B Model to Heal Its Own Hallucinations"
 thumbnail: /blog/assets/reflexive-agents/test-results.png
 authors:
+- user: katiemarieek
 - user: cp89
 - user: cg3849
-- user: katiemarieek
 ---
 
 # Reflexive Agents: Teaching a 32B Model to Heal Its Own Hallucinations
