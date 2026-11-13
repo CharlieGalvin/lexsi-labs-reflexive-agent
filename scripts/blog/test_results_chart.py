@@ -5,7 +5,8 @@
 Left: task success by domain (mean of 2 samples over 100 test tasks, 95% bootstrap ranges over
 tasks). Right: the share of conversations with a Tool or Arg hallucination (the classifier).
 Two panels, not two axes: they are different measures. Every number is read from the committed
-metrics files (`results/arm-*-test.eval.metrics.json`, `results/arm-*-test-vs-arm-S2-test.compare.metrics.json`).
+metrics files: `results/arm-*-test.eval.metrics.json` and
+`results/arm-*-test-vs-arm-S2-test.compare.metrics.json`.
 
 Needs matplotlib, which isn't a project dependency: run it with any Python that has it.
 Colours: the first three slots of the data-viz reference palette, in fixed order
