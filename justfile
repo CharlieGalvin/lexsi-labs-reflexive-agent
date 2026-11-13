@@ -90,6 +90,34 @@ hard-subset *args:
 train-data *args:
     python scripts/data/build_train_data.py {{args}}
 
+# Single-turn GRPO prompts from the training conversations → data/train/grpo-*.jsonl (SEL-21)
+grpo-data *args:
+    python scripts/data/build_grpo_data.py {{args}}
+
+# Check the single-turn GRPO reward on the real prompts: the teacher scores the maximum, mistakes less (SEL-21)
+grpo-reward-check *args:
+    python scripts/data/check_grpo_rewards.py {{args}}
+
+# Single-turn GRPO on the GPU pod (SEL-21): SFT v2's adapter on 4-bit Aya 32B, the reward vs the teacher's turn → runs/
+grpo-train *args:
+    python scripts/grpo/train_single_turn.py {{args}}
+
+# Held-out reward: SFT v2 against the GRPO adapter on prompts never trained on (GPU pod; SEL-21)
+grpo-heldout *args:
+    python scripts/grpo/heldout_check.py {{args}}
+
+# Heal GRPO (SEL-75): the teacher's fixes at the student's Tool / Arg / Loop failures → data/heal/ (`--dry-run`: no API)
+heal-fixes *args:
+    python scripts/heal/make_fixes.py {{args}}
+
+# Heal GRPO prompts (SEL-75): the fixes plus anchor turns → data/train/grpo-heal*.jsonl
+grpo-heal-data *args:
+    python scripts/data/build_grpo_heal_data.py {{args}}
+
+# Heal rewards on the real data (SEL-75): teacher turns at the maximum, each failed turn caught by its type's reward
+grpo-heal-reward-check *args:
+    python scripts/data/check_heal_rewards.py {{args}}
+
 # Indicative SFT run on the GPU pod (SEL-65): QLoRA on Aya 32B, the agent's turns as targets → runs/
 sft-train *args:
     python scripts/sft/train_sft.py {{args}}
@@ -179,6 +207,14 @@ arm-eval +args:
 # Failed conversations: the expected state-changing actions against what the agent did (`--all`, `--out`)
 arm-failures +args:
     python scripts/arms/failure_diff.py {{args}}
+# Why conversations failed: unmet device assertions and missed actions, re-scored (`just arm-why S2 H --domain telecom`)
+arm-why +args:
+    python scripts/arms/why_failed.py {{args}}
+
+# Tool / Arg / Loop conversations per arm and domain, by the classifier (`--split val`: SEL-75's rule, part 3)
+arm-tool-arg +args:
+    python scripts/arms/tool_arg.py {{args}}
+
 # Passes per arm, domain and sample: the run-to-run spread (`--split val`)
 arm-samples +args:
     python scripts/arms/samples.py {{args}}
@@ -222,6 +258,12 @@ arm-compare a b *args:
 [positional-arguments]  # quoted: telecom task IDs contain | and [ ], which a shell would split
 rollout arm domain *args:
     python scripts/arms/rollout.py "$@"
+
+# An arm on the 30 validation tasks, 2 samples (task lists from P-<domain>-val.jsonl), e.g.
+# `just arm-val G configs/sft/arms.grpo.yaml`; then `just arm-samples S2 G --split val`
+[positional-arguments]
+arm-val arm config *args:
+    python scripts/arms/val_rollout.py "$@"
 
 # Experiment commands (train, evaluate…) are added by the Architect and Trainer.
 
