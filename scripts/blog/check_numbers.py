@@ -1,7 +1,7 @@
 """Check every number in the blog post against the committed results (SEL-77).
 
     just blog-check                 # recompute, compare with docs/blog/reflexive-agents.md
-    just blog                       # the same, then redraw the blog's figures
+    just reproduce                  # the walkthrough of every experiment, which ends with this check
 
 Each claim is recomputed from a committed metrics file and must appear in the post **exactly as
 written** (a whole table row or phrase, not just the number). Exits 1 if any doesn't. Claims whose
