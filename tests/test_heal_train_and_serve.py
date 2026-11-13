@@ -32,9 +32,13 @@ marker, port, env_file = sys.argv[1], int(sys.argv[2]), sys.argv[3]
 if env_file != "-":
     keys = ("ADAPTER", "EXTRA_ADAPTERS", "RUNTIME_LORA", "PORT")
     json.dump({k: os.environ.get(k) for k in keys}, open(env_file, "w"))
+key = os.environ.get("VLLM_API_KEY")
 class H(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
-        self.send_response(200 if self.path == "/v1/models" else 404)
+        if key and self.headers.get("Authorization") != f"Bearer {key}":
+            self.send_response(401)  # as vLLM does with VLLM_API_KEY
+        else:
+            self.send_response(200 if self.path == "/v1/models" else 404)
         self.end_headers()
         self.wfile.write(b'{"data": []}')
     def log_message(self, *a):
@@ -47,6 +51,7 @@ import json, os, sys
 from pathlib import Path
 argv = sys.argv[1:]
 json.dump(argv, open(os.environ["TRAIN_ARGS_FILE"], "w"))
+open(os.environ["TRAIN_ARGS_FILE"] + ".hf_home", "w").write(os.environ.get("HF_HOME", ""))
 if os.environ.get("TRAIN_FAILS"):
     sys.exit(3)
 out = Path(argv[argv.index("--out") + 1])
@@ -97,6 +102,8 @@ def pod(tmp_path):
         "STOP_TIMEOUT": "10",
     }
     env.pop("HEAL_INIT_ADAPTER", None)
+    env.pop("VLLM_API_KEY", None)
+    env.pop("HF_HOME", None)
     env.pop("HEAL_SERVE_ADAPTERS", None)
     yield {"tmp": tmp_path, "port": port, "old": old, "runs": runs, "out": out, "env": env, "marker": marker}
     old.kill()
@@ -195,3 +202,17 @@ def test_for_the_heal_service_the_new_adapter_is_served_from_the_restart(pod):
     assert read(pod, "env.json")["EXTRA_ADAPTERS"] == f"{pod['out'].name}={pod['out']}"
     failed = run(pod, HEAL_SERVE_NEW="1", TRAIN_FAILS="1")  # nothing new to serve
     assert failed.returncode == 3 and read(pod, "env.json")["EXTRA_ADAPTERS"] == ""
+
+
+def test_a_server_that_requires_a_key_is_checked_with_it(pod):
+    done = run(pod, VLLM_API_KEY="sk-pod", READY_TIMEOUT="5")
+    assert done.returncode == 0, done.stderr
+    assert "vLLM is up" in done.stdout
+
+
+def test_it_loads_the_pods_caches_as_serve_sh_does(pod):
+    hf_home = pod["tmp"] / "hf_cache"
+    (pod["tmp"] / ".pod_env").write_text(f"export HF_HOME={hf_home}\n")
+    done = run(pod)
+    assert done.returncode == 0, done.stderr
+    assert (pod["tmp"] / "train_args.json.hf_home").read_text() == str(hf_home)  # training saw it

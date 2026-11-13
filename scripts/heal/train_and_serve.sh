@@ -26,6 +26,8 @@
 #                        the cycle runs elsewhere and reaches the pod only through its endpoint)
 #   SERVE_LOG (default $WORKSPACE/vllm-heal.log), PORT (8000), READY_TIMEOUT (1200 s),
 #   STOP_TIMEOUT (120 s), HEAL_TRAIN_CONFIG, and for tests HEAL_TRAIN, HEAL_SERVE, VLLM_MATCH.
+#   VLLM_API_KEY, when vLLM requires a key: the readiness check sends it. $WORKSPACE/.pod_env (setup.sh's
+#   caches, HF_HOME) is loaded first, as serve.sh does.
 
 set -euo pipefail
 
@@ -35,6 +37,10 @@ BASE="${3-}"
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 WORKSPACE="${WORKSPACE:-/workspace}"
+# the pod's caches (setup.sh), as serve.sh loads them: HF_HOME on the volume, or training downloads the
+# model again into the container's disk. Here too, since the heal service may start without them.
+# shellcheck disable=SC1091
+[[ -f "$WORKSPACE/.pod_env" ]] && source "$WORKSPACE/.pod_env"
 PORT="${PORT:-8000}"
 CONFIG="${HEAL_TRAIN_CONFIG:-configs/train/sft_heal.yaml}"
 TRAIN="${HEAL_TRAIN:-$REPO_DIR/.venv/bin/python scripts/sft/train_sft.py}"
@@ -124,8 +130,11 @@ ADAPTER="" EXTRA_ADAPTERS="$extras" RUNTIME_LORA=1 PORT="$PORT" \
   nohup ${detach[@]+"${detach[@]}"} "${serve_cmd[@]}" >"$SERVE_LOG" 2>&1 </dev/null &
 server=$!
 
+# a vLLM started with VLLM_API_KEY answers 401 without it
+auth=()
+[[ -n "${VLLM_API_KEY-}" ]] && auth=(-H "Authorization: Bearer $VLLM_API_KEY")
 deadline=$(( SECONDS + READY_TIMEOUT ))
-until curl -sf "http://localhost:$PORT/v1/models" >/dev/null 2>&1; do
+until curl -sf ${auth[@]+"${auth[@]}"} "http://localhost:$PORT/v1/models" >/dev/null 2>&1; do
   if ! kill -0 "$server" 2>/dev/null && ! pgrep -f -- "$VLLM_MATCH" >/dev/null; then
     tail -20 "$SERVE_LOG" >&2 || true
     die "vLLM exited while starting: see $SERVE_LOG"
