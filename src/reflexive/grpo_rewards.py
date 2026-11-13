@@ -160,6 +160,29 @@ def _context(contents: tuple[str, ...]) -> _Context:
     return ctx
 
 
+TOOLS_BLOCK = "## Available Tools"  # where `reflexive.teacher.COHERE_TOOLS_PROMPT` starts
+
+
+def seen_text(prompt: Sequence[dict]) -> tuple[str, ...]:
+    """What counts as already seen for the grounding check: the conversation, without the tool
+    descriptions in the system prompt. Their examples (``something@example.com``) aren't the
+    customer's data, and Chiara's classifier doesn't count them either: it reads the
+    conversation with the tools given separately. Copying one is an invented argument."""
+    out = []
+    for m in prompt:
+        content = str(m.get("content") or "")
+        if m.get("role") == "system":
+            content = content.split(TOOLS_BLOCK, 1)[0]
+        out.append(content)
+    return tuple(out)
+
+
+def rotate_log(log: Path | None) -> None:
+    """Move a non-empty rewards log aside, so a new run starts its own file (runs kept apart)."""
+    if log and log.exists() and log.stat().st_size:
+        log.rename(log.with_name(f"{log.stem}.stopped-{int(time.time())}{log.suffix}"))
+
+
 def score(
     text: str, target_calls: Sequence[Call], domain: str, prompt: Sequence[dict], target: str = ""
 ) -> dict:
@@ -167,7 +190,7 @@ def score(
     calls, embedded = parse_calls(text)
     tools, customer = domain_tools(domain)
     schemas = {t["function"]["name"]: t["function"] for t in tools}
-    ctx = _context(tuple(str(m.get("content") or "") for m in prompt))
+    ctx = _context(seen_text(prompt))
 
     unknown_tools = [c["name"] for c in calls if c["name"] not in schemas]
     kinds = set()
@@ -227,8 +250,7 @@ def make_reward_fn(
     if bad := sorted(set(w) - set(COMPONENTS)):
         raise ValueError(f"unknown reward component(s) {bad}: expected some of {COMPONENTS}")
     log = Path(log_path) if log_path else None
-    if log and log.exists() and log.stat().st_size:
-        log.rename(log.with_name(f"{log.stem}.stopped-{int(time.time())}{log.suffix}"))  # keep runs apart
+    rotate_log(log)
     lock = threading.Lock()
     state = {"calls": 0}
 

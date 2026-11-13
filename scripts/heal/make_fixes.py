@@ -108,7 +108,13 @@ def fix_one(pid: str, rec: Record, types: list[str], finding: Any, teacher_kw: d
     return log
 
 
+def only_errors(log: Record) -> bool:
+    """Every attempt failed on the API (a key limit, a rate limit), not a refused fix: try again."""
+    return not log["accepted"] and all(a.get("error") for a in log["attempts"] or [{}])
+
+
 def report(logs: list[Record]) -> Record:
+    logs = list({log["point"]: log for log in logs}.values())  # a retried point: its last try
     by = collections.defaultdict(lambda: [0, 0])
     for log in logs:
         for t in log["types"]:
@@ -162,7 +168,9 @@ def main(argv: list[str] | None = None) -> int:
 
     a.out.mkdir(parents=True, exist_ok=True)
     attempts_path, fixes_path = a.out / "attempts.jsonl", a.out / "fixes.jsonl"
-    done = {log["point"] for log in read_jsonl(attempts_path)} if attempts_path.exists() else set()
+    logs = read_jsonl(attempts_path) if attempts_path.exists() else []
+    latest = {log["point"]: log for log in logs}
+    done = {p for p, log in latest.items() if not only_errors(log)}  # API errors are tried again
     todo = [x for x in pts if x[0] not in done][: a.limit]
     print(f"{len(done)} already tried; {len(todo)} to fix now")
     if a.dry_run or not todo:

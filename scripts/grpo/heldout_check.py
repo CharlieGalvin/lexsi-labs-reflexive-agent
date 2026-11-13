@@ -186,9 +186,12 @@ def summarise(
         ref = names[0]
         a, b = _by_task(scored[ref]), _by_task(scored[name])
         ci = paired_bootstrap_diff(a, b)
+        shared = a.keys() & b.keys()  # the point estimate on the same tasks as its interval
+        mean_a = _mean([x for t in shared for x, _ in a[t]])
+        mean_b = _mean([x for t in shared for x, _ in b[t]])
         diffs[name] = {
             "against": ref,
-            "reward_diff": round(adapters[name]["reward"] - adapters[ref]["reward"], 4),
+            "reward_diff": round(mean_b - mean_a, 4),
             "ci95": [round(ci[0], 4), round(ci[1], 4)] if ci else None,
             "tasks": len(a.keys() & b.keys()),
         }

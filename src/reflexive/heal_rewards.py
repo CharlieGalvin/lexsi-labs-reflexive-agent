@@ -39,7 +39,6 @@ from __future__ import annotations
 import json
 import re
 import threading
-import time
 from collections import Counter
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -92,21 +91,8 @@ def _json(v: Any, default: Any) -> Any:
     return default if v is None else v
 
 
-TOOLS_BLOCK = "## Available Tools"  # where `reflexive.teacher.COHERE_TOOLS_PROMPT` starts
-
-
-def seen_text(prompt: Sequence[Record]) -> tuple[str, ...]:
-    """What counts as already seen for the grounding check: the conversation, without the tool
-    descriptions in the system prompt. Their examples (``something@example.com``) aren't the
-    customer's data, and Chiara's classifier doesn't count them either: it reads the
-    conversation with the tools given separately. Copying one is an invented argument."""
-    out = []
-    for m in prompt:
-        content = str(m.get("content") or "")
-        if m.get("role") == "system":
-            content = content.split(TOOLS_BLOCK, 1)[0]
-        out.append(content)
-    return tuple(out)
+TOOLS_BLOCK = g.TOOLS_BLOCK
+seen_text = g.seen_text  # shared with the single-turn reward
 
 
 def score(
@@ -212,8 +198,7 @@ def score(
     }
 
 
-def total(s: Record, weights: dict[str, float]) -> float:
-    return sum(w * s[k] for k, w in weights.items())
+total = g.total
 
 
 def score_row(text: str, row: Record) -> Record:
@@ -242,13 +227,11 @@ class RewardFns:
         if bad := sorted(set(self.weights) - set(COMPONENTS)):
             raise ValueError(f"unknown reward component(s) {bad}: expected some of {COMPONENTS}")
         self.log = Path(log_path) if log_path else None
-        if self.log and self.log.exists() and self.log.stat().st_size:
-            self.log.rename(
-                self.log.with_name(f"{self.log.stem}.stopped-{int(time.time())}{self.log.suffix}")
-            )
+        g.rotate_log(self.log)
         self._lock = threading.Lock()
         self._key: tuple | None = None
         self._scores: list[Record] = []
+        self._served = 0  # reward functions that have read the cached batch
         self.calls = 0
         self.fns = [self._fn(c) for c in COMPONENTS]
 
@@ -283,7 +266,7 @@ class RewardFns:
             )
         with self._lock:
             self.calls += 1
-            self._key, self._scores = key, scores
+            self._key, self._scores, self._served = key, scores, 0
             if self.log:
                 with self.log.open("a") as f:
                     f.writelines(json.dumps(r, ensure_ascii=False) + "\n" for r in rows)
@@ -299,7 +282,12 @@ class RewardFns:
         def reward(completions: list[Any], **kwargs: Any) -> list[float]:
             if "target_calls" not in kwargs or "domain" not in kwargs:
                 raise ValueError("the dataset needs the heal columns: build it with `just grpo-heal-data`")
-            return [float(s[component]) for s in self._batch(completions, kwargs)]
+            scores = self._batch(completions, kwargs)
+            with self._lock:  # every component has read this batch: a later identical one is scored anew
+                self._served += 1
+                if self._served >= len(COMPONENTS):
+                    self._key, self._served = None, 0
+            return [float(s[component]) for s in scores]
 
         reward.__name__ = component  # TRL names the chart after it: rewards/<component>/mean
         return reward

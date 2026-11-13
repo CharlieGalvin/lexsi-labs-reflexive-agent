@@ -86,7 +86,7 @@ def prompts(cfg: dict[str, Any]) -> list[dict[str, Any]]:
     hold argument dicts of different shapes in one column."""
     rows = read_rows(cfg["data"])
     columns = HEAL_COLUMNS if cfg.get("rewards") == "heal" else COLUMNS
-    if missing := [c for c in columns if c not in rows[0]]:
+    if missing := sorted({c for r in rows for c in columns if c not in r}):
         raise SystemExit(f"⛔ {cfg['data']} has no {missing}: build it with `just grpo-heal-data`")
     return [{k: json.dumps(r[k]) if k in JSON_COLUMNS else r[k] for k in columns} for r in rows]
 
@@ -267,7 +267,7 @@ class ReplyDrift:
     Watches ``heal/reply_excess`` (the samples' share of replies minus the teacher's, per step,
     `reflexive.heal_rewards`). The first ``window`` logged steps are the baseline: SFT v2's own
     habit. From ``after_step`` on, if the mean of the last ``window`` steps is more than
-    ``max_drift`` further from zero than the baseline was, training stops: G drifted to replying
+    ``max_drift`` away from the baseline, either way, training stops: G drifted to replying
     almost never; a reward that rewarded generic questions would drift the other way."""
 
     def __init__(self, max_drift: float = 0.10, window: int = 10, after_step: int = 20) -> None:
@@ -288,7 +288,7 @@ class ReplyDrift:
         if step < self.after_step:
             return None
         recent = statistics.fmean(self.values[-self.window :])
-        if abs(recent) - abs(self.baseline) > self.max_drift:
+        if abs(recent - self.baseline) > self.max_drift:
             self.stopped = (
                 f"step {step}: reply share minus the teacher's averaged {recent:+.2f} over the last "
                 f"{self.window} steps, against {self.baseline:+.2f} at the start "
@@ -339,11 +339,16 @@ def main() -> int:  # noqa: PLR0915 - one linear script: check, load, train, sav
     lengths = prompt_tokens(rows, tok)
     print(f"{len(rows)} prompts; {length_report(lengths)}")
     rows, lengths = cap_prompts(rows, lengths, cfg.get("max_prompt_tokens"))
-    n_prompts = args["max_steps"] * args["per_device_train_batch_size"] * args["gradient_accumulation_steps"]
-    n_prompts //= args.get("num_generations", 8)
+    groups = args.get("num_generations", 8)
+    if (steps := args.get("max_steps") or 0) > 0:
+        batch = args.get("per_device_train_batch_size", 8) * args.get("gradient_accumulation_steps", 1)
+        n_prompts = steps * batch
+        seen = f"{steps} steps see {n_prompts // groups} of them"
+    else:
+        seen = f"{args.get('num_train_epochs', 3)} epoch(s)"
     print(
         f"training on {len(rows)} prompts (max_prompt_tokens: {cfg.get('max_prompt_tokens') or 'none'}); "
-        f"{args['max_steps']} steps see {n_prompts} of them, {args.get('num_generations', 8)} samples each"
+        f"{seen}, {groups} samples each"
     )
     if a.dry_run:
         return 0

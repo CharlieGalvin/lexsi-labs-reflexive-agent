@@ -11,8 +11,8 @@ Each domain's task list is read from ``P-<domain>-val.jsonl`` (arm P's validatio
 ``--from``, and ``scripts/arms/rollout.py`` writes ``results/episodes/arms/<arm>-<domain>-val.jsonl``.
 A re-run resumes: finished conversations are kept and crashed ones run again.
 
-Refuses a task outside the train split, and (if ``data/train/grpo-healable.jsonl`` is there) a task
-GRPO trained on.
+Refuses a task outside the train split, and a task GRPO trained on (any ``data/train/grpo-*.jsonl``
+training file that's there: the first run's and the heal run's; held-out files aren't trained on).
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ from reflexive.files import ROOT, read_jsonl, shown
 
 DOMAINS = ("retail", "airline", "telecom")
 ARMS_DIR = ROOT / "results" / "episodes" / "arms"
-GRPO_DATA = ROOT / "data" / "train" / "grpo-healable.jsonl"
+GRPO_DIR = ROOT / "data" / "train"
 SAMPLES = 2
 
 
@@ -49,11 +49,10 @@ def val_tasks(source: Path, domain: str) -> list[str]:
     return ids
 
 
-def trained_tasks(path: Path = GRPO_DATA) -> set[tuple[str, str]]:
-    """The (domain, task) pairs GRPO trained on, if its data file is here."""
-    if not path.exists():
-        return set()
-    return {(r["domain"], str(r["task_id"])) for r in read_jsonl(path)}
+def trained_tasks(folder: Path = GRPO_DIR) -> set[tuple[str, str]]:
+    """The (domain, task) pairs any GRPO run trained on: every ``grpo-*.jsonl`` here but the held-out ones."""
+    files = [p for p in sorted(folder.glob("grpo-*.jsonl")) if ".heldout" not in p.name]
+    return {(r["domain"], str(r["task_id"])) for p in files for r in read_jsonl(p)}
 
 
 def command(arm: str, domain: str, ids: list[str], config: Path, samples: int, extra: list[str]) -> list[str]:
@@ -88,7 +87,8 @@ def main(argv: list[str] | None = None) -> int:
     a, extra = p.parse_known_args(argv)  # anything else goes to rollout.py (e.g. --workers 8)
 
     tasks = {d: val_tasks(a.source, d) for d in a.domains}
-    if both := sorted((d, t) for d, ids in tasks.items() for t in ids if (d, t) in trained_tasks()):
+    trained = trained_tasks()
+    if both := sorted((d, t) for d, ids in tasks.items() for t in ids if (d, t) in trained):
         raise SystemExit(f"⛔ {len(both)} validation task(s) are in GRPO's training data, e.g. {both[0]}")
     print(
         f"Arm {a.arm} on validation: "
