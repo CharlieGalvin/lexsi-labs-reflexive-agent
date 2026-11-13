@@ -161,6 +161,29 @@ TODO (Charlie): H3, the revised decision reward, when its result is in.
   the remaining failures were about what to change, and when. That's the next frontier for
   self-healing agents.
 
+### Reproduce it yourself
+
+Every run saved its results, so you can step through all five experiments on a laptop in seconds,
+with no GPU or API keys. Each one is introduced, recomputed from the saved results, and ends with
+the commands that rerun it from scratch:
+
+```bash
+git clone <repo> && cd <repo>
+just reproduce            # or: python scripts/blog/reproduce.py
+```
+
+```
+━━ Experiment 2 of 5: Can you just tell it to be careful?
+
+  Test split, 100 tasks × 2  Arm A  Arm C        C − A (95% range)
+  Success                    14.5%  13.0%  −1.5 pts (−7.0 to +4.0)
+  Tool or Arg failure        95.0%  95.5%  +0.5 pts (−2.0 to +3.5)
+
+Result: No clear difference: the 95% range of C − A includes zero. Asking nicely doesn't work.
+```
+
+It ends by checking that every number it recomputed appears in this post exactly as written.
+
 ### What's next
 
 The next step is a reward that judges decisions as well as structure, and scores whole conversations

@@ -319,3 +319,7 @@ blog-figures:
 
 # Reproduce the blog's findings from the committed results: check the numbers, redraw the figures
 blog: blog-check blog-figures
+
+# Walk through the blog's experiments and reproduce each result from results/ (no GPU or keys): `just reproduce 3`, `--list`
+reproduce *args:
+    python scripts/blog/reproduce.py {{args}}
