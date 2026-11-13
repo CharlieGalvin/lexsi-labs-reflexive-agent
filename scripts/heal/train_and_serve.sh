@@ -111,7 +111,11 @@ if (( train_status == 0 )) && [[ ! -f "$OUT/adapter_config.json" ]]; then
   log "training exited 0 but wrote no adapter to $OUT"
   train_status=1
 fi
-(( train_status == 0 )) && log "adapter written to $OUT" || log "training failed (exit $train_status)"
+if (( train_status == 0 )); then
+  log "adapter written to $OUT"
+else
+  log "training failed (exit $train_status)"
+fi
 
 # --- 3. Start vLLM again -------------------------------------------------------------------------
 extras="$HEAL_SERVE_ADAPTERS"
