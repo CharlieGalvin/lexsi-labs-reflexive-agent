@@ -121,4 +121,6 @@ service ran on 8003 and nginx's 8001 block was pointed at it. Two fixes for the 
   conversations), `cycle-1.fixes.jsonl`, `run.json`, `runs/heal-20261113-052712-c1/` (fixes, training log,
   `run_summary.json`)
 - [`results/heal-first-cycle.metrics.json`](../../results/heal-first-cycle.metrics.json): the committed summary
-- The adapter `heal-20261113-052712-c1` is on the pod's volume only (not pushed: rejected)
+- The adapter `heal-20261113-052712-c1` (rejected, kept for the record and as a possible start for cycle 2):
+  private Hub repo [`reagent-lexsi/heal-first-cycle-c1-rejected`](https://huggingface.co/reagent-lexsi/heal-first-cycle-c1-rejected),
+  and a local copy in `runs/heal-service/heal-20261113-052712-c1/` (not in git)
