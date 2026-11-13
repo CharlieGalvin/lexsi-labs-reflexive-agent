@@ -13,6 +13,7 @@ import time
 import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import Any
 
 import pytest
 from _scripts import load_script
@@ -162,7 +163,7 @@ def vllm(served: list[str]):
             self.end_headers()
             self.wfile.write(raw)
 
-        def log_message(self, *a):
+        def log_message(self, format: str, *args: Any) -> None:  # noqa: A002 (BaseHTTPRequestHandler's name)
             pass
 
     return serve(Models)

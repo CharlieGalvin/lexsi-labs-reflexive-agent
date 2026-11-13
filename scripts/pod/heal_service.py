@@ -179,8 +179,8 @@ def handler(service: HealService) -> type[BaseHTTPRequestHandler]:
                 return
             self._send(*service.submit(body if isinstance(body, dict) else {}))
 
-        def log_message(self, fmt: str, *args: Any) -> None:
-            sys.stderr.write(f"[heal_service] {self.address_string()} {fmt % args}\n")
+        def log_message(self, format: str, *args: Any) -> None:  # noqa: A002 (BaseHTTPRequestHandler's name)
+            sys.stderr.write(f"[heal_service] {self.address_string()} {format % args}\n")
 
     return Handler
 
