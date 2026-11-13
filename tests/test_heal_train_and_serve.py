@@ -216,3 +216,23 @@ def test_it_loads_the_pods_caches_as_serve_sh_does(pod):
     done = run(pod)
     assert done.returncode == 0, done.stderr
     assert (pod["tmp"] / "train_args.json.hf_home").read_text() == str(hf_home)  # training saw it
+
+
+def test_a_gpu_that_doesnt_free_up_skips_training_but_still_brings_the_server_back(pod):
+    bin_dir = pod["tmp"] / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "nvidia-smi").write_text("#!/bin/sh\necho 30000\n")  # something else holds 30 GB
+    (bin_dir / "nvidia-smi").chmod(0o755)
+    done = run(pod, PATH=f"{bin_dir}:{os.environ['PATH']}", STOP_TIMEOUT="1")
+    assert done.returncode == 1 and "Not training" in done.stdout
+    assert not (pod["tmp"] / "train_args.json").exists()  # never trained
+    assert answers(pod["port"]) and "vLLM is up" in done.stdout  # but the endpoint is back
+
+
+def test_an_adapter_already_served_isnt_passed_to_vllm_twice(pod):
+    prev = pod["runs"] / "heal-20261110-110000-c1"
+    prev.mkdir()
+    (prev / "adapter_config.json").write_text('{"r": 16}')
+    done = run(pod, base=prev.name, HEAL_SERVE_ADAPTERS=f"{prev.name}={prev} sft2=runs/v2")
+    assert done.returncode == 0, done.stderr
+    assert read(pod, "env.json")["EXTRA_ADAPTERS"] == f"{prev.name}={prev} sft2=runs/v2"

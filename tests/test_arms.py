@@ -11,7 +11,7 @@ import json
 import pytest
 import yaml
 
-from reflexive.arms import get_arm, load_config, make_student
+from reflexive.arms import get_arm, load_config, make_student, recorded_api_base
 
 CUSTOMER = {"user_llm": "gpt-4.1", "user_llm_args": {"mock_response": "Yes, please go ahead."}}
 
@@ -95,6 +95,12 @@ def test_the_pods_student_takes_its_url_and_key_from_the_environment(monkeypatch
     monkeypatch.setenv("POD_STUDENT_URL", "https://pod-8000.proxy.runpod.net/v1/")
     agent = make_student(arm.student)
     assert agent.api_base == "https://pod-8000.proxy.runpod.net/v1" and agent.usage.prices == (0.0, 0.0)
+
+
+def test_records_keep_the_servers_variable_name_never_none_as_text():
+    assert recorded_api_base({"api_base": "http://localhost:8000/v1"}) == "http://localhost:8000/v1"
+    assert recorded_api_base({"api_base_env": "POD_STUDENT_URL"}) == "$POD_STUDENT_URL"
+    assert recorded_api_base({"model": "c4ai-aya-expanse-32b"}) is None  # a hosted API: not "$None"
 
 
 # --- With τ²-bench ----------------------------------------------------------------------------

@@ -151,13 +151,68 @@ def test_the_service_wont_start_without_a_long_token(monkeypatch, capsys):
     assert svc.main(["--port", "0"]) == 1 and "HEAL_TOKEN" in capsys.readouterr().err
 
 
+def test_the_service_wont_start_without_vllms_key(monkeypatch, capsys):
+    # each job restarts vLLM with this environment: without the key, the public port comes back open
+    monkeypatch.setenv("HEAL_TOKEN", TOKEN)
+    monkeypatch.delenv("VLLM_API_KEY", raising=False)
+    assert svc.main(["--port", "0"]) == 1 and "VLLM_API_KEY" in capsys.readouterr().err
+
+
+def test_a_malformed_authorization_header_is_a_401_not_a_crash(service):
+    s, url, _ = service
+    assert not s.authorised("Bearer \u201ct\u201d")  # a token pasted with smart quotes
+    assert call(f"{url}/heal/health", token="\u00e9" * 20)[0] == 401  # non-ASCII over HTTP (latin-1)
+
+
+def test_a_job_that_cant_be_set_up_leaves_the_service_free(service, monkeypatch):
+    s, url, tmp = service
+    real = s._status
+
+    def full_disk(name, **fields):
+        if fields.get("status") == "running":
+            raise OSError(122, "Disk quota exceeded")
+        real(name, **fields)
+
+    monkeypatch.setattr(s, "_status", full_disk)
+    code, body = call(f"{url}/heal/train", "POST", {"name": "heal-c1", "fixes": [fix()]})
+    assert code == 500 and "Disk quota exceeded" in body["error"]
+    assert (
+        s.busy is None
+        and json.loads((tmp / "jobs" / "heal-c1" / "status.json").read_text())["status"] == "failed"
+    )
+    monkeypatch.setattr(s, "_status", real)
+    assert (
+        call(f"{url}/heal/train", "POST", {"name": "heal-c2", "fixes": [fix()]})[0] == 202
+    )  # not stuck busy
+    assert wait(url, "heal-c2")["status"] == "done"
+
+
+def test_a_job_left_running_by_a_restart_is_marked_interrupted(tmp_path):
+    (tmp_path / "jobs" / "heal-c1").mkdir(parents=True)
+    (tmp_path / "jobs" / "heal-c1" / "status.json").write_text('{"name": "heal-c1", "status": "running"}')
+    (tmp_path / "jobs" / "heal-c0").mkdir()
+    (tmp_path / "jobs" / "heal-c0" / "status.json").write_text('{"name": "heal-c0", "status": "done"}')
+    s = svc.HealService(tmp_path / "jobs", TOKEN)
+    code, st = s.job("heal-c1")
+    assert code == 200 and st["status"] == "failed" and st["interrupted"] is True
+    assert s.job("heal-c0")[1]["status"] == "done"  # finished jobs untouched
+
+
 # --- The cycle's side ---------------------------------------------------------------------------
 
 
-def vllm(served: list[str]):
+def vllm(served: list[str], fail_first: int = 0):
+    """A stub vLLM listing ``served``; its first ``fail_first`` answers are a 502, as the proxy's."""
+    failures = [fail_first]
+
     class Models(BaseHTTPRequestHandler):
         def do_GET(self):  # noqa: N802
             assert self.headers.get("Authorization") == "Bearer pod-key"
+            if failures[0] > 0:
+                failures[0] -= 1
+                self.send_response(502)
+                self.end_headers()
+                return
             raw = json.dumps({"data": [{"id": m} for m in served]}).encode()
             self.send_response(200)
             self.end_headers()
@@ -199,4 +254,46 @@ def test_the_remote_trainer_fails_loudly(service, tmp_path, monkeypatch):
     bad = cycle.RemoteTrainer(tmp_path / "runs2", url=url, token="wrong", api_base=f"{api}/v1")
     with pytest.raises(RuntimeError, match="HTTP 401"):
         bad.train([fix()], None)
+    server.shutdown()
+
+
+def test_one_proxy_hiccup_on_the_final_check_doesnt_crash_the_cycle(tmp_path):
+    server, api = vllm(["heal-c1"], fail_first=2)
+    t = cycle.RemoteTrainer(tmp_path / "runs", url="-", token=TOKEN, api_base=f"{api}/v1", api_key="pod-key")
+    t.poll_s = 0.01
+    assert t._served() == {"heal-c1"}  # two 502s, then the list
+    server.shutdown()
+    server, api = vllm(["heal-c1"], fail_first=5)
+    t.api_base = f"{api}/v1"
+    with pytest.raises(urllib.error.HTTPError):  # still failing after its tries: reported
+        t._served()
+    server.shutdown()
+
+
+def test_a_service_that_keeps_refusing_the_poll_fails_fast_not_after_4_hours(tmp_path):
+    class Forgetful(BaseHTTPRequestHandler):  # takes the job, then doesn't know it (another --root)
+        def do_POST(self):  # noqa: N802
+            self.rfile.read(int(self.headers["Content-Length"]))
+            self._send(202, {"status": "running"})
+
+        def do_GET(self):  # noqa: N802
+            self._send(404, {"error": "no job"})
+
+        def _send(self, code: int, body: dict) -> None:
+            raw = json.dumps(body).encode()
+            self.send_response(code)
+            self.send_header("Content-Length", str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+
+        def log_message(self, format: str, *args: Any) -> None:  # noqa: A002 (BaseHTTPRequestHandler's name)
+            pass
+
+    server, url = serve(Forgetful)
+    t = cycle.RemoteTrainer(tmp_path / "runs", url=url, token=TOKEN, api_base="-")
+    t.poll_s = 0.01
+    start = time.monotonic()
+    with pytest.raises(RuntimeError, match=r"HTTP 404 .*\(3 polls in a row\)"):
+        t.train([fix()], None)
+    assert time.monotonic() - start < 5
     server.shutdown()

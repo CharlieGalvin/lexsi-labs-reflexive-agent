@@ -24,7 +24,8 @@
 #                        when the cycle's student is sft2 (the gate's baseline)
 #   HEAL_SERVE_NEW=1     also serve the new adapter from the restart (scripts/pod/heal_service.py:
 #                        the cycle runs elsewhere and reaches the pod only through its endpoint)
-#   SERVE_LOG (default $WORKSPACE/vllm-heal.log), PORT (8000), READY_TIMEOUT (1200 s),
+#   SERVE_LOG (default $WORKSPACE/vllm-heal.log), PORT (8000), READY_TIMEOUT (2400 s: the 32B reload
+#   from the network volume took 11-13 min on 13 Nov),
 #   STOP_TIMEOUT (120 s), HEAL_TRAIN_CONFIG, and for tests HEAL_TRAIN, HEAL_SERVE, VLLM_MATCH.
 #   VLLM_API_KEY, when vLLM requires a key: the readiness check sends it. $WORKSPACE/.pod_env (setup.sh's
 #   caches, HF_HOME) is loaded first, as serve.sh does.
@@ -47,7 +48,7 @@ TRAIN="${HEAL_TRAIN:-$REPO_DIR/.venv/bin/python scripts/sft/train_sft.py}"
 SERVE="${HEAL_SERVE:-bash scripts/pod/serve.sh}"
 VLLM_MATCH="${VLLM_MATCH:-vllm serve}"
 SERVE_LOG="${SERVE_LOG:-$WORKSPACE/vllm-heal.log}"
-READY_TIMEOUT="${READY_TIMEOUT:-1200}"
+READY_TIMEOUT="${READY_TIMEOUT:-2400}"
 STOP_TIMEOUT="${STOP_TIMEOUT:-120}"
 POLL="${POLL:-5}"
 GPU_FREE_MB="${GPU_FREE_MB:-2000}"
@@ -92,10 +93,16 @@ if [[ -n "$pids" ]]; then
 else
   log "no vLLM running (nothing matches '$VLLM_MATCH')"
 fi
+gpu_free=1
 if command -v nvidia-smi >/dev/null; then  # its worker processes can hold memory a little longer
   deadline=$(( SECONDS + STOP_TIMEOUT ))
   until (( $(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits | head -1) < GPU_FREE_MB )); do
-    (( SECONDS < deadline )) || die "the GPU still has over ${GPU_FREE_MB} MiB in use: is something else on it?"
+    if (( SECONDS >= deadline )); then
+      # vLLM is already stopped: don't train, but don't leave the endpoint down either
+      log "the GPU still has over ${GPU_FREE_MB} MiB in use: is something else on it? Not training"
+      gpu_free=0
+      break
+    fi
     sleep "$POLL"
   done
 fi
@@ -106,7 +113,11 @@ args=("$CONFIG" --data "$DATA" --out "$OUT" --name "$NAME")
 [[ -n "$init" ]] && args+=(--init-adapter "$init")
 log "training $NAME on $(wc -l < "$DATA" | tr -d ' ') fixes${init:+, from $init}"
 train_status=0
-"${train_cmd[@]}" "${args[@]}" || train_status=$?
+if (( gpu_free )); then
+  "${train_cmd[@]}" "${args[@]}" || train_status=$?
+else
+  train_status=1
+fi
 if (( train_status == 0 )) && [[ ! -f "$OUT/adapter_config.json" ]]; then
   log "training exited 0 but wrote no adapter to $OUT"
   train_status=1
@@ -119,10 +130,15 @@ fi
 
 # --- 3. Start vLLM again -------------------------------------------------------------------------
 extras="$HEAL_SERVE_ADAPTERS"
-[[ -n "$BASE" ]] && extras="${extras:+$extras }$BASE=$init"
+serve_also() {  # add "name=path" unless that name is already served: vLLM refuses a name twice
+  local e
+  for e in $extras; do [[ "${e%%=*}" == "${1%%=*}" ]] && return 0; done
+  extras="${extras:+$extras }$1"
+}
+if [[ -n "$BASE" ]]; then serve_also "$BASE=$init"; fi
 # HEAL_SERVE_NEW=1 (the pod heal service): serve the new adapter from the start too, so a cycle
 # running elsewhere, which can't load a file on the pod, finds it on the endpoint
-[[ "$HEAL_SERVE_NEW" == 1 && "$train_status" == 0 ]] && extras="${extras:+$extras }$NAME=$OUT"
+if [[ "$HEAL_SERVE_NEW" == 1 && "$train_status" == 0 ]]; then serve_also "$NAME=$OUT"; fi
 read -ra serve_cmd <<< "$SERVE"
 mkdir -p "$(dirname "$SERVE_LOG")"
 log "starting vLLM on :$PORT (runtime LoRA${extras:+, serving $extras}); log: $SERVE_LOG"

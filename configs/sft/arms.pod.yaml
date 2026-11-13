@@ -9,7 +9,8 @@
 #   HEAL_SERVICE_URL=https://<pod>-8001.proxy.runpod.net     # the heal service (--train-url)
 #   HEAL_TOKEN=...           # the heal service's token
 #
-# On the pod: RUNTIME_LORA=1 ADAPTER= VLLM_API_KEY=... just sft-serve, and the heal service.
+# On the pod: RUNTIME_LORA=1 ADAPTER= VLLM_API_KEY=... just sft-serve, then the heal service with the
+# same key (it restarts vLLM after each job): HEAL_TOKEN=... VLLM_API_KEY=... just heal-service
 # Same harness, prompt, decoding and customer as configs/sft/arms.base.yaml (arm P); only how the
 # student is reached differs. Never on test.
 

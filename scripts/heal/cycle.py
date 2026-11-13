@@ -164,6 +164,8 @@ class RemoteTrainer(CommandTrainer):
     api_key: str | None = None
     poll_s: float = 30.0
     timeout_s: float = 4 * 3600.0
+    max_refused: int = 3  # polls refused in a row (401/403/404) before giving up
+    served_tries: int = 3  # the final model-list check, through the same proxy
 
     def train(self, fixes: Any, base: Adapter) -> Adapter:
         name = super().train(fixes, base)  # no command: writes the data, returns the name
@@ -175,11 +177,18 @@ class RemoteTrainer(CommandTrainer):
         if code != 202:
             raise RuntimeError(f"the heal service refused {name}: HTTP {code} {body.get('error', body)}")
         status: dict[str, Any] = {}
+        refused = 0  # consecutive 401/403/404: the service restarted with another token or --root
         while time.monotonic() - start < self.timeout_s:
             time.sleep(self.poll_s)
             code, status = self._request("GET", f"/heal/jobs/{name}")
             if code == 200 and status.get("status") != "running":
                 break
+            refused = refused + 1 if code in (401, 403, 404) else 0
+            if refused >= self.max_refused:
+                raise RuntimeError(
+                    f"the heal service answers HTTP {code} for {name} ({refused} polls in a row): "
+                    f"{status.get('error', status)}; was it restarted with another HEAL_TOKEN or --root?"
+                )
         else:
             raise RuntimeError(f"{name}: still training after {self.timeout_s / 3600:.1f} h")
         call.update(
@@ -216,10 +225,21 @@ class RemoteTrainer(CommandTrainer):
             return 0, {"error": str(e)}
 
     def _served(self) -> set[str]:
+        """The endpoint's model list, retried: the pod's proxy can drop a request (502, timeout)."""
         headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
         req = urllib.request.Request(self.api_base.rstrip("/") + "/models", headers=headers)
-        with urllib.request.urlopen(req, timeout=60) as resp:  # noqa: S310 - the student's server
-            return {m.get("id") for m in json.loads(resp.read()).get("data", [])}
+        for attempt in range(1, self.served_tries + 1):
+            try:
+                with urllib.request.urlopen(req, timeout=60) as resp:  # noqa: S310 - the student's server
+                    return {m.get("id") for m in json.loads(resp.read()).get("data", [])}
+            except urllib.error.HTTPError as e:
+                if e.code < 500 or attempt == self.served_tries:  # 401/404 won't fix themselves
+                    raise
+            except (urllib.error.URLError, TimeoutError):
+                if attempt == self.served_tries:
+                    raise
+            time.sleep(min(self.poll_s, 10.0))
+        raise AssertionError("unreachable")
 
 
 def save_episodes(report: CycleReport, path: Path) -> None:

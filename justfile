@@ -202,7 +202,7 @@ rollout arm domain *args:
 heal *args:
     python scripts/heal/cycle.py {{args}}
 
-# On the pod (SEL-68): the heal service, so a cycle elsewhere trains here (`just heal --train-url`); needs HEAL_TOKEN
+# On the pod (SEL-68): the heal service, so a cycle elsewhere trains here (`just heal --train-url`); needs HEAL_TOKEN and VLLM_API_KEY
 heal-service *args:
     python scripts/pod/heal_service.py {{args}}
 
