@@ -1,6 +1,6 @@
 """The blog's test-results chart (SEL-77): arms A, C and B on the τ²-bench test split.
 
-    python scripts/blog/test_results_chart.py          # → docs/blog/img/test-results.png
+    just blog-figures          # → docs/blog/img/test-results.png (and the loop diagram)
 
 Left: task success by domain (mean of 2 samples over 100 test tasks, 95% bootstrap ranges over
 tasks). Right: the share of conversations with a Tool or Arg hallucination (the classifier).

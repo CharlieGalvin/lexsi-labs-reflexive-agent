@@ -28,6 +28,36 @@ gate. We built this loop on [τ²-bench](https://github.com/sierra-research/tau2
 * **Reinforcement learning didn't beat fine-tuning,** but it showed what a healing reward has to
   measure: not just *how* the agent acts, but *whether* it should.
 
+### The idea, without the jargon
+
+Picture a new trainee on a customer help desk. They're quick and polite, but under pressure they
+bluff: they quote an order number that doesn't exist, use a system they don't have access to, or
+press the same broken button again and again. That's an agent **hallucinating**.
+
+Now give the trainee a senior colleague who replays each call that went wrong, stops at the exact
+moment it went off track, and writes down what should have been said. The trainee practises on those
+corrections: that's **teacher–student training**. Before they go back on the phones, a manager runs
+them through a set of test calls and signs them off only if they solve more than before.
+
+Spot the mistake, get the correction, practise, pass the check, and repeat: that's
+**self-healing**. In our project the trainee is a 32B open model, the senior colleague is a stronger
+model, and the manager is a benchmark with a rulebook fixed in advance.
+
+### The loop: detect, fix, retrain, gate
+
+![The self-healing loop: the student agent fails a conversation; a classifier detects and labels the failing turn; a teacher model rewrites it; the student is retrained on the verified fixes; and a gate promotes the new adapter only if it solves more dev tasks](img/heal-loop.png)
+
+1. **Detect.** A classifier finds the first failing turn and its type: Tool, Arg or Loop.
+2. **Fix.** The teacher sees the conversation exactly as the student did, up to that turn, and
+   rewrites it. A fix is kept only if it's a real turn, doesn't give up, and has no Tool, Arg or Loop
+   failure of its own. Fixes cost about $0.001 each.
+3. **Retrain** the student's LoRA adapter on the fixes.
+4. **Gate.** The new adapter replaces the old one only if it does better on the dev split, under a
+   rule agreed in advance.
+
+A runtime monitor also watches live conversations for loops. On telecom it flagged all 7 that looped
+to the step limit, and none of those that passed.
+
 ### The setup
 
 τ²-bench gives an agent a simulated customer, a policy and real tools over a database, in three
@@ -66,25 +96,7 @@ The cheapest fix is a prompt. With a fixed instruction not to hallucinate, the s
 against 14.5% without it (a difference of −1.5 points, 95% range −7.0 to +4.0), and still
 hallucinated in 95.5% of conversations. The model knows the rule; it doesn't follow it.
 
-### The loop: detect, fix, retrain, gate
-
-```
- task ──► student (Aya Expanse 32B + LoRA) ──► conversation ──► DETECT & CLASSIFY (Tool / Arg / Loop)
-              ▲                                                         │ failures
-              │ promote if the gate passes                              ▼
-        GATE (dev split) ◄──── RETRAIN (LoRA) ◄──── FIX: the teacher rewrites the failing turn
-```
-
-1. **Detect.** The classifier finds the first failing turn and its type.
-2. **Fix.** The teacher sees the conversation exactly as the student did, up to that turn, and
-   rewrites it. A fix is kept only if it's a real turn, doesn't give up, and has no Tool, Arg or Loop
-   failure of its own. Fixes cost about $0.001 each.
-3. **Retrain** the student's LoRA adapter on the fixes.
-4. **Gate.** The new adapter replaces the old one only if it does better on the dev split, under a
-   rule agreed in advance.
-
-A runtime monitor also watches live conversations for loops. On telecom it flagged all 7 that looped
-to the step limit, and none of those that passed.
+### One turn of the loop
 
 We ran one full cycle end to end. The teacher fixed **24 of 24** failures, and the healed adapter
 made **71% fewer** Tool, Arg and Loop errors per conversation. But it solved the same number of dev
