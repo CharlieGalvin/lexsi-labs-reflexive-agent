@@ -9,6 +9,8 @@ authors:
 
 # Reflexive Agents: Teaching a 32B Model to Heal Its Own Hallucinations
 
+*8 min read*
+
 Agents are increasingly trusted with write access: cancelling orders, changing flights, editing
 accounts. When they hallucinate, the result isn't a wrong sentence but a wrong action. They call a
 tool they don't have, invent an order ID, or retry a failing call until the conversation runs out.
