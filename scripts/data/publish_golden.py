@@ -355,6 +355,12 @@ def card(
         else ""
     )
     hard_md = hard_section(*hard_part, repo, tag) if hard_part else ""
+    hard_row = (
+        f"\n| `{HARD_FILE}` | {len(hard_part[0])} | How the untuned student did on every **train** task, "
+        "with failure labels (see [Hard subset](#hard-subset-added-in-v11)) |"
+        if hard_part
+        else ""
+    )
     unsolved_note = (
         "With no fix, none of them is healable: the hard subset above shows how Arm A did on each."
         if hard_part
@@ -413,7 +419,7 @@ marks assistant turns.
 |---|---:|---|
 | `{FILES["train"]}` | {n_train} | One golden trajectory per solved **train** task. Train on these. |
 | `{FILES["dev"]}` | {n_dev} | Trajectories for **dev** tasks: for reference and comparison, **never trained on** |
-| `splits.json` | | The frozen task IDs: train {split_sizes["train"]}, dev {split_sizes["dev"]}, test {split_sizes["test"]} (seed `{seed}`) |
+| `splits.json` | | The frozen task IDs: train {split_sizes["train"]}, dev {split_sizes["dev"]}, test {split_sizes["test"]} (seed `{seed}`) |{hard_row}
 
 | Domain | Train: tasks with a trajectory | Dev: tasks with a trajectory |
 |---|---:|---:|
