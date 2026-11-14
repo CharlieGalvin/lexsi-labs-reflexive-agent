@@ -1,6 +1,8 @@
 <!-- prettier-ignore -->
 <div align="center">
 
+<img src="docs/img/logo.svg" alt="" height="96">
+
 # Reflexive Agents
 
 *An AI agent that heals its own hallucinations: it detects how it went wrong, learns from a
@@ -225,15 +227,12 @@ results/*.metrics.json   committed evidence for the demo
 
 ## Feedback for Lexsi Labs
 
-TODO (team): our feedback and feature requests for AgentTune, AuditKIT and DECIDE. Notes so far:
-
 - **AgentTune:** `FailureDetector` sees only tool calls, so it misses text-only loops (repeated
   replies); our `reflexive.monitor` stands in for it. `lexsi_provenance.json` worked well as the
   lineage record for every adapter we published.
 - **AuditKIT:** the outcome oracle agreed with τ²-bench's own verdicts on all 600 test conversations.
   `agent_loop_detection` counts near-identical replies (e.g. repeated goodbyes) as loops, so it
   couldn't tell arms A and B apart (126 against 125 of 200) where our classifier could (49% against 27%).
-- **DECIDE:** TODO.
 
 ## Resources
 

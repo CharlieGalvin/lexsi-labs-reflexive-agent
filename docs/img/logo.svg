@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Reflexive Agents logo: a healing loop around a check mark">
+  <title>Reflexive Agents</title>
+  <rect width="128" height="128" rx="28" fill="#15171c"/>
+  <path d="M 83.5 36.1 A 34 34 0 1 1 44.5 36.1" fill="none" stroke="#ff4b0a" stroke-width="10" stroke-linecap="round"/>
+  <path d="M 53.5 29.8 L 47.8 46.1 L 36.3 29.7 Z" fill="#ff4b0a" stroke="#ff4b0a" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M 47 66 L 59 78 L 82 52" fill="none" stroke="#ffffff" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
