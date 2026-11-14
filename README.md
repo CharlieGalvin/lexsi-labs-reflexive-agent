@@ -73,9 +73,10 @@ and decoding. 95% ranges are a bootstrap over tasks.
 
 - **Healing works, and it's mostly about data.** B beats A by **+37.0 points** (paired, +28.0 to +45.5).
 - **Asking nicely doesn't.** C − A is −1.5 points (−7.0 to +4.0): the model knows the rule, it doesn't follow it.
-- **The grain of the fix matters.** Run automatically, fixing only the failing turn cut
-  hallucinations by 71% but solved no more dev tasks, so the gate rejected it. Fixing with whole
-  verified conversations: TODO (Charlie): the trajectory cycle's result.
+- **The grain of the fix matters.** Run fully automatically, the loop that fixed only the failing turn
+  cut hallucinations by 71% but solved no more dev tasks, and the gate rejected it. The same loop
+  fixing with whole verified conversations went from **6 to 22 of 36 dev tasks**, and the gate
+  promoted it and swapped it in with no one in the loop.
 - **What's left is decisions.** In 37 of Arm B's 55 failed dev and validation conversations the
   classifier finds no hallucination at all: the agent changed the wrong thing, or didn't change
   the right one.
@@ -115,7 +116,7 @@ Every version was judged by a rule written down before its result. Each has a co
 | Teacher bake-off | Which teacher? | GLM-5.3-Flash: 88% first try; verified fixes for 158 of 178 tasks, $11 | [phase 2](docs/experiments/TEACHER_PHASE2_RESULTS.md) |
 | SFT v1 → v4 | Does fine-tuning on verified fixes heal the student? | v2: dev 11% → 60%, gate promotes: **Arm B**. v3 and v4 matched it, not adopted | [SFT](docs/experiments/SFT.md) |
 | Heal cycle, turn-level | Does the automated loop improve the base model? | Findings −71%, dev 4 → 4: rejected | [first cycle](docs/experiments/HEAL_FIRST_CYCLE.md) |
-| Heal cycle, trajectory-level | The same loop, fixing with whole verified conversations | TODO (Charlie): result | [plan and result](docs/experiments/HEAL_FROM_V2.md) |
+| Heal cycle, trajectory-level | The same loop, fixing with whole verified conversations | Dev 6 → 22 of 36, findings −87%: **promoted, swapped in live** | [plan and result](docs/experiments/HEAL_FROM_V2.md) |
 | GRPO G, H, H2 | Can reinforcement learning heal beyond SFT? | G collapsed (0.5/30); H halved loops, rejected; H2 14.5/30 against v2's 17.0 | [GRPO heal](docs/experiments/GRPO_HEAL.md) |
 | Runtime monitor | Can a monitor catch loops live? | Fired on all 7 telecom conversations that looped to the step limit, none of the 7 that passed | [monitor](docs/experiments/MONITOR_NO_PROGRESS.md) |
 
@@ -177,7 +178,8 @@ serving with vLLM, scoring. The automated heal cycle is `scripts/heal/cycle.py` 
 | | Hugging Face | Licence |
 |---|---|---|
 | **Healed model (Arm B)** | [reagent-lexsi/sft-aya32b-r16-v2](https://huggingface.co/reagent-lexsi/sft-aya32b-r16-v2), a LoRA adapter for Aya Expanse 32B | CC BY-NC 4.0 (from Aya) |
-| **Every version we trained** | [reagent-lexsi](https://huggingface.co/reagent-lexsi): 10 adapters, adopted or not, each with its result and `lexsi_provenance.json` | CC BY-NC 4.0 |
+| **Healed by the automated loop** | [reagent-lexsi/heal-trajectory-cycle-c1](https://huggingface.co/reagent-lexsi/heal-trajectory-cycle-c1): the adapter the loop trained and the gate promoted, with no one in the loop | CC BY-NC 4.0 |
+| **Every version we trained** | [reagent-lexsi](https://huggingface.co/reagent-lexsi): 11 adapters, adopted or not, each with its result and `lexsi_provenance.json` | CC BY-NC 4.0 |
 | **Verified teacher conversations** | [reagent-lexsi/tau2-golden-trajectories](https://huggingface.co/datasets/reagent-lexsi/tau2-golden-trajectories): 127 train + 31 dev conversations, plus the hard subset | CC BY-NC 4.0 (customer turns are GPT-4.1 outputs) |
 
 The code in this repo is [MIT](LICENSE). Third-party code (τ²-bench, AgentTune) isn't committed:
@@ -232,7 +234,7 @@ results/*.metrics.json   committed evidence for the demo
   lineage record for every adapter we published.
 - **AuditKIT:** the outcome oracle agreed with τ²-bench's own verdicts on all 600 test conversations.
   `agent_loop_detection` counts near-identical replies (e.g. repeated goodbyes) as loops, so it
-  couldn't tell arms A and B apart (126 against 125 of 200) where our classifier could (49% against 27%).
+  couldn't tell arms A and B apart (125 and 126 of 200) where our classifier could (49% and 27%).
 
 ## Resources
 
