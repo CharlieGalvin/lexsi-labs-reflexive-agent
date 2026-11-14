@@ -1,0 +1,43 @@
+# A heal cycle's retraining (SEL-68): QLoRA on the teacher's runtime fixes, one cycle at a time.
+# Run by scripts/heal/train_and_serve.sh, which passes --data (the cycle's fixes.jsonl), --out,
+# --name and, from the second cycle on, --init-adapter (the adapter being healed).
+#
+#   just heal --config configs/sft/arms.base.yaml --sample 10 \
+#     --train-cmd "bash scripts/heal/train_and_serve.sh {data} {out} {base}" --load-adapter
+#
+# Everything is SFT v1's (configs/train/sft_aya32b.yaml), except:
+# - data: none here; the cycle's fixes are passed with --data (group "heal", one target turn each)
+# - gradient_accumulation_steps 2, not 4: a cycle has few fixes (6 on the 7 Nov fixes-only run),
+#   so 4 would give one or two optimiser steps. Untested at this size: see the first cycle's
+#   run_summary.json (steps, train loss) before trusting it.
+
+name: heal                         # replaced by --name (the cycle's adapter name)
+model: CohereLabs/aya-expanse-32b
+data: null                         # always --data
+train_group: heal
+eval_group: solved_by_aya          # not in a cycle's fixes: no held-out loss
+max_len: 16384
+
+lora:                              # a new adapter only; --init-adapter keeps the old one's
+  r: 16
+  alpha: 32
+  dropout: 0.05
+  target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+
+quantization:
+  load_in_4bit: true
+  quant_type: nf4
+  double_quant: true
+
+trainer:
+  num_train_epochs: 2
+  learning_rate: 1.0e-4
+  lr_scheduler_type: cosine
+  warmup_ratio: 0.05
+  per_device_train_batch_size: 1
+  gradient_accumulation_steps: 2
+  max_grad_norm: 1.0
+  weight_decay: 0.0
+  optim: paged_adamw_8bit
+  logging_steps: 1
+  seed: 0

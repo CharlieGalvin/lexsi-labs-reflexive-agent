@@ -1,164 +1,149 @@
+<!-- prettier-ignore -->
+<div align="center">
+
+<img src="docs/img/logo-intro.png" alt="Reflexive Agents logo: a sad robot goes round the healing loop, gets a plaster and smiles" height="112">
+
 # Reflexive Agents
 
-**A self-healing loop for mitigating agent hallucination in production workflows**
+*An AI agent that heals its own hallucinations: it detects how it went wrong, learns from a
+teacher's verified fix, and keeps the update only if it passes a gate.*
 
-> The incredible LBG RAI team is embarking on an epic conquest to self-heal a hallucinating agent using reinforcement learning.
+[![CI](https://github.com/CharlieGalvin/lexsi-labs-reflexive-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/CharlieGalvin/lexsi-labs-reflexive-agent/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/Python-3.12-3776ab?style=flat-square&logo=python&logoColor=white)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](LICENSE)
+[![Benchmark: τ²-bench](https://img.shields.io/badge/Benchmark-τ²--bench-2f6f9f?style=flat-square)](https://github.com/sierra-research/tau2-bench)
+<br>
+[![Model on HF](https://img.shields.io/badge/🤗_Model-sft--aya32b--r16--v2-ffcc4d?style=flat-square)](https://huggingface.co/reagent-lexsi/sft-aya32b-r16-v2)
+[![Dataset on HF](https://img.shields.io/badge/🤗_Dataset-tau2--golden--trajectories-ffcc4d?style=flat-square)](https://huggingface.co/datasets/reagent-lexsi/tau2-golden-trajectories)
+[![Blog post](https://img.shields.io/badge/Read-the_blog_post-ff6b35?style=flat-square)](docs/blog/reflexive-agents.md)
 
-Lexsi Labs AI Safety & Alignment Hackathon (Nov 2026) · Track 3: Agentic Fine-tuning
-Problem statements: *Self-healing agents*, *Efficient trajectories*, *Reliable tool calling*,
-*Reward design and reward-hacking defences*.
+[Overview](#overview) • [Results](#results) • [How it works](#how-it-works) • [Experiments](#experiments) • [Get started](#get-started) • [Models and data](#models-and-data) • [Resources](#resources)
 
----
+![The self-healing loop, animated: detect the failing turn, a teacher rewrites it, retrain on verified fixes, promote only if better](docs/blog/img/heal-loop.gif)
 
-## 1. Abstract
+</div>
 
-Current agentic systems suffer from **hallucination drift**: a model correctly identifies a
-tool but generates hallucinated arguments, or enters an infinite loop of incorrect reasoning.
-Most systems treat these as terminal failures that need a human to "reset" the prompt.
+Agents are trusted with write access: cancelling orders, changing flights, editing accounts. When
+they hallucinate, the result isn't a wrong sentence but a **wrong action**. Reflexive Agents is a
+closed loop that turns those failures into training data, built for the Lexsi Labs AI Safety &
+Alignment Hackathon (Track 3: Agentic Fine-tuning) on the Lexsi Labs stack.
 
-This project introduces a **Reflexive self-healing agent** that treats hallucinations as
-repairable data points rather than terminal failures. Using the Lexsi Labs stack, we build a
-multi-step customer-service agent with database write tools (on τ²-bench) with **AgentTune**, and a closed loop
-in which the agent's `EventLog` is monitored by a **DECIDE**-based decision engine. When a
-failure is detected (a ToolNotFound error, a loop, or a hallucinated argument), the system:
+> [!IMPORTANT]
+> **The healed agent solves 51.5% of τ²-bench's test tasks, against 14.5% before healing**, and
+> conversations with a hallucinated tool or argument fall from **95% to 10%**. A "be careful"
+> prompt changed nothing (13.0%).
 
-1. **Detect & Classify** — categorise the failure as **Tool**, **Arg** or **Loop** using a
-   groundedness check.
-2. **Synthesise** — use a teacher model (**GLM-5.3-Flash**, chosen in a bake-off) to
-   generate a corrected trajectory.
-3. **Retrain & Gate** — pass corrected trajectories into the AgentTune RL factory
-   (**GRPO**, **BCO**) to update the student (**Aya Expanse 32B**).
+## Overview
 
-*Model choices changed on 3 Nov:* the original proposal had Aya Expanse 32B as the teacher and
-Tiny Aya as the student. Unaided Aya Expanse 32B solved 1 of 30 train tasks, so it became the
-student (its 128K context also fits telecom), and GLM-5.3-Flash won the teacher bake-off. See
-[`docs/experiments/`](docs/experiments/README.md).
-4. **Verify** — use **AuditKIT** as a deployment gate, comparing the healed model's success
-   rate against the baseline; the healed adapter is promoted only if it wins.
+We gave a 32B open model, **Aya Expanse 32B**, three customer-service jobs on
+[τ²-bench](https://github.com/sierra-research/tau2-bench): retail, airline and telecom, with real
+tools over a database and a simulated customer. Untuned, it bluffs: it calls tools it doesn't have,
+invents IDs like `email="something@example.com"`, and retries failing calls until the conversation
+runs out.
 
-Our goal is to show that self-healing not only improves success rate but significantly
-**reduces steps per task and redundant tool calls**, moving agents from best-effort execution
-towards verified correctness through automated, gated weight updates.
+The loop heals it with four parts:
 
-```
-             ┌──────────────────────── production / eval rollouts ───────────────────────┐
- task ──► Student (Aya Expanse 32B + LoRA) ─► EventLog ──► DETECT & CLASSIFY (Tool/Arg/Loop)
-                 ▲                                                   │ failures
-                 │ promote if gate passes                            ▼
-        VERIFY: AuditKIT gate ◄── RETRAIN: AgentTune GRPO/BCO ◄── SYNTHESISE: teacher
-        (healed vs. baseline)        (student weights)            (GLM-5.3-Flash) →
-                                                                  verified golden trajectories
-```
+- **A classifier** (`reflexive.hallucination`) that labels every failure **Tool**, **Arg** or **Loop**.
+- **A teacher**, GLM-5.3-Flash, chosen from 12 models in a bake-off, whose fixes are verified by
+  τ²-bench's own evaluator.
+- **A trainer** that fits a QLoRA adapter (rank 16) on the fixes.
+- **A gate**, agreed before any result, that promotes the new adapter only if it solves more dev
+  tasks without more hallucinations.
 
-## 2. Experiment design — "the proof"
+We ran it two ways: **by hand**, as supervised fine-tuning on the teacher's verified conversations,
+and **automatically**, end to end on a GPU pod, where the loop detects, fixes, retrains, gates and
+swaps the adapter with no one in it.
 
-**Task suites** (decision 2 Nov: public benchmarks instead of a synthetic suite, so our numbers are
-comparable with published results; setup, splits and costs: [`docs/TAU2_SETUP.md`](docs/TAU2_SETUP.md)):
+## Results
 
-- **[τ²-bench](https://github.com/sierra-research/tau2-bench)** (MIT): retail, airline and telecom
-  customer-service tasks with database write tools and an LLM-simulated user, scored by final database
-  state. We heal on the train split and report all arms on the official test split.
-  **Splits are frozen in [`configs/splits.json`](configs/splits.json)** (SEL-36): train 142, dev 36
-  (15 retail, 6 airline, 15 telecom, carved from τ²-bench's train by task), test 100.
-  **Rule: test task IDs are never used for healing, teacher fixes, DSPy or choosing anything;**
-  **dev tasks are never trained on.** Code that builds training data calls
-  `reflexive.splits.assert_not_test`.
-- **[BFCL v3 multi-turn](https://gorilla.cs.berkeley.edu/blogs/13_bfcl_v3_multi_turn.html)** (Apache-2.0):
-  state-scored multi-turn function calling. Generalisation test only, never trained on; its
-  missing-parameter and missing-function sets map onto Arg and Tool hallucination.
+τ²-bench **test split**: 100 tasks × 2 samples per arm, the same student, harness, customer (GPT-4.1)
+and decoding. 95% ranges are a bootstrap over tasks.
 
-Our published data contribution is the curated set of verified teacher fixes for τ²-bench train
-failures, labelled Tool / Arg / Loop.
+| Arm | What it is | Success | Retail | Airline | Telecom | Tool or Arg hallucination | Loops |
+|---|---|---:|---:|---:|---:|---:|---:|
+| **A** | Untuned Aya Expanse 32B | 14.5% (9.5–20.0) | 12.5% | 17.5% | 15.0% | 95.0% | 49.0% |
+| **C** | A + "be careful" prompt | 13.0% (7.5–19.0) | 10.0% | 20.0% | 12.5% | 95.5% | 49.5% |
+| **B** | **Healed (SFT v2)** | **51.5% (43.5–59.5)** | **60.0%** | **30.0%** | **53.8%** | **10.0%** | **27.0%** |
 
-**Four arms** (same student model, same harness, same test split, same decoding):
+<div align="center">
 
-| Arm | Name | What it is | Weight updates? |
+![Test results by domain for arms A, C and B](docs/blog/img/test-results.png)
+
+</div>
+
+- **Healing works, and it's mostly about data.** B beats A by **+37.0 points** (paired, +28.0 to +45.5).
+- **Asking nicely doesn't.** C − A is −1.5 points (−7.0 to +4.0): the model knows the rule, it doesn't follow it.
+- **The grain of the fix matters.** Run fully automatically, the loop that fixed only the failing turn
+  cut hallucinations by 71% but solved no more dev tasks, and the gate rejected it. The same loop
+  fixing with whole verified conversations went from **6 to 22 of 36 dev tasks**, and the gate
+  promoted it and swapped it in with no one in the loop.
+- **What's left is decisions.** In 37 of Arm B's 55 failed dev and validation conversations the
+  classifier finds no hallucination at all: the agent changed the wrong thing, or didn't change
+  the right one.
+
+> [!NOTE]
+> Arm B was declared before any test run, every test run is reported, and every success is
+> re-scored by AuditKIT's outcome oracle (0 disagreements with τ²-bench). B ran self-hosted at a 32K
+> context (2 of its 200 conversations ran past it and count as failures); A and C ran on Cohere's API.
+
+## How it works
+
+1. **Detect.** The student runs train tasks. The classifier finds the first failing turn and its
+   type: **Tool** (a tool it doesn't have), **Arg** (an invented, placeholder or ill-typed argument)
+   or **Loop** (a repeated or already-failed call).
+2. **Fix.** The teacher sees the conversation exactly as the student did and fixes it, either the
+   failing turn or the whole task. A fix is kept only if it passes its check.
+3. **Retrain.** A QLoRA adapter is trained on the fixes.
+4. **Gate.** The adapter replaces the current one only if it solves at least **2 more of the 36 dev
+   tasks**, without more hallucinations or any domain losing 2 tasks
+   ([`configs/gate.yaml`](configs/gate.yaml)).
+
+The splits are frozen in [`configs/splits.json`](configs/splits.json): **train** 142 tasks (30 held
+out as validation, for choosing between versions), **dev** 36 (the gate) and **test** 100 (declared
+arms only).
+
+> [!TIP]
+> Every number above is recomputed from committed files in seconds, with no GPU or API keys:
+> `just reproduce`. See [Get started](#get-started).
+
+## Experiments
+
+Every version was judged by a rule written down before its result. Each has a config, a row in
+[`docs/EXPERIMENTS.md`](docs/EXPERIMENTS.md), committed metrics and a write-up.
+
+| Experiment | Question | Result | Write-up |
 |---|---|---|---|
-| **A** | Baseline (naive agent) | Standard AgentTune rollout, no healing | No |
-| **B** | **Reflexive agent (ours)** | Full Detect → Synthesise → Retrain → Verify loop | Yes |
-| **C** | Prompt-only control | "Be careful not to hallucinate" system prompt | No |
-| **D** | Optimised-prompt control | DSPy-optimised prompt on the dev/train split | No |
+| Teacher bake-off | Which teacher? | GLM-5.3-Flash: 88% first try; verified fixes for 158 of 178 tasks, $11 | [phase 2](docs/experiments/TEACHER_PHASE2_RESULTS.md) |
+| SFT v1 → v4 | Does fine-tuning on verified fixes heal the student? | v2: dev 11% → 60%, gate promotes: **Arm B**. v3 and v4 matched it, not adopted | [SFT](docs/experiments/SFT.md) |
+| Heal cycle, turn-level | Does the automated loop improve the base model? | Findings −71%, dev 4 → 4: rejected | [first cycle](docs/experiments/HEAL_FIRST_CYCLE.md) |
+| Heal cycle, trajectory-level | The same loop, fixing with whole verified conversations | Dev 6 → 22 of 36, findings −87%: **promoted, swapped in live** | [plan and result](docs/experiments/HEAL_FROM_V2.md) |
+| GRPO G, H, H2 | Can reinforcement learning heal beyond SFT? | G collapsed (0.5/30); H halved loops, rejected; H2 14.5/30 against v2's 17.0 | [GRPO heal](docs/experiments/GRPO_HEAL.md) |
+| Runtime monitor | Can a monitor catch loops live? | Fired on all 7 telecom conversations that looped to the step limit, none of the 7 that passed | [monitor](docs/experiments/MONITOR_NO_PROGRESS.md) |
 
-C and D separate the effect of *weight updates* from the effect of *better instructions*: if B
-beats D, the gain is not something prompt engineering alone could get. A useful extra
-ablation if time allows: **B′ = B without the teacher** (retrain on the student's own
-successful rollouts), to isolate the teacher's contribution.
+> [!NOTE]
+> **Changed from the proposal:** student and teacher swapped on 3 Nov (unaided Aya Expanse 32B
+> solved 1 of 30 train tasks); the DSPy prompt arm and BFCL dropped on 5 Nov to focus on τ²-bench;
+> the healed arm is SFT rather than GRPO, because no GRPO version beat it under the rules.
 
-**Key metrics** (all on the held-out test split, with bootstrap confidence intervals):
+## Get started
 
-| Metric | Definition | Owner |
-|---|---|---|
-| Success Rate (SR) | verified outcome correct (τ²-bench evaluator / AuditKIT outcome oracle) | Curator |
-| Hallucination Rate | episodes with a Tool or Arg failure, or an ungrounded final claim | Architect (classifier) |
-| Loop Rate | episodes classified Loop | Architect, cross-checked with AuditKIT `agent_loop_detection` |
-| Steps / redundant calls | tool calls per task, repeated identical calls | Curator (AuditKIT `redundant_tool_calls`) |
-| TTC | tokens and wall-clock time per completed task | Trainer (rollout logs) |
-| Healing Accuracy | share of failures that the healed model gets right on re-run | Trainer (heal loop logs) |
-| Success per token / ROI | SR ÷ tokens per task | Curator (final charts) |
-
-## 3. Technical roadmap and roles
-
-### Role 1 — Data & Synthesis ("the Curator")
-**Tooling:** CuratorKIT, AuditKIT
-- Freeze the τ²-bench train / dev / test splits, and build the **"hard hallucination"
-  subset** (tasks that reliably trigger Tool / Arg / Loop failures in the baseline).
-- Run the teacher (**GLM-5.3-Flash**) to generate **golden trajectories** on train tasks,
-  verified by τ²-bench's own evaluator, then convert them to the student's format and publish
-  them for the Trainer (**published 5 Nov: [v1](https://huggingface.co/datasets/reagent-lexsi/tau2-golden-trajectories), private, 127 train + 31 dev reference
-  records**; the hard subset follows as v1.1, SEL-60).
-- Run the AuditKIT verification suite; produce the final ROI and success-per-token charts.
-
-### Role 2 — Systems & Logic ("the Architect")
-**Tooling:** AgentTune, DECIDE
-- Build the `ReflexiveAgent` class.
-- Implement `classify_hallucination` (Tool vs. Arg vs. Loop).
-- Integrate the DECIDE YAML workflow to orchestrate Detect → Heal, and build the public demo
-  (live UI or interactive notebook).
-
-### Role 3 — Model & Training ("the Trainer")
-**Tooling:** Aya Expanse 32B (student), AgentTune RL factory
-- Set up the GRPO / BCO training loop; manage student weights and the adapter lifecycle.
-- Execute the HEAL training steps (retrain the student on the Curator's dataset).
-
-Task breakdown, milestones and owners: [`docs/WORKPLAN.md`](docs/WORKPLAN.md).
-
----
-
-## Mapping the proposal onto the stack
-
-AgentTune already ships most of the closed loop under `agenttune.decide.closed_loop`, so the
-work is mainly wiring plus our own classifier, rewards and evaluation. Who builds each part:
-
-| Proposal step | AgentTune / AuditKIT component | Owner |
-|---|---|---|
-| Monitor EventLog | `agenttune.agentic.EventLog` and the audit log `FullClosedLoop` reads; our `reflexive.monitor` checks it after every turn and stands in for `FailureDetector` (which sees only tool calls, so misses text-only loops) | Architect |
-| Detect & Classify | `FailureClassifier` (LLM, 5 root causes) | Architect: our `classify_hallucination` (Tool / Arg / Loop) |
-| Synthesise | `TrainingExampleGenerator` (chosen/rejected pairs), `create_distill_trainer` | Curator |
-| Retrain | `RetrainingTrigger`, `create_agentic_trainer(algorithm="grpo"/"bco")` | Trainer |
-| Gate | `DeploymentGate`, `ReplayValidator` | Curator (AuditKIT scorers) |
-| Orchestrate | DECIDE YAML → `langgraph` (`GraphRunner`), `FullClosedLoop` | Architect |
-
-## Stack
-
-| Piece | Used for |
-|---|---|
-| [AgentTune](https://github.com/Lexsi-Labs/AgentTune) | Rollouts, GRPO/BCO, DECIDE, closed-loop components |
-| [AuditKIT](https://github.com/Lexsi-Labs/AuditKIT) | Gate + independent scorers: `redundant_tool_calls`, `agent_loop_detection`, `tool_call_validity`, `tool_selection` |
-| [CuratorKIT](https://github.com/Lexsi-Labs/CuratorKIT) | Hard-hallucination dataset, quality-gated golden trajectories |
-| Aya Expanse 32B (Cohere Labs, CC-BY-NC) | Student |
-| GLM-5.3-Flash (`z-ai/glm-5.3-flash`, MIT, via OpenRouter) | Teacher |
-| Hugging Face Hub ([reagent-lexsi](https://huggingface.co/reagent-lexsi)) | Adapters, datasets, logs |
-| W&B or Trackio | Training curves |
-
-## Quick start
-
-Needs two small tools, once per machine: [uv](https://docs.astral.sh/uv/) (Python + packages)
-and [just](https://just.systems) (task runner). On a Mac: `brew install uv just`.
-Don't `pip install just`: that's an unrelated Python package with the same name. Without
-Homebrew, use `uv tool install rust-just`. Check with `which just`: it should not be inside `.venv`.
+You need [uv](https://docs.astral.sh/uv/) and [just](https://just.systems). On a Mac:
+`brew install uv just`.
 
 ```bash
 git clone https://github.com/CharlieGalvin/lexsi-labs-reflexive-agent && cd lexsi-labs-reflexive-agent
+just setup-dev      # Python 3.12 environment, τ²-bench and its data, test tools
+just reproduce      # the five experiments, recomputed from results/ (no GPU, no keys)
+```
+
+<details>
+<summary><b>Develop and run experiments</b></summary>
+
+> [!WARNING]
+> Don't `pip install just`: that's an unrelated Python package. Without Homebrew, use
+> `uv tool install rust-just`.
+
+```bash
 just setup-dev                  # .venv (Python 3.12) + τ²-bench with its data + test tools; creates .env
 #   → open .env and add OPENAI_API_KEY (the retail/airline judges), OPENROUTER_API_KEY (teacher +
 #     simulated customer), COHERE_API_KEY (the student, Aya Expanse 32B, for `just rollout`) and
@@ -177,7 +162,31 @@ just setup                      # also installs the training libraries and Agent
 Run `just` on its own to list every command. Python must be **3.12 or 3.13** (τ²-bench rejects
 3.14); `just setup-dev` creates a 3.12 environment for you.
 
-## Repo layout
+</details>
+
+<details>
+<summary><b>Rerun training on a GPU</b></summary>
+
+Training and serving the 32B student needs one H100 (SFT takes about 25 minutes).
+[`docs/experiments/SFT_POD.md`](docs/experiments/SFT_POD.md) is the runbook: pod setup, training,
+serving with vLLM, scoring. The automated heal cycle is `scripts/heal/cycle.py` (see its docstring).
+
+</details>
+
+## Models and data
+
+| | Hugging Face | Licence |
+|---|---|---|
+| **Healed model (Arm B)** | [reagent-lexsi/sft-aya32b-r16-v2](https://huggingface.co/reagent-lexsi/sft-aya32b-r16-v2), a LoRA adapter for Aya Expanse 32B | CC BY-NC 4.0 (from Aya) |
+| **Healed by the automated loop** | [reagent-lexsi/heal-trajectory-cycle-c1](https://huggingface.co/reagent-lexsi/heal-trajectory-cycle-c1): the adapter the loop trained and the gate promoted, with no one in the loop | CC BY-NC 4.0 |
+| **Every version we trained** | [reagent-lexsi](https://huggingface.co/reagent-lexsi): 11 adapters, adopted or not, each with its result and `lexsi_provenance.json` | CC BY-NC 4.0 |
+| **Verified teacher conversations** | [reagent-lexsi/tau2-golden-trajectories](https://huggingface.co/datasets/reagent-lexsi/tau2-golden-trajectories): 127 train + 31 dev conversations, plus the hard subset | CC BY-NC 4.0 (customer turns are GPT-4.1 outputs) |
+
+The code in this repo is [MIT](LICENSE). Third-party code (τ²-bench, AgentTune) isn't committed:
+`just setup-dev` clones it, under its own licence.
+
+<details>
+<summary><b>Repo layout</b></summary>
 
 ```
 configs/                 one YAML per experiment / arm (copy, don't edit in place)
@@ -198,30 +207,59 @@ scripts/                 command-line tools, one folder per job (scripts/README.
   student/               Aya's failure review
   arms/                  experiment arms: rollouts (`just rollout A retail`), classifier spot check
   data/                  frozen splits, golden trajectories v1, the Hugging Face upload
+  sft/                   SFT training (QLoRA) and serving the student (Arm B)
+  grpo/                  the GRPO runs (G, H, H2)
+  heal/                  the automated heal cycle (`cycle.py`: detect → fix → retrain → gate)
+  pod/                   GPU pod setup, vLLM serving and the heal service
+  blog/                  the blog's figures, number check and `just reproduce`
   archive/               early probes, kept for the record
 third_party/             τ²-bench v2.0.0 (with data) and AgentTune, cloned by `just setup-dev` / `just setup`
 tests/                   offline tests (no GPU) — run in CI on every PR
 docs/DATA_CONTRACT.md    what the Curator hands over: the five rules, the files and the record format
 docs/TAU2_SETUP.md       τ²-bench setup decisions (splits, judges, context fit, costs)
 docs/TEACHER_SETUP.md    teacher (GLM-5.3-Flash via OpenRouter) and the Cohere prompt format Aya uses
-docs/experiments/        the teacher bake-off and golden trajectories, in order (start at its README)
+docs/experiments/        every experiment's plan, rule and result, in order (start at its README)
+docs/blog/               the project write-up (Hugging Face blog format)
 docs/WORKPLAN.md         the original 2 Nov plan (live tracking is in Linear)
 docs/EXPERIMENTS.md      one row per run
 results/*.metrics.json   committed evidence for the demo
 ```
 
-## Team workflow
+</details>
 
-- Work is tracked in **Linear**: [Reflexive Agents project](https://linear.app/self-healing-hallucination/project/reflexive-agents-e8769e1623aa)
-  (issues `SEL-5`…`SEL-30`, milestones M1–M4, role labels Curator / Architect / Trainer / Shared).
-- Branch per issue using Linear's branch name (copy it from the issue, e.g. `charliegalvin/sel-12-…`),
-  or mention `SEL-12` in the PR title — Linear moves the issue to In Progress / Done automatically.
-- PR into `main`, CI must pass, one review.
-- Every run gets a config file, an `EXPERIMENTS.md` row and a committed `metrics.json`.
-- Models, adapters and datasets go to the team HF org [reagent-lexsi](https://huggingface.co/reagent-lexsi), not git.
+## Feedback for Lexsi Labs
 
-## Licences
+- **AgentTune:** `FailureDetector` sees only tool calls, so it misses text-only loops (repeated
+  replies); our `reflexive.monitor` stands in for it. `lexsi_provenance.json` worked well as the
+  lineage record for every adapter we published.
+- **AuditKIT:** the outcome oracle agreed with τ²-bench's own verdicts on all 600 test conversations.
+  `agent_loop_detection` counts near-identical replies (e.g. repeated goodbyes) as loops, so it
+  couldn't tell arms A and B apart (125 and 126 of 200) where our classifier could (49% and 27%).
 
-AgentTune (LSAL v1.1) and AuditKIT (LSAL v1.2) are source-available for research and
-non-commercial use, not OSI open source. Check the Aya Expanse licence (CC-BY-NC) before
-publishing weights, and the customer model's terms (GPT-4.1) before publishing trajectories. Code in this repo: pick a licence before going public.
+## Resources
+
+- **[Blog post](docs/blog/reflexive-agents.md):** the project, told end to end.
+- **[Experiments, in order](docs/experiments/README.md)** and **[every run](docs/EXPERIMENTS.md)**.
+- **[τ²-bench](https://github.com/sierra-research/tau2-bench)** and the Lexsi Labs stack:
+  [AgentTune](https://github.com/Lexsi-Labs/AgentTune), [AuditKIT](https://github.com/Lexsi-Labs/AuditKIT),
+  [CuratorKIT](https://github.com/Lexsi-Labs/CuratorKIT).
+
+<details>
+<summary><b>Cite τ²-bench</b></summary>
+
+```bibtex
+@article{barres2025tau2,
+  title   = {$\tau^2$-Bench: Evaluating Conversational Agents in a Dual-Control Environment},
+  author  = {Barres, Victor and Dong, Honghua and Ray, Soham and Si, Xujie and Narasimhan, Karthik},
+  journal = {arXiv preprint arXiv:2506.07982},
+  year    = {2025}
+}
+```
+
+</details>
+
+---
+
+Built by **Katie** ([katiemarieek](https://huggingface.co/katiemarieek)), **Chiara Picardi**
+([cp89](https://huggingface.co/cp89)) and **Charlie Galvin** ([cg3849](https://huggingface.co/cg3849))
+for the Lexsi Labs AI Safety & Alignment Hackathon, November 2026.

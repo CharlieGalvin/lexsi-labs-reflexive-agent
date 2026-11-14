@@ -13,6 +13,11 @@ from `reflexive.sft.encode`: only the agent's turns are targets. Writes ``runs/<
 adapter, ``run_summary.json`` (data, settings, losses, time, peak memory) and ``log.jsonl``.
 Refuses to overwrite a finished run without ``--force``. Never reads dev or test tasks:
 `just train-data` only writes train tasks, and this checks again.
+
+A heal cycle (SEL-68) runs it through ``scripts/heal/train_and_serve.sh`` with
+``configs/train/sft_heal.yaml`` and ``--data`` (the cycle's fixes), ``--out`` (the folder the cycle
+reads the adapter from), ``--name`` and, from the second cycle on, ``--init-adapter`` (the adapter
+being healed, trained further rather than replaced).
 """
 
 from __future__ import annotations
@@ -157,17 +162,36 @@ def build_trainer(  # noqa: PLR0913 - the pieces a Trainer is made of
     )
 
 
-def main() -> int:  # noqa: C901, PLR0915 - one linear script: load, tokenise, train, save
+def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0915 - one linear script
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("config", type=Path, nargs="?", default=CONFIG, help=f"default: {shown(CONFIG)}")
     p.add_argument("--dry-run", action="store_true", help="tokenise and report only (no GPU)")
     p.add_argument("--force", action="store_true", help="replace a finished run")
     p.add_argument("--push", action="store_true", help=f"upload the adapter to {HUB_ORG}/<name>, private")
-    a = p.parse_args()
+    # a heal cycle (SEL-68, scripts/heal/train_and_serve.sh) passes its own fixes and folder
+    p.add_argument("--data", type=Path, help="train on this JSONL instead of the config's data")
+    p.add_argument("--out", type=Path, help="write the adapter here instead of runs/<name>")
+    p.add_argument("--name", help="the run's name instead of the config's (summary, W&B, the Hub)")
+    p.add_argument(
+        "--init-adapter",
+        type=Path,
+        help="continue training this LoRA adapter (its own rank and modules) instead of a new one",
+    )
+    a = p.parse_args(argv)
     os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")  # less fragmentation
 
     cfg = load(a.config)
-    out = ROOT / "runs" / cfg["name"]
+    if a.data is not None:
+        cfg["data"] = str(a.data.resolve())
+    if not cfg["data"]:
+        print(f"⛔ {shown(a.config)} names no data: pass --data")
+        return 1
+    if a.name:
+        cfg["name"] = a.name
+    if a.init_adapter is not None and not (a.init_adapter / "adapter_config.json").exists():
+        print(f"⛔ no adapter to start from in {shown(a.init_adapter)} (no adapter_config.json)")
+        return 1
+    out = a.out.resolve() if a.out is not None else ROOT / "runs" / cfg["name"]
     if (out / "adapter_config.json").exists() and not a.force:
         print(f"⛔ {shown(out)} already has an adapter: pass --force to train again")
         return 1
@@ -209,16 +233,22 @@ def main() -> int:  # noqa: C901, PLR0915 - one linear script: load, tokenise, t
     )
     model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=True)
     lc = cfg["lora"]
-    model = get_peft_model(
-        model,
-        LoraConfig(
-            r=lc["r"],
-            lora_alpha=lc["alpha"],
-            lora_dropout=lc["dropout"],
-            target_modules=lc["target_modules"],
-            task_type="CAUSAL_LM",
-        ),
-    )
+    if a.init_adapter is not None:  # the next heal cycle starts from the adapter now served
+        from peft import PeftModel
+
+        model = PeftModel.from_pretrained(model, str(a.init_adapter), is_trainable=True)
+        lc = {**lc, "init_adapter": str(a.init_adapter)}
+    else:
+        model = get_peft_model(
+            model,
+            LoraConfig(
+                r=lc["r"],
+                lora_alpha=lc["alpha"],
+                lora_dropout=lc["dropout"],
+                target_modules=lc["target_modules"],
+                task_type="CAUSAL_LM",
+            ),
+        )
     model.print_trainable_parameters()
 
     pad_id = tok.pad_token_id if tok.pad_token_id is not None else tok.eos_token_id

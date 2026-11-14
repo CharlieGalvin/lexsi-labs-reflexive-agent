@@ -1,0 +1,45 @@
+cff-version: 1.2.0
+message: "If you use this work, please cite it as below."
+title: "Reflexive Agents: a self-healing loop for AI agent hallucination"
+abstract: >-
+  A closed loop that detects an agent's Tool, Arg and Loop hallucinations, fixes them with a
+  teacher's verified trajectories, retrains a LoRA adapter, and keeps it only if it passes a gate.
+  On the τ²-bench test split, healing took Aya Expanse 32B from 14.5% to 51.5% of tasks solved.
+type: software
+authors:
+  - given-names: Katie
+    alias: katiemarieek
+  - given-names: Chiara
+    family-names: Picardi
+    alias: cp89
+  - given-names: Charlie
+    family-names: Galvin
+    alias: cg3849
+repository-code: "https://github.com/CharlieGalvin/lexsi-labs-reflexive-agent"
+url: "https://huggingface.co/reagent-lexsi"
+license: MIT
+date-released: "2026-11-16"
+keywords:
+  - ai-agents
+  - hallucination
+  - self-healing
+  - tau2-bench
+  - fine-tuning
+references:
+  - type: article
+    title: "τ²-Bench: Evaluating Conversational Agents in a Dual-Control Environment"
+    authors:
+      - family-names: Barres
+        given-names: Victor
+      - family-names: Dong
+        given-names: Honghua
+      - family-names: Ray
+        given-names: Soham
+      - family-names: Si
+        given-names: Xujie
+      - family-names: Narasimhan
+        given-names: Karthik
+    year: 2025
+    identifiers:
+      - type: other
+        value: "arXiv:2506.07982"

@@ -7,6 +7,8 @@
 #   ADAPTER= bash scripts/pod/serve.sh                 # the base model only
 #   ADAPTER= EXTRA_ADAPTERS="sft2=runs/sft-aya32b-r16-v2" bash scripts/pod/serve.sh   # v2 only
 #   EXTRA_ADAPTERS="sft2=runs/sft-aya32b-r16-v2" bash scripts/pod/serve.sh   # v1 as "sft" + v2 as "sft2"
+#   ADAPTER= RUNTIME_LORA=1 bash scripts/pod/serve.sh  # heal cycles: adapters loaded while serving
+#   VLLM_API_KEY=... (read by vLLM itself): require a key, when the port is public (configs/sft/arms.pod.yaml)
 #
 # Then, in another terminal on the pod, the rollouts (configs/sft/: P = base, S = adapter):
 #   just rollout P retail --split dev --limit 5 --config configs/sft/arms.base.yaml
@@ -45,18 +47,32 @@ for m in $EXTRA_ADAPTERS; do
   [[ "$m" == *=* ]] || { echo "⛔ EXTRA_ADAPTERS entry '$m' isn't name=path" >&2; exit 1; }
   mods+=("$m")
 done
+# RUNTIME_LORA=1 (heal cycles, SEL-68): LoRA on even with no adapter at start, and adapters can be
+# loaded while serving (POST /v1/load_lora_adapter, `just heal --load-adapter`). MAX_LORA_RANK and
+# MAX_LORAS then size the slots for adapters that aren't known yet.
+RUNTIME_LORA="${RUNTIME_LORA:-0}"
+MAX_LORA_RANK="${MAX_LORA_RANK:-16}"
+MAX_LORAS="${MAX_LORAS:-4}"
 lora=()
-if (( ${#mods[@]} )); then
+if (( ${#mods[@]} )) || [[ "$RUNTIME_LORA" == 1 ]]; then
   rank=0  # vLLM needs the largest rank among them, not the first one's
-  for m in "${mods[@]}"; do
+  for m in ${mods[@]+"${mods[@]}"}; do  # (an empty array, safely, on macOS's bash 3 too)
     dir="${m#*=}"
     [[ -f "$dir/adapter_config.json" ]] || { echo "⛔ no adapter in $dir: train it first (just sft-train)" >&2; exit 1; }
     r="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['r'])" "$dir/adapter_config.json")"
     (( r > rank )) && rank="$r"
   done
-  lora=(--enable-lora --lora-modules "${mods[@]}" --max-lora-rank "$rank" --max-loras "${#mods[@]}")
-  echo "serving $MODEL + ${mods[*]} (max rank $rank) on :$PORT, context $MAX_LEN"
-  [[ -z "$ADAPTER" ]] && echo "   note: no \"sft\" adapter (ADAPTER is empty): arm S won't find its model"
+  slots="${#mods[@]}"
+  if [[ "$RUNTIME_LORA" == 1 ]]; then
+    export VLLM_ALLOW_RUNTIME_LORA_UPDATING=True
+    (( MAX_LORA_RANK > rank )) && rank="$MAX_LORA_RANK"
+    (( MAX_LORAS > slots )) && slots="$MAX_LORAS"
+  fi
+  lora=(--enable-lora)
+  (( ${#mods[@]} )) && lora+=(--lora-modules "${mods[@]}")
+  lora+=(--max-lora-rank "$rank" --max-loras "$slots")
+  echo "serving $MODEL + ${mods[*]:-no adapter yet} (max rank $rank, $slots slots, runtime loading: $RUNTIME_LORA) on :$PORT, context $MAX_LEN"
+  [[ -z "$ADAPTER" && "$RUNTIME_LORA" != 1 ]] && echo "   note: no \"sft\" adapter (ADAPTER is empty): arm S won't find its model"
 else
   echo "serving $MODEL (no adapter) on :$PORT, context $MAX_LEN"
 fi
