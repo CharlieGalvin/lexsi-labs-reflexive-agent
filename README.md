@@ -260,6 +260,6 @@ results/*.metrics.json   committed evidence for the demo
 
 ---
 
-Built by **Katie** ([katiemarieek](https://huggingface.co/katiemarieek)), **Chiara Picardi**
+Built by **Katie Kitchen** ([katiemarieek](https://huggingface.co/katiemarieek)), **Chiara Picardi**
 ([cp89](https://huggingface.co/cp89)) and **Charlie Galvin** ([cg3849](https://huggingface.co/cg3849))
 for the Lexsi Labs AI Safety & Alignment Hackathon, November 2026.
