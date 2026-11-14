@@ -3,7 +3,7 @@
     python scripts/heal/cycle.py --fixes-only --domains telecom --limit 5   # today: Cohere's Aya
     python scripts/heal/cycle.py --fixes-only --sample 3                     # 3 random per domain
     python scripts/heal/cycle.py --config configs/sft/arms.base.yaml \\
-        --train-cmd "<your training command> {data} {out} {base}" --load-adapter
+        --train-cmd "bash scripts/heal/train_and_serve.sh {data} {out} {base}" --load-adapter
     python scripts/heal/cycle.py ... --cycles 3                              # SEL-23
     python scripts/heal/cycle.py --report results/heal/<run>                 # metrics, no API calls
 
@@ -26,10 +26,18 @@ to `heal.CommandTrainer` and the candidate adapter to the agreed gate (`gate.Dev
   pointing ``api_base`` at it. ``--train-cmd`` trains the adapter: ``{data}`` (the fixes, as
   ``reagent.sft/v1``), ``{out}`` (where the adapter must be written), ``{name}`` and ``{base}``
   (the adapter it starts from; empty for the base student) are filled in. One GPU can't train and
-  serve at once, so the command is expected to stop vLLM, train, and start it again.
+  serve at once, so the command is expected to stop vLLM, train, and start it again: on the pod,
+  ``scripts/heal/train_and_serve.sh`` (SEL-68) does exactly that.
   ``--load-adapter`` then registers ``{out}`` with the running vLLM under ``{name}``
   (``/v1/load_lora_adapter``; vLLM needs ``--enable-lora`` and
   ``VLLM_ALLOW_RUNTIME_LORA_UPDATING=True``), and the gate runs the student as model ``{name}``.
+
+* Full cycle **through the pod's endpoint** (SEL-68): the cycle runs here, and the student is
+  reached only by its public vLLM URL (`configs/sft/arms.pod.yaml`: ``POD_STUDENT_URL``,
+  ``POD_API_KEY``). ``--train-url`` (default ``$HEAL_SERVICE_URL``, with ``HEAL_TOKEN``) sends each
+  cycle's fixes to the pod's heal service (`scripts/pod/heal_service.py`), which trains and
+  restarts vLLM with the new adapter served (`RemoteTrainer`); no ``--train-cmd`` or
+  ``--load-adapter``. ``just heal --config configs/sft/arms.pod.yaml --arm P --sample 10``.
 
 **What it writes**, in ``--out`` (default ``results/heal/<time>``):
 
@@ -60,6 +68,7 @@ import random
 import shlex
 import sys
 import time
+import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
@@ -67,7 +76,7 @@ from typing import Any
 
 from reflexive import splits
 from reflexive.agent import Adapter, CycleReport, Record, ReflexiveAgent, Task, arm_rollout
-from reflexive.arms import get_arm, make_student
+from reflexive.arms import get_arm, make_student, student_api_base
 from reflexive.files import read_jsonl
 from reflexive.heal import TEACHER, CommandTrainer, PrefixTeacher, run_metrics, write_audit
 
@@ -101,7 +110,7 @@ def gate_tasks() -> list[Task]:
 
 def student_factory(arm: Any) -> Any:
     """``make_agent(adapter)`` for `arm_rollout`: the arm's student, as model ``adapter`` if given."""
-    cohere = COHERE in str(arm.student.get("api_base"))
+    cohere = COHERE in str(arm.student.get("api_base") or "")
 
     def make(adapter: Adapter) -> Any:
         if adapter is None:
@@ -137,6 +146,100 @@ class LoadingTrainer(CommandTrainer):
             if resp.status != 200:
                 raise RuntimeError(f"vLLM refused adapter {name}: HTTP {resp.status}")
         return name
+
+
+@dataclass
+class RemoteTrainer(CommandTrainer):
+    """Trains each adapter on the pod, through its heal service (`scripts/pod/heal_service.py`).
+
+    For a cycle that reaches the student only through the pod's endpoint. The fixes are written
+    here as for any `CommandTrainer` (``runs/<name>/fixes.jsonl``), sent to the service, and the job
+    is polled until it ends. The service restarts vLLM with the new adapter served under its name;
+    before the gate runs, the endpoint's model list must show it.
+    """
+
+    url: str = ""  # the heal service, e.g. https://<pod>-8001.proxy.runpod.net
+    token: str = ""
+    api_base: str = ""  # the student's vLLM endpoint, to check the adapter is served
+    api_key: str | None = None
+    poll_s: float = 30.0
+    timeout_s: float = 4 * 3600.0
+    max_refused: int = 3  # polls refused in a row (401/403/404) before giving up
+    served_tries: int = 3  # the final model-list check, through the same proxy
+
+    def train(self, fixes: Any, base: Adapter) -> Adapter:
+        name = super().train(fixes, base)  # no command: writes the data, returns the name
+        call = self.calls[-1]
+        data = Path(call["data"])
+        sent = [json.loads(line) for line in data.read_text().splitlines() if line.strip()]
+        start = time.monotonic()
+        code, body = self._request("POST", "/heal/train", {"name": name, "base": base, "fixes": sent})
+        if code != 202:
+            raise RuntimeError(f"the heal service refused {name}: HTTP {code} {body.get('error', body)}")
+        status: dict[str, Any] = {}
+        refused = 0  # consecutive 401/403/404: the service restarted with another token or --root
+        while time.monotonic() - start < self.timeout_s:
+            time.sleep(self.poll_s)
+            code, status = self._request("GET", f"/heal/jobs/{name}")
+            if code == 200 and status.get("status") != "running":
+                break
+            refused = refused + 1 if code in (401, 403, 404) else 0
+            if refused >= self.max_refused:
+                raise RuntimeError(
+                    f"the heal service answers HTTP {code} for {name} ({refused} polls in a row): "
+                    f"{status.get('error', status)}; was it restarted with another HEAL_TOKEN or --root?"
+                )
+        else:
+            raise RuntimeError(f"{name}: still training after {self.timeout_s / 3600:.1f} h")
+        call.update(
+            remote=self.url,
+            returncode=status.get("exit_code"),
+            seconds=round(time.monotonic() - start, 1),
+        )
+        (data.parent / "train.log").write_text("\n".join(status.get("log_tail") or []) + "\n")
+        if status.get("status") != "done":
+            raise RuntimeError(
+                f"training {name} on the pod failed (exit {status.get('exit_code')}); "
+                f"see {data.parent / 'train.log'} (the last lines) or the pod's runs/heal-service/{name}/"
+            )
+        if name not in self._served():
+            raise RuntimeError(f"the pod trained {name} but its vLLM doesn't serve it: check the pod")
+        return name
+
+    def _request(self, method: str, path: str, body: dict | None = None) -> tuple[int, dict]:
+        req = urllib.request.Request(
+            self.url.rstrip("/") + path,
+            data=json.dumps(body).encode() if body is not None else None,
+            method=method,
+            headers={"Content-Type": "application/json", "Authorization": f"Bearer {self.token}"},
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=60) as resp:  # noqa: S310 - our own service
+                return resp.status, json.loads(resp.read() or b"{}")
+        except urllib.error.HTTPError as e:
+            try:
+                return e.code, json.loads(e.read() or b"{}")
+            except json.JSONDecodeError:
+                return e.code, {}
+        except (urllib.error.URLError, TimeoutError) as e:  # the pod's proxy can drop a poll
+            return 0, {"error": str(e)}
+
+    def _served(self) -> set[str]:
+        """The endpoint's model list, retried: the pod's proxy can drop a request (502, timeout)."""
+        headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
+        req = urllib.request.Request(self.api_base.rstrip("/") + "/models", headers=headers)
+        for attempt in range(1, self.served_tries + 1):
+            try:
+                with urllib.request.urlopen(req, timeout=60) as resp:  # noqa: S310 - the student's server
+                    return {m.get("id") for m in json.loads(resp.read()).get("data", [])}
+            except urllib.error.HTTPError as e:
+                if e.code < 500 or attempt == self.served_tries:  # 401/404 won't fix themselves
+                    raise
+            except (urllib.error.URLError, TimeoutError):
+                if attempt == self.served_tries:
+                    raise
+            time.sleep(min(self.poll_s, 10.0))
+        raise AssertionError("unreachable")
 
 
 def save_episodes(report: CycleReport, path: Path) -> None:
@@ -210,10 +313,16 @@ def check_args(ap: argparse.ArgumentParser, a: argparse.Namespace) -> bool:
     """Refuse settings that can't work, before anything is spent. Returns whether judges are on."""
     if a.limit is not None and a.sample is not None:
         ap.error("pass --limit or --sample, not both")
-    if not a.fixes_only and not a.train_cmd:
-        ap.error("a full cycle needs --train-cmd (or pass --fixes-only)")
+    if not a.fixes_only and not (a.train_cmd or a.train_url):
+        ap.error("a full cycle needs --train-cmd or --train-url (or pass --fixes-only)")
+    if a.train_cmd and a.train_url:
+        ap.error("pass --train-cmd (training here) or --train-url (on the pod), not both")
     if a.load_adapter and a.fixes_only:
         ap.error("--load-adapter needs a full cycle")
+    if a.load_adapter and a.train_url:
+        ap.error("--train-url: the pod serves each new adapter itself, no --load-adapter")
+    if a.train_url and not os.environ.get("HEAL_TOKEN"):
+        ap.error("--train-url needs HEAL_TOKEN in .env (the heal service's token)")
     if not os.environ.get("OPENROUTER_API_KEY"):
         ap.error("the teacher needs OPENROUTER_API_KEY in .env")
     judges = {"on": True, "off": False}.get(a.judges, bool(os.environ.get("OPENAI_API_KEY")))
@@ -238,6 +347,12 @@ def main() -> int:
     ap.add_argument("--fixes-only", action="store_true", help="stop after the fixes: no training, no gate")
     ap.add_argument("--train-cmd", help="training command; {data} {out} {name} {base} are filled in")
     ap.add_argument("--load-adapter", action="store_true", help="register each new adapter with vLLM")
+    ap.add_argument(
+        "--train-url",
+        default=os.environ.get("HEAL_SERVICE_URL"),
+        help="train on the pod through its heal service (scripts/pod/heal_service.py; "
+        "default $HEAL_SERVICE_URL), for a cycle that reaches the student only by its endpoint",
+    )
     ap.add_argument("--adapter", help="the adapter the student starts with (default: the base student)")
     ap.add_argument("--workers", type=int, default=4, help="conversations at once (default 4)")
     ap.add_argument(
@@ -298,10 +413,17 @@ def main() -> int:
     (out / "run.json").write_text(json.dumps(run, indent=1) + "\n")
     teacher = PrefixTeacher(attempts=a.attempts)
     command = shlex.split(a.train_cmd) if a.train_cmd else None
-    if a.load_adapter:
-        trainer: CommandTrainer = LoadingTrainer(
-            out / "runs", command=command, api_base=arm.student["api_base"]
+    if a.train_url and not a.fixes_only:
+        key_env = arm.student.get("api_key_env")
+        trainer: CommandTrainer = RemoteTrainer(
+            out / "runs",
+            url=a.train_url,
+            token=os.environ["HEAL_TOKEN"],
+            api_base=student_api_base(arm.student),
+            api_key=os.environ.get(key_env) if key_env else None,
         )
+    elif a.load_adapter:
+        trainer = LoadingTrainer(out / "runs", command=command, api_base=student_api_base(arm.student))
     else:
         trainer = CommandTrainer(out / "runs", command=command)
 

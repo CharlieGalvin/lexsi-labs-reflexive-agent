@@ -1,0 +1,37 @@
+# The student on the pod, reached through its public vLLM endpoint (SEL-68): a heal cycle runs here
+# and trains on the pod through its heal service (scripts/pod/heal_service.py).
+#
+#   just heal --config configs/sft/arms.pod.yaml --arm P --sample 10 --out results/heal/first-cycle
+#
+# .env (none of it committed; the pod's URLs change with every pod):
+#   POD_STUDENT_URL=https://<pod>-8000.proxy.runpod.net/v1   # vLLM, OpenAI-compatible
+#   POD_API_KEY=...          # vLLM's --api-key (VLLM_API_KEY on the pod): the port is public
+#   HEAL_SERVICE_URL=https://<pod>-8001.proxy.runpod.net     # the heal service (--train-url)
+#   HEAL_TOKEN=...           # the heal service's token
+#
+# On the pod: RUNTIME_LORA=1 ADAPTER= VLLM_API_KEY=... just sft-serve, then the heal service with the
+# same key (it restarts vLLM after each job): HEAL_TOKEN=... VLLM_API_KEY=... just heal-service
+# Same harness, prompt, decoding and customer as configs/sft/arms.base.yaml (arm P); only how the
+# student is reached differs. Never on test.
+
+student:
+  name: aya32-pod
+  model: CohereLabs/aya-expanse-32b
+  api_base_env: POD_STUDENT_URL
+  api_key_env: POD_API_KEY
+  self_hosted: true       # our own server: no per-token price
+  mode: prompted          # the data contract (SEL-35): don't change these two
+  style: cohere
+  temperature: 0.0
+  max_tokens: 1024
+  max_context: 32768      # = serve.sh MAX_LEN
+  reserve: 4096
+  rpm: 0
+
+customer: null            # GPT-4.1, as for every arm
+
+arms:
+  P:
+    name: baseline-pod
+    description: "Arm P (the base student on vLLM), reached through the pod's public endpoint"
+    prompt_variant: default
