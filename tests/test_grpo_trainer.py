@@ -1,0 +1,194 @@
+"""SEL-21: the single-turn GRPO trainer's checks, and one real TRL step on a tiny model.
+
+The checks (config, data, batch arithmetic) need no GPU. The last test runs TRL's GRPOTrainer
+for real: a tiny random Llama with a LoRA adapter on it (as SFT v2's sits on Aya), our reward,
+conversational prompts. Skipped without torch, transformers, peft and trl (the GPU pod has them).
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+
+import _tiny
+import pytest
+from _scripts import load_script
+
+from reflexive import grpo_data, grpo_rewards
+from reflexive.files import ROOT
+
+ts = load_script("grpo/train_single_turn")
+
+FIND = {
+    "name": "find_user_id_by_name_zip",
+    "arguments": {"first_name": "Yusuf", "last_name": "Rossi", "zip": "19122"},
+}
+PROMPT = [
+    {"role": "system", "content": "policy and tools"},
+    {"role": "assistant", "content": "Hi! How can I help you today?"},
+    {"role": "user", "content": "I'm Yusuf Rossi, zip 19122."},
+]
+
+
+def _row(task_id: str = "2", **kw: Any) -> dict[str, Any]:
+    return {
+        "id": f"x/retail/{task_id}/1#t3",
+        "format": grpo_data.FORMAT,
+        "domain": "retail",
+        "task_id": task_id,
+        "group": "healable",
+        "turn": 3,
+        "kind": "call",
+        "prompt": PROMPT,
+        "target": 'Action: ```json\n[{"tool_name": "find_user_id_by_name_zip", "parameters": '
+        '{"first_name": "Yusuf", "last_name": "Rossi", "zip": "19122"}}]\n```',
+        "target_calls": [FIND],
+        "source": {},
+        **kw,
+    }
+
+
+def _data(tmp_path: Path, *rows: dict[str, Any]) -> dict[str, Any]:
+    path = tmp_path / "grpo.jsonl"
+    path.write_text("".join(json.dumps(r) + "\n" for r in rows))
+    return {**ts.load(ts.CONFIG), "data": str(path)}
+
+
+def test_the_config_loads_and_its_batches_hold_whole_groups(tmp_path: Path):
+    cfg = ts.load(ts.CONFIG)
+    args = ts.grpo_args(cfg, tmp_path)
+    assert args["remove_unused_columns"] is False and args["num_generations"] == 8
+    assert (args["per_device_train_batch_size"] * args["gradient_accumulation_steps"]) % 8 == 0
+    # one group per generation round: 16 x ~8K-token prompts at once ran the H100 out of memory
+    assert args["per_device_train_batch_size"] * args["steps_per_generation"] == args["num_generations"]
+
+
+def test_batches_that_split_a_group_are_refused_before_loading(tmp_path: Path):
+    with pytest.raises(SystemExit, match="multiple of num_generations"):
+        ts.grpo_args(ts.load(ts.CONFIG), tmp_path, {"gradient_accumulation_steps": 12})
+
+
+def test_unknown_reward_components_are_refused(tmp_path: Path):
+    path = tmp_path / "c.yaml"
+    path.write_text("name: x\nmodel: m\nadapter: a\ndata: d\ntrainer: {}\nreward_weights: {correct: 1}\n")
+    with pytest.raises(SystemExit, match="unknown reward component"):
+        ts.load(path)
+
+
+def test_rows_become_the_columns_the_reward_reads(tmp_path: Path):
+    (r,) = ts.prompts(_data(tmp_path, _row()))
+    assert set(r) == set(ts.COLUMNS) and json.loads(r["target_calls"]) == [FIND]
+
+
+@pytest.mark.parametrize(
+    ("row", "error"),
+    [(_row("1"), "isn't a train task"), (_row(format="reagent.sft/v1"), "rebuild")],
+)
+def test_a_dev_task_or_another_format_is_refused(tmp_path: Path, row: dict[str, Any], error: str):
+    with pytest.raises(SystemExit, match=error):
+        ts.prompts(_data(tmp_path, row))
+
+
+def test_a_missing_data_file_says_how_to_build_it():
+    with pytest.raises(SystemExit, match="just grpo-data"):
+        ts.prompts({**ts.load(ts.CONFIG), "data": str(ROOT / "nowhere.jsonl")})
+
+
+class _Tok:
+    """transformers 5's shape: apply_chat_template(tokenize=True) would give a 2-key dict."""
+
+    def apply_chat_template(self, messages, tokenize, add_generation_prompt):  # noqa: ANN001
+        assert not tokenize and add_generation_prompt
+        return "".join(m["content"] for m in messages) + "<turn>"
+
+    def __call__(self, text: str, add_special_tokens: bool) -> dict[str, list[int]]:
+        return {"input_ids": list(range(len(text.split()))), "attention_mask": [1] * len(text.split())}
+
+
+def test_prompt_lengths_count_tokens_not_dict_keys():
+    rows = [
+        {"prompt": [{"role": "user", "content": "a b c "}]},
+        {"prompt": [{"role": "user", "content": "a "}]},
+    ]
+    assert ts.prompt_tokens(rows, _Tok()) == [4, 2]
+
+
+def test_long_prompts_are_dropped_only_when_a_cap_is_set():
+    rows = [{"id": i} for i in range(3)]
+    assert ts.cap_prompts(rows, [5, 12, 9], None) == (rows, [5, 12, 9])
+    assert ts.cap_prompts(rows, [5, 12, 9], 9) == ([rows[0], rows[2]], [5, 9])
+    with pytest.raises(SystemExit, match="raise max_prompt_tokens"):
+        ts.cap_prompts(rows, [5, 12, 9], 4)
+    assert "over >6K: 2, >8K: 1, >9K: 1, >10K: 0" in ts.length_report([5000, 7000, 9500])
+
+
+def test_the_run_records_its_commit():
+    commit = ts.git_commit()
+    assert commit and len(commit.split("+")[0]) >= 7
+
+
+def test_sdpa_is_never_asked_for_gqa_so_float32_attention_stays_memory_efficient():
+    sdpa = pytest.importorskip("transformers.integrations.sdpa_attention")
+    torch = pytest.importorskip("torch")
+    key = torch.zeros(1, 8, 4, 128)
+    original = sdpa.use_gqa_in_sdpa
+    try:
+        ts.no_gqa_in_sdpa()
+        assert sdpa.use_gqa_in_sdpa(None, key, key) is False  # no mask: transformers would have said True
+    finally:
+        sdpa.use_gqa_in_sdpa = original
+
+
+def test_one_real_grpo_step_on_a_tiny_model(tmp_path: Path):
+    pytest.importorskip("torch")
+    pytest.importorskip("peft")
+    trl = pytest.importorskip("trl")
+    from datasets import Dataset
+
+    tok = _tiny.tokenizer()
+    model = _tiny.adapter_model(tmp_path, tok, ts.prepare_for_training)  # SFT v2 stand-in, bfloat16
+
+    cfg = _data(tmp_path, _row(), _row())
+    rows = ts.prompts(cfg)
+    args = ts.grpo_args(
+        cfg,
+        tmp_path / "run",
+        {
+            "max_steps": 1,
+            "per_device_train_batch_size": 2,
+            "gradient_accumulation_steps": 4,  # a step is 2 groups,
+            "steps_per_generation": 2,  # generated one group at a time, as on the pod
+            "num_generations": 4,
+            "max_completion_length": 8,
+            "optim": "adamw_torch",
+            "report_to": [],
+            "bf16": False,
+            "save_strategy": "no",
+            "use_cpu": True,
+        },
+    )
+    seen: dict[str, list[float]] = {}
+    reward = grpo_rewards.make_reward_fn(log_path=tmp_path / "rewards.jsonl")
+
+    def spy(**kw: Any) -> list[float]:
+        log_metric = kw.pop("log_metric")
+        return reward(**kw, log_metric=lambda k, v: (seen.setdefault(k, []).append(v), log_metric(k, v)))
+
+    spy.__name__ = "single_turn_reward"
+    trainer = ts.releasing_trainer(trl.GRPOTrainer)(  # the trainer the script uses
+        model=model,
+        reward_funcs=[spy],
+        args=trl.GRPOConfig(**args),
+        train_dataset=Dataset.from_list(rows),
+        processing_class=tok,
+    )
+    trainable = [n for n, p in model.named_parameters() if p.requires_grad]
+    trainer.train()
+
+    logged = [json.loads(line) for line in (tmp_path / "rewards.jsonl").read_text().splitlines()]
+    assert len(logged) == 8 and all(r["id"] == rows[0]["id"] for r in logged)  # two groups of 4 samples
+    assert {r["call"] for r in logged} == {1, 2}  # in two generation rounds
+    assert trainer.rounds == 2
+    assert set(seen) == {f"reward_parts/{k}" for k in grpo_rewards.COMPONENTS}
+    assert trainable and all("lora" in n for n in trainable)  # the SFT adapter is what trains

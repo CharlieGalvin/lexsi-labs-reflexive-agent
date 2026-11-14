@@ -110,11 +110,15 @@ The cycle took three attempts on 13 Nov. Nothing in the analysis changed between
 | 3 (05:18) | Trained and served the adapter, but **`train_and_serve.sh` couldn't see vLLM come up**: its readiness check (`curl -sf .../v1/models`) sends no API key, so a vLLM started with `VLLM_API_KEY` answers 401 until the 20-minute timeout | Put the key in a temporary `/root/.curlrc`, removed straight after; the job finished `done` and the gate ran |
 
 Also on this pod: nginx (the template's "vscode server" proxy) holds port 8001, so the heal
-service ran on 8003 and nginx's 8001 block was pointed at it. For the SEL-68 branch:
+service ran on 8003 and nginx's 8001 block was pointed at it. Two changes for the SEL-68 branch,
+both **fixed in #61** (`3c97103`, with tests):
 
 1. **Bug:** `train_and_serve.sh`'s readiness check should send `Authorization: Bearer $VLLM_API_KEY` when it's set.
 2. **Hardening:** `train_and_serve.sh` should source `$WORKSPACE/.pod_env` itself, as `serve.sh` does, so training
    uses vLLM's model cache however the heal service was started.
+
+#61's review (`841eca0`) also requires `VLLM_API_KEY` for the heal service, keeps the endpoint up when
+the GPU doesn't free, and raises the reload timeout to 40 minutes. None of it changes this run's results.
 
 ## Files
 

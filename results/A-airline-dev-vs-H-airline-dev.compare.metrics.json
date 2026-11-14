@@ -1,0 +1,127 @@
+{
+ "a": {
+  "name": "A-airline-dev",
+  "file": "results/episodes/arms/A-airline-dev.jsonl"
+ },
+ "b": {
+  "name": "H-airline-dev",
+  "file": "results/episodes/arms/H-airline-dev.jsonl"
+ },
+ "commit": "da630d2",
+ "date": "2026-11-12",
+ "rows": [
+  {
+   "metric": "success_rate",
+   "a": 0.16666666666666666,
+   "a_ci95": [
+    0.0,
+    0.5
+   ],
+   "b": 0.4166666666666667,
+   "b_ci95": [
+    0.16666666666666666,
+    0.6666666666666666
+   ],
+   "diff_b_minus_a": 0.25,
+   "diff_ci95": [
+    0.0,
+    0.5833333333333334
+   ],
+   "clear": false
+  },
+  {
+   "metric": "hallucination_rate",
+   "a": 1.0,
+   "a_ci95": [
+    1.0,
+    1.0
+   ],
+   "b": 0.0,
+   "b_ci95": [
+    0.0,
+    0.0
+   ],
+   "diff_b_minus_a": -1.0,
+   "diff_ci95": [
+    -1.0,
+    -1.0
+   ],
+   "clear": true
+  },
+  {
+   "metric": "loop_rate",
+   "a": 0.3333333333333333,
+   "a_ci95": [
+    0.0,
+    0.6666666666666666
+   ],
+   "b": 0.0,
+   "b_ci95": [
+    0.0,
+    0.0
+   ],
+   "diff_b_minus_a": -0.3333333333333333,
+   "diff_ci95": [
+    -0.6666666666666666,
+    0.0
+   ],
+   "clear": false
+  },
+  {
+   "metric": "steps_per_task",
+   "a": 10.5,
+   "a_ci95": [
+    9.166666666666666,
+    11.833333333333334
+   ],
+   "b": 15.166666666666666,
+   "b_ci95": [
+    12.333333333333334,
+    18.083333333333332
+   ],
+   "diff_b_minus_a": 4.666666666666666,
+   "diff_ci95": [
+    2.0,
+    7.0
+   ],
+   "clear": true
+  },
+  {
+   "metric": "redundant_call_rate",
+   "a": 0.25,
+   "a_ci95": [
+    0.075,
+    0.4
+   ],
+   "b": 0.009009009009009009,
+   "b_ci95": [
+    0.0,
+    0.0297029702970297
+   ],
+   "diff_b_minus_a": -0.240990990990991,
+   "diff_ci95": [
+    -0.3972602739726027,
+    -0.06385542168674699
+   ],
+   "clear": true
+  }
+ ],
+ "a_scored": 6,
+ "b_scored": 12,
+ "a_crashed": 0,
+ "b_crashed": 0,
+ "shared_tasks": 6,
+ "reps": 10000,
+ "seed": 0,
+ "a_monitor_stopped": {
+  "conversations": 0,
+  "passed": 0,
+  "task_success_if_failed": 0.1667
+ },
+ "b_monitor_stopped": {
+  "conversations": 0,
+  "passed": 0,
+  "task_success_if_failed": 0.4167
+ },
+ "method": "percentile bootstrap; difference paired on shared tasks (cluster by task)"
+}
