@@ -169,7 +169,14 @@ def grpo() -> tuple[list[str], str, bool]:
     s2_val = cn.mean_passes("S2", "val")
     (s2_dev, s2_loops), (h_dev, h_loops) = cn.dev_from_compares("a"), cn.dev_from_compares("b")
     tel = cn.row("S2-telecom-dev-vs-H-telecom-dev.compare.metrics.json", "redundant_call_rate")
-    gate = cn.load("gate-S2-vs-H-s0.json")
+    try:  # the gate's own record, where it's present: results/*.json other than metrics isn't in git
+        g = cn.load("gate-S2-vs-H-s0.json")
+        gate_line = f"  Gate (Arm B vs heal GRPO, sample 0): {g['verdict'].upper()}: {g['reason']}"
+    except FileNotFoundError:
+        gate_line = (
+            f"  {DIM}from the write-up [docs/EXPERIMENTS.md, grpo-heal-aya32b-v2]:{RESET} "
+            "gate (Arm B vs heal GRPO, sample 0): REJECT, 24 → 19 dev tasks"
+        )
     lines = [
         f"Starting point: Arm B solves {s2_val:.1f} of 30 held-out validation tasks (mean of 2 samples).",
         "",
@@ -193,7 +200,7 @@ def grpo() -> tuple[list[str], str, bool]:
     ]
     lines += [
         "",
-        f"  Gate (Arm B vs heal GRPO, sample 0): {gate['verdict'].upper()}: {gate['reason']}",
+        gate_line,
         "",
         "Run 3: + a reward for the right decision",
         f"  {DIM}from the write-up [GRPO_DECISION.md, branch charliegalvin/h2-decision-grpo]:{RESET} "
