@@ -203,7 +203,8 @@ results/*.metrics.json   committed evidence for the demo
 
 ## Licences
 
-- **This repo's code:** TODO (Charlie): pick a licence before the repo goes public.
+- **This repo's code:** [MIT](LICENSE). Third-party code (τ²-bench, AgentTune) isn't committed here:
+  `just setup-dev` clones it, under its own licence.
 - **Our adapters and dataset:** CC BY-NC 4.0. The adapters inherit Aya Expanse 32B's licence; the
   dataset's customer turns are GPT-4.1 outputs, under OpenAI's terms (see each card).
 - **The Lexsi Labs stack:** AgentTune (LSAL v1.1) and AuditKIT (LSAL v1.2) are source-available for
