@@ -190,7 +190,7 @@ def draw_stage(ax: Axes, i: int, s: State) -> None:
     elif i == 2:  # training on the fixes
         f = min(p / 0.85, 1.0)
         pill_box(ax, px, py, max(pw * f, 2.4), fill=LEXSI_SOFT, z=3.5)
-        ax.text(px + 1.4, py + 2.2, f"training on {round(158 * f)} verified fixes", **mono)
+        ax.text(px + 1.4, py + 2.2, f"training on {round(146 * f)} verified conversations", **mono)
     else:  # the gate: dev success, base model against the new adapter
         new = 11 + round((60 - 11) * min(p / 0.7, 1.0))
         ax.text(px + 1.4, py + 2.2, f"dev success  11% → {new}%", **mono)

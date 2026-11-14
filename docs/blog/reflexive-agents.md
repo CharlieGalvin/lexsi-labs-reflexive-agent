@@ -46,7 +46,7 @@ stronger model, and the manager is a benchmark with a rulebook fixed in advance.
 
 ### The loop: detect, fix, retrain, gate
 
-![The self-healing loop, animated. The student agent, Aya Expanse 32B with a LoRA adapter, fails a conversation. 1, Detect: a classifier finds the failing turn and flags an invented argument, email="something@example.com". 2, Fix: the teacher rewrites the turn as "Could you confirm your email?". 3, Retrain: the student trains on 158 verified fixes. 4, Gate: dev success rises from 11% to 60%, so the new adapter is promoted and the student moves from adapter v1 to v2.](img/heal-loop.gif)
+![The self-healing loop, animated. The student agent, Aya Expanse 32B with a LoRA adapter, fails a conversation. 1, Detect: a classifier finds the failing turn and flags an invented argument, email="something@example.com". 2, Fix: the teacher rewrites the turn as "Could you confirm your email?". 3, Retrain: the student trains on 146 verified conversations. 4, Gate: dev success rises from 11% to 60%, so the new adapter is promoted and the student moves from adapter v1 to v2.](img/heal-loop.gif)
 
 1. **Detect.** A classifier finds the first failing turn and its type: Tool, Arg or Loop.
 2. **Fix.** The teacher sees the conversation exactly as the student did, up to that turn, and
@@ -70,9 +70,9 @@ We froze the splits early (train 142 tasks, dev 36, test 100) and gave each one 
 Train is for training, a held-out slice of train for choosing between versions, dev for the
 deployment gate, and test only for models declared in advance.
 
-To pick the teacher, we screened 12 models, then ran the two finalists on every train task.
-GLM-5.3-Flash passed 88% on the first try and produced verified fixes for 158 of 178 tasks, for
-**$11** in total.
+To pick the teacher, we screened 12 models, then ran the two finalists on all 178 tasks of
+τ²-bench's own train split (our train and dev splits together). GLM-5.3-Flash passed 88% on the
+first try and produced verified fixes for 158 of 178 tasks, for **$11** in total.
 
 ### What a hallucinating agent looks like
 
@@ -93,18 +93,11 @@ The cheapest fix is a prompt. With a fixed instruction not to hallucinate, the s
 13.0% against 14.5% without it (a difference of −1.5 points, 95% range −7.0 to +4.0), and still
 hallucinated in 95.5% of conversations. The model knows the rule; it doesn't follow it.
 
-### One turn of the loop
-
-We ran one full cycle end to end. The teacher fixed **24 of 24** failures, and the healed adapter
-made **71% fewer** Tool, Arg and Loop errors per conversation. But it solved the same number of
-dev tasks, 4 against 4, so the gate rejected it. Fewer hallucinations isn't the goal on its own;
-solving tasks is. One cycle of 16 fixes was too small a signal, so we trained on many verified
-conversations at once.
-
 ### Result 1: fine-tuning on verified fixes
 
-We fine-tuned the student (QLoRA, rank 16) on the teacher's verified conversations. A first
-version raised dev success from 11% to 38%. The gate rejected it on airline, where it now made
+Our first pass through the loop was by hand: we fine-tuned the student (QLoRA, rank 16) on the
+teacher's whole verified conversations for the train tasks it failed. A first version raised dev
+success from 11% to 38%. The gate rejected it on airline, where it now made
 changes nobody had asked for. Adding 34 airline conversations fixed that, and reached **60% on
 dev**. We declared this version as **Arm B** and ran it on the 100 test tasks, against the
 untuned student (**Arm A**) and the careful prompt (**Arm C**):
@@ -117,7 +110,29 @@ untuned student (**Arm A**) and the careful prompt (**Arm C**):
 telecom, and smallest in airline, where the remaining failures are policy decisions rather than
 hallucinations.
 
-### Result 2: what reinforcement learning taught us
+### Result 2: the loop, run automatically
+
+We then ran the whole loop on the GPU with no one in it: the student runs train tasks, the
+classifier finds its failures, the teacher fixes them, an adapter is trained, and the gate decides
+whether it's swapped in.
+
+**First, at the grain we'd designed: fix only the turn that went wrong.** The teacher fixed
+**24 of 24** failures, and the healed adapter made **71% fewer** Tool, Arg and Loop errors per
+conversation. But it solved the same number of dev tasks, 4 against 4, so the gate rejected it.
+It had trained on 16 rewritten turns, about 1% of the conversations' tokens: it learned not to
+bluff at the start of a call, not how to finish one.
+
+**Then, at the grain that worked by hand: the teacher's whole verified conversation for each
+failure.** TODO (Charlie): the trajectory cycle's result (gate decision, dev tasks before and
+after, conversations trained on).
+
+This second cycle feeds the loop what Result 1 taught, so a promotion was the expected outcome:
+it shows the automated pipeline can do what we did by hand, not new evidence that healing works.
+That evidence is the test result above. What the two cycles show together is that **the grain of
+the fix decides whether healing moves success**: fixing where an agent first goes wrong isn't
+enough; it has to learn how to finish the job.
+
+### Result 3: what reinforcement learning taught us
 
 We then tried to heal further with GRPO, starting from Arm B. Each training prompt is a
 conversation up to one agent turn; the model writes that turn 8 times, and a reward scores each
@@ -149,9 +164,12 @@ replies stopped training early. It scored 14.5 of 30, below Arm B's 17.0.
 * **Decide the rule before you see the result.** Every model we trained was judged by a rule
   written down before it ran. Several promising ideas didn't pass, and the rules kept us honest.
 * **Fewer hallucinations isn't the same as more success.** The gate caught this twice.
+* **The grain of the fix matters.** Rewriting one turn removed most hallucinations but solved no
+  more tasks; training on whole verified conversations did both.
 * **Hallucinations and decision errors are different problems.** Once the hallucinations were
-  gone, the remaining failures were about what to change, and when. That's the next frontier for
-  self-healing agents.
+  gone, the remaining failures were about what to change, and when: in 37 of Arm B's 55 failed dev
+  and validation conversations, the classifier finds no hallucination at all. A loop that heals
+  hallucinations has nothing left to fix there. That's the next frontier for self-healing agents.
 
 ### Reproduce it yourself
 
@@ -173,7 +191,14 @@ It ends by checking that every number it recomputed appears in this post exactly
 The next step is a reward that judges decisions as well as structure, and scores whole
 conversations rather than single turns. We'd love to hear how others approach it.
 
-TODO: links to the code and any published adapters.
+**Everything is public:**
+
+* **Code:** [github.com/CharlieGalvin/lexsi-labs-reflexive-agent](https://github.com/CharlieGalvin/lexsi-labs-reflexive-agent)
+* **Arm B, the healed model:** [reagent-lexsi/sft-aya32b-r16-v2](https://huggingface.co/reagent-lexsi/sft-aya32b-r16-v2),
+  a LoRA adapter for Aya Expanse 32B. Every other version we trained, adopted or not, is in
+  [reagent-lexsi](https://huggingface.co/reagent-lexsi), each with its result and lineage.
+* **Data:** [reagent-lexsi/tau2-golden-trajectories](https://huggingface.co/datasets/reagent-lexsi/tau2-golden-trajectories),
+  the teacher's verified conversations and the hard subset (CC BY-NC 4.0).
 
 ### Acknowledgements
 
