@@ -1,7 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Reflexive Agents logo: a healing loop around a check mark">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Reflexive Agents logo: a winking robot with a plaster">
   <title>Reflexive Agents</title>
-  <rect width="128" height="128" rx="28" fill="#15171c"/>
-  <path d="M 83.5 36.1 A 34 34 0 1 1 44.5 36.1" fill="none" stroke="#ff4b0a" stroke-width="10" stroke-linecap="round"/>
-  <path d="M 53.5 29.8 L 47.8 46.1 L 36.3 29.7 Z" fill="#ff4b0a" stroke="#ff4b0a" stroke-width="2" stroke-linejoin="round"/>
-  <path d="M 47 66 L 59 78 L 82 52" fill="none" stroke="#ffffff" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="1" y="1" width="126" height="126" rx="28" fill="#fff7ed" stroke="#f2dfc9" stroke-width="2"/>
+  <line x1="64" y1="40" x2="64" y2="26" stroke="#0f766e" stroke-width="5" stroke-linecap="round"/>
+  <circle cx="64" cy="22" r="6.5" fill="#ff7a59"/>
+  <rect x="18" y="58" width="9" height="20" rx="4.5" fill="#0f766e"/>
+  <rect x="101" y="58" width="9" height="20" rx="4.5" fill="#0f766e"/>
+  <rect x="26" y="39" width="76" height="62" rx="20" fill="#0f766e"/>
+  <circle cx="48" cy="65" r="7" fill="#fff7ed"/><circle cx="50" cy="63" r="2.4" fill="#0f766e"/>
+  <path d="M73 67 Q80 58.5 87 67" fill="none" stroke="#fff7ed" stroke-width="5" stroke-linecap="round"/>
+  <path d="M50 83 Q64 93 78 83" fill="none" stroke="#fff7ed" stroke-width="5" stroke-linecap="round"/>
+  <g transform="rotate(-38 85 46)"><rect x="64" y="38.5" width="42" height="15" rx="7.5" fill="#ff7a59"/><rect x="77.5" y="38.5" width="15" height="15" fill="#ffc2ae"/><circle cx="82" cy="43" r="1.3" fill="#d9502e"/><circle cx="88" cy="43" r="1.3" fill="#d9502e"/><circle cx="82" cy="49" r="1.3" fill="#d9502e"/><circle cx="88" cy="49" r="1.3" fill="#d9502e"/></g>
 </svg>
