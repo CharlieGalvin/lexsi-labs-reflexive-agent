@@ -142,8 +142,6 @@ hallucination taught the model to act confidently, not correctly.**
 still expected. It drifted towards calling tools, and a guard we'd built to watch the share of
 replies stopped training early. It scored 14.5 of 30, below Arm B's 17.0.
 
-TODO (Charlie): H3, the revised decision reward, when its result is in.
-
 ### What we learned
 
 * **Verified data beats instructions.** What healed the agent was hundreds of correct turns, each
