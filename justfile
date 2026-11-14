@@ -90,6 +90,34 @@ hard-subset *args:
 train-data *args:
     python scripts/data/build_train_data.py {{args}}
 
+# Single-turn GRPO prompts from the training conversations → data/train/grpo-*.jsonl (SEL-21)
+grpo-data *args:
+    python scripts/data/build_grpo_data.py {{args}}
+
+# Check the single-turn GRPO reward on the real prompts: the teacher scores the maximum, mistakes less (SEL-21)
+grpo-reward-check *args:
+    python scripts/data/check_grpo_rewards.py {{args}}
+
+# Single-turn GRPO on the GPU pod (SEL-21): SFT v2's adapter on 4-bit Aya 32B, the reward vs the teacher's turn → runs/
+grpo-train *args:
+    python scripts/grpo/train_single_turn.py {{args}}
+
+# Held-out reward: SFT v2 against the GRPO adapter on prompts never trained on (GPU pod; SEL-21)
+grpo-heldout *args:
+    python scripts/grpo/heldout_check.py {{args}}
+
+# Heal GRPO (SEL-75): the teacher's fixes at the student's Tool / Arg / Loop failures → data/heal/ (`--dry-run`: no API)
+heal-fixes *args:
+    python scripts/heal/make_fixes.py {{args}}
+
+# Heal GRPO prompts (SEL-75): the fixes plus anchor turns → data/train/grpo-heal*.jsonl
+grpo-heal-data *args:
+    python scripts/data/build_grpo_heal_data.py {{args}}
+
+# Heal rewards on the real data (SEL-75): teacher turns at the maximum, each failed turn caught by its type's reward
+grpo-heal-reward-check *args:
+    python scripts/data/check_heal_rewards.py {{args}}
+
 # Indicative SFT run on the GPU pod (SEL-65): QLoRA on Aya 32B, the agent's turns as targets → runs/
 sft-train *args:
     python scripts/sft/train_sft.py {{args}}
@@ -173,9 +201,20 @@ oracle-score *files:
 # Summarise a rollout file as results/arm-<arm>-<domain>-<split>.metrics.json (no API calls; `--only dev`)
 arm-metrics file *args:
     python scripts/arms/metrics.py {{file}} {{args}}
+# All headline metrics for an arm (SEL-38): oracle success, AuditKIT agent scorers, TTC; any split
+arm-eval +args:
+    python scripts/arms/evaluate.py {{args}}
 # Failed conversations: the expected state-changing actions against what the agent did (`--all`, `--out`)
 arm-failures +args:
     python scripts/arms/failure_diff.py {{args}}
+# Why conversations failed: unmet device assertions and missed actions, re-scored (`just arm-why S2 H --domain telecom`)
+arm-why +args:
+    python scripts/arms/why_failed.py {{args}}
+
+# Tool / Arg / Loop conversations per arm and domain, by the classifier (`--split val`: SEL-75's rule, part 3)
+arm-tool-arg +args:
+    python scripts/arms/tool_arg.py {{args}}
+
 # Passes per arm, domain and sample: the run-to-run spread (`--split val`)
 arm-samples +args:
     python scripts/arms/samples.py {{args}}
@@ -186,6 +225,31 @@ gate-check baseline candidate *args:
 sft-v2-data *args="--domains airline":
     python scripts/data/build_extra_fixes.py {{args}}
 
+# Adapter lifecycle (SEL-22): configs/adapters.yaml; state and history in results/adapters/state.json
+[positional-arguments]
+adapter-publish id *args:
+    python scripts/adapters/publish.py "$@"
+[positional-arguments]  # quoted: --why "a reason in words" must stay one argument
+adapter-use id *args:
+    python scripts/adapters/use.py "$@"
+[positional-arguments]
+adapter-rollback *args:
+    python scripts/adapters/use.py --rollback "$@"
+
+# On-policy teacher fixes (SEL-73): where the student's changes leave the expected ones on train tasks
+# (v2's train-pool rollouts are always the input; extra arguments are added, e.g. --dry-run)
+onpolicy-fixes *args:
+    python scripts/heal/onpolicy_fixes.py results/episodes/arms/S2-retail-trainpool.jsonl results/episodes/arms/S2-airline-trainpool.jsonl results/episodes/arms/S2-telecom-trainpool.jsonl {{args}}
+
+# SFT v4 data (SEL-73): v2's file + the on-policy fixes (group "onpolicy")
+sft-v4-data fixes="results/heal/onpolicy-fixes.jsonl":
+    cat data/train/sft-v2.jsonl {{fixes}} > data/train/sft-v4.jsonl
+    @echo "data/train/sft-v4.jsonl: $(wc -l < data/train/sft-v4.jsonl) examples ($(wc -l < {{fixes}}) on-policy)"
+
+# SFT v3 data (SEL-72): v1's examples + the extra verified retail and airline passes
+sft-v3-data *args:
+    python scripts/data/build_extra_fixes.py --domains retail airline --out data/train/sft-v3.jsonl {{args}}
+
 # Compare two rollout files with 95% bootstrap CIs (SEL-27): success, hallucination, loops, steps, redundant calls
 arm-compare a b *args:
     python scripts/arms/compare.py {{a}} {{b}} {{args}}
@@ -194,6 +258,12 @@ arm-compare a b *args:
 [positional-arguments]  # quoted: telecom task IDs contain | and [ ], which a shell would split
 rollout arm domain *args:
     python scripts/arms/rollout.py "$@"
+
+# An arm on the 30 validation tasks, 2 samples (task lists from P-<domain>-val.jsonl), e.g.
+# `just arm-val G configs/sft/arms.grpo.yaml`; then `just arm-samples S2 G --split val`
+[positional-arguments]
+arm-val arm config *args:
+    python scripts/arms/val_rollout.py "$@"
 
 # Experiment commands (train, evaluate…) are added by the Architect and Trainer.
 

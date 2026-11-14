@@ -143,4 +143,6 @@ def test_pick_first_clean_pass():
     assert golden.why_not_clean(retry) == "retried a failed call"
     assert (golden.why_not_clean(record(termination="max_steps")) or "").startswith("run broke")
     assert (golden.why_not_clean(record(error="boom")) or "").startswith("run broke")
+    # SEL-69: a pass the runtime monitor's guard ended is never a golden trajectory
+    assert golden.why_not_clean(record(termination="monitor_stop")) == "ended by the runtime monitor's guard"
     assert golden.pick([later, retry, fail, good])[("telecom", "t1")]["attempt"] == 3

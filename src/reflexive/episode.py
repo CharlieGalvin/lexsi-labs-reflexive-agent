@@ -189,6 +189,7 @@ class Tau2Episode:
         }
         self.done = False
         self._overflowed = False
+        self._monitor_stopped = False
         self.started: float | None = None
         self.ended: float | None = None
 
@@ -363,6 +364,17 @@ class Tau2Episode:
         if not self.done:
             self._send_done()
 
+    def stop_for_monitor(self) -> None:
+        """End the conversation because the runtime monitor's guard stopped a loop (``monitor_stop``).
+
+        τ²-bench is sent the agent's stop, as `finish` does, and grades it that way
+        (`outcome.SCORED_AS`), but the termination says the harness ended it, not the agent: a
+        goodbye loop cut short after the task was done can pass, and that pass is the guard's.
+        """
+        if not self.done:
+            self._monitor_stopped = True
+            self._send_done()
+
     def _send_done(self) -> None:
         from tau2.data_model.message import AssistantMessage, ToolCall
 
@@ -415,7 +427,12 @@ class Tau2Episode:
         run = self._env._simulation_run if self._env else None
         if run is None:
             return "unexpected_error"
-        return run.termination_reason.value
+        reason = run.termination_reason.value
+        if self._monitor_stopped and reason == "agent_stop":
+            from reflexive.outcome import MONITOR_STOP
+
+            return MONITOR_STOP
+        return reason
 
     def trajectory(self) -> list[dict]:
         """The full conversation, including the customer's own tool calls, as OpenAI-style dicts.
@@ -466,10 +483,29 @@ class Tau2Episode:
             "max_context": self.max_context,
             "reserve": self.reserve,
             "user_cost": getattr(run, "user_cost", None) if run else None,
+            "user_usage": _user_usage(run),
             "duration_s": round((self.ended or time.time()) - (self.started or time.time()), 2),
             "messages": traj,
             **extra,
         }
+
+
+def _user_usage(run: Any) -> dict[str, int] | None:
+    """The simulated customer's calls and tokens (TTC, SEL-38), from τ²-bench's messages.
+
+    None when no customer message carries usage: an unrecorded count, not zero tokens."""
+    if run is None or not getattr(run, "messages", None):
+        return None
+    calls = prompt = completion = 0
+    for m in run.messages:
+        u = getattr(m, "usage", None) if getattr(m, "role", None) == "user" else None
+        if u:
+            calls += 1
+            prompt += int(u.get("prompt_tokens") or 0)
+            completion += int(u.get("completion_tokens") or 0)
+    if not calls:
+        return None
+    return {"calls": calls, "prompt_tokens": prompt, "completion_tokens": completion}
 
 
 def _no_score_env_class() -> type:

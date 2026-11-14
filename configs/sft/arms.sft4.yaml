@@ -1,0 +1,28 @@
+# Arm S4: Aya Expanse 32B + SFT v4 (SEL-73), served next to the others as "sft4":
+#   EXTRA_ADAPTERS="sft2=runs/sft-aya32b-r16-v2 sftlong=runs/sft-aya32b-r16-long sft3=runs/sft-aya32b-r16-v3 sft4=runs/sft-aya32b-r16-v4" just sft-serve
+# Same harness, prompt, decoding and customer as configs/arms.yaml; only the student differs:
+# it's served by vLLM on the pod (scripts/pod/serve.sh), on localhost:8000, no API key.
+# Scored on the validation tasks (SEL-73), like SL, S2 and S3:
+#   just rollout S4 <domain> --split train --task-ids ... --samples 2 --config configs/sft/arms.sft4.yaml
+# Never on test unless the team declares it. Everything but the adapter is as in arms.sft.yaml.
+
+student:
+  name: aya32-sft-r16-v4
+  model: sft4
+  api_base: http://localhost:8000/v1
+  api_key_env: null
+  mode: prompted          # the data contract (SEL-35): don't change these two
+  style: cohere
+  temperature: 0.0
+  max_tokens: 1024
+  max_context: 32768      # = serve.sh MAX_LEN (the GPU's limit; Cohere's API allows 128K)
+  reserve: 4096
+  rpm: 0
+
+customer: null            # GPT-4.1, as for every arm
+
+arms:
+  S4:
+    name: sft-v4-indicative
+    description: "SFT v4: v2's data plus on-policy teacher fixes at v2's own wrong decisions, 74 steps (SEL-73)"
+    prompt_variant: default

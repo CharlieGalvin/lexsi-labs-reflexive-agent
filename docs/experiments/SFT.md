@@ -183,17 +183,197 @@ done
 
 **Validation** (the 30 unseen train tasks, 2 samples, runs' own verdicts):
 - P: 9.0/30 on average.
-- v1 (S): retail 6, 6 /13; airline 3, 1 /5; telecom 6, 3 of 8 scored (8 crashed, to re-run).
+- v1 (S), before its telecom crashes were re-run: retail 6, 6 /13; airline 3, 1 /5; telecom 6, 3 of 8 scored (8 crashed). Superseded by the table in the next section (telecom 7 and 5 of 12, all scored).
 - On these unseen tasks, **v1 equalled the base model on airline** (2/5 on average each), confirming its airline weakness without using dev.
-- v2 on validation is still to run: it's the dev-independent test of the airline fix.
+- v2 on validation is still to run: it's the dev-independent test of the airline fix (done 9 Nov: see the next section).
+
+## Validation (9 Nov): v2 on tasks no arm trained on
+
+The dev-independent check: the 30 validation tasks (13 retail, 5 airline, 12 telecom), 2 samples
+each, scored in-run (`just arm-samples P S S2 --split val`).
+
+| Arm | Retail | Airline | Telecom | Total, mean of 2 | Samples |
+|---|---:|---:|---:|---:|---:|
+| P (base) | 5.0 | 2.0 | 2.0 | **9.0** | 8, 10 |
+| S (v1) | 6.0 | 2.0 | 6.0 | **14.0** | 16, 12 |
+| S2 (v2) | 6.5 | 2.5 | 8.0 | **17.0** | 16, 18 |
+
+- **SFT generalises:** v2 scores +8 over the same base model on unseen tasks, well above either
+  arm's spread between samples.
+- **v2 against v1 is +3, within noise** (v1's own samples differ by 4), and no domain is worse.
+- **The airline hypothesis isn't supported here:** airline is 2.5 against 2.0. The gain is in
+  telecom, where v2 got no new data. So v2's extra steps (74 against 56) may explain it: the
+  known confound. Until SL is in, credit v2's gain over v1 to "more training and/or more data".
+- On dev, v2 did fix airline's over-action (unwarranted cancellations 14 → 2, `just arm-failures`),
+  but dev informed v2's design, and that gain doesn't show detectably on 5 unseen airline tasks.
+
+Commands: the task list for each domain comes from `P-<domain>-val.jsonl`. A resume rewrites an
+arm's own file without its crashed records, so a task whose samples all crashed vanishes from it.
+Pass `--out`: the validation tasks are train tasks, so without it the file is named
+`<arm>-<domain>-train.jsonl`, which `--split val` doesn't read.
+
+```bash
+# Pod, one arm at a time (two at once crashed telecom); <arm> and its config, e.g. S2 configs/sft/arms.sft2.yaml
+for d in retail airline telecom; do
+  ids=$(jq -r '.task_id' results/episodes/arms/P-$d-val.jsonl | sort -u | tr '\n' ' ')
+  just rollout <arm> $d --task-ids $ids --samples 2 --config <config> \
+    --out results/episodes/arms/<arm>-$d-val.jsonl
+done
+# Mac: just arm-samples P S S2 SL S3 --split val
+```
+
+## SL and v3 (SEL-72): plan fixed before any result
+
+Three arms at the same **74 steps**. They differ in data, and so in passes over it: at 4 examples
+a step, SL makes about 2.6 passes over its 112, v2 2.0 over its 146 and v3 1.8 over its 166 (v3
+sees about 40 examples only once, which ones set by the shuffle). Matching steps keeps the compute
+equal, not the epochs:
+
+| Arm | Data | Config |
+|---|---|---|
+| SL | v1's 112 | `configs/train/sft_aya32b_long.yaml` |
+| S2 (v2) | v1's 112 and 34 airline | `configs/train/sft_aya32b_v2.yaml` |
+| S3 (v3) | v1's 112, 34 airline and 20 retail (166) | `configs/train/sft_aya32b_v3.yaml` (`just sft-v3-data`) |
+
+Telecom has no extra verified passes, so it stays at v1's 47. Tests check that SL differs from v1
+only in its steps, and v3 from v2 only in its data and steps.
+
+**Reproduce v3:**
+
+```bash
+# Mac (teacher via OpenRouter, judges via OpenAI): v3's retail extras need the retail fix run too
+python scripts/teacher/fixes.py --domains retail airline --tasks all --all-attempts
+# Pod, with results/fixes/glm53f.jsonl copied up:
+just sft-v3-data                                        # → data/train/sft-v3.jsonl: 166 (146 without the retail run)
+just sft-train configs/train/sft_aya32b_v3.yaml --dry-run
+just sft-train configs/train/sft_aya32b_v3.yaml --push
+EXTRA_ADAPTERS="sft2=runs/sft-aya32b-r16-v2 sftlong=runs/sft-aya32b-r16-long sft3=runs/sft-aya32b-r16-v3" just sft-serve
+# then the validation rollouts above, with S3 and configs/sft/arms.sft3.yaml
+```
+
+**Reading SL:** SL ≈ v2 means the steps explain v2's gain over v1; SL ≈ v1 means the airline data
+helped, just not where expected.
+
+**Decision rule for v3** (on validation, 2 samples each): v3 is better than v2 if its total beats
+17.0 by more than v2's sample spread (2), so 19.5 or more; no domain drops by more than 1 task;
+and Tool/Arg hallucination stays at or below 5% of conversations. Otherwise it's reported, not
+adopted.
+
+**Caveat:** each version compared on the same 30 tasks tunes us to them a little, as dev was. The
+headline arm is declared before test (SEL-26), and every test run is reported.
+
+## SL and v3: results (9 Nov)
+
+All five arms on the 30 validation tasks, 2 samples each (`just arm-samples P S S2 SL S3 --split val`;
+SL's and S3's telecom crashes came from running both arms at once and were re-run one arm at a time):
+
+| Arm | Data | Steps | Retail (13) | Airline (5) | Telecom (12) | Total, mean | Samples |
+|---|---|---:|---:|---:|---:|---:|---:|
+| P | — | — | 5.0 | 2.0 | 2.0 | **9.0** | 8, 10 |
+| S (v1) | 112 | 56 | 6.0 | 2.0 | 6.0 | **14.0** | 16, 12 |
+| SL | 112 | 74 | 6.5 | 2.0 | 7.0 | **15.5** | 15, 16 |
+| S2 (v2) | + 34 airline | 74 | 6.5 | 2.5 | 8.0 | **17.0** | 16, 18 |
+| S3 (v3) | + 34 airline + 20 retail | 74 | **8.0** | 2.5 | 6.5 | **17.0** | 16, 18 |
+
+**v3 isn't adopted:** its total (17.0) needed 19.5 or more, and telecom fell 1.5 against v2 (at most 1
+allowed). v2 stays Arm B and GRPO's starting adapter, as fixed at 19:24 in SEL-72.
+
+**These are the runs' own verdicts** (`just arm-samples`), not re-scored with `just oracle-score`,
+which `samples.py` says the reported numbers need; crashed conversations are counted apart, not as
+failures, and all were re-run. The telecom condition sits within 0.5 of its limit, so a re-score
+could change it, but the decision doesn't rest on it: the total misses 19.5 by 2.5. Re-score before
+these numbers go in the report.
+
+**Confound:** at a fixed 74 steps the arms also differ in passes over their data (above), so SL against
+v2 against v3, and v3's telecom drop, are data *and* epochs, not data alone.
+
+- **SL sits halfway between v1 and v2** (14.0 → 15.5 → 17.0). Each step of 1.5 is within v1's sample
+  spread of 4, so the shares due to training longer and to the airline data can't be separated.
+- **v3's retail data helped retail** (8.0, the best of any arm) and **telecom fell** (6.5): at a fixed
+  74 steps, more non-telecom examples mean fewer passes over each telecom example.
+- **Held-out loss doesn't separate them:** SL 0.365, v2 0.368, v3 0.368 at the end of training.
+- **The rule's third part, Tool/Arg at or below 5%:** v3 has 3 of 60 conversations (5.0%), so it
+  holds; v3 fails on the first two parts. For reference: SL 4 of 60, v2 4 of 60 (6.7%, all telecom's
+  customer-only phone tools), v1 6 of 60, P 52 of 60 (`classify_record`, any Tool or Arg finding).
+
+**Failure analysis** (one main cause per failed conversation, validation, both samples):
+
+| Main cause | v1 | v2 | v3 |
+|---|---:|---:|---:|
+| Loop / hit the step limit | 13 | 5 | 8 |
+| Over-action (an unneeded change) | 5 | 5 | 4 |
+| Right action, wrong arguments | 5 | 4 | 9 |
+| Missed an action | 2 | 4 | 5 |
+| Did something else instead | 3 | 1 | 0 |
+| Past 32K context / too many errors | 3 | 4 | 0 |
+| Actions right, another check failed | 1 | 3 | 0 |
+| **Failed (of 60)** | 32 | 26 | 26 |
+
+v2's gain over v1 is mostly fewer loops (13 → 5). 14 of its 26 failures are wrong decisions at a
+particular turn; airline still over-acts on unseen tasks (3 of its 5 failures), so the dev fix
+(cancellations 14 → 2) doesn't carry over. 4 conversations ran past 32K context.
+
+**Training** (both pushed to `reagent-lexsi`): SL 31 min, train loss 0.401, held-out 0.854 → 0.365;
+v3 29 min, train loss 0.408, held-out 0.854 → 0.368. Neither held-out loss rose.
+
+## v4 (SEL-73): on-policy fixes at v2's own wrong decisions
+
+Plan and rule fixed at 21:16 on 9 Nov, before any result: v4 replaces v2 if its validation total is
+19.5 or more, no domain drops by more than 1, and Tool/Arg hallucination stays at or below 5%.
+
+**Method** (`just onpolicy-fixes`, `scripts/heal/onpolicy_fixes.py`):
+
+1. v2 on the 112 train tasks outside validation, 1 sample (`S2-<domain>-trainpool.jsonl`): **55 passed**
+   (retail 21/46, airline 8/19, telecom 26/47). Most are tasks v2 trained on: it underfits.
+2. The turn to fix, from the task's expected actions: the first change that matches none still pending;
+   else the last agent turn if an expected change was never made; else the classifier's first finding.
+3. GLM-5.3-Flash rewrites that turn (`heal.fix_point`, `check_fix`, `to_sft_example`), up to 3 attempts;
+   accepted only if every change in it is one the task still expects.
+
+| Fix point | Found | Accepted |
+|---|---:|---:|
+| Unexpected change | 38 | 26 |
+| Classifier (loop / hallucination) | 3 | 3 |
+| Change never made | 13 | 0 |
+| No fix point (actions matched) | 3 | — |
+
+- **No stop-short fixes:** at those points the teacher looked something up or asked to confirm (which
+  the policy requires), but the rule demanded the change itself in that turn. **Also a bug, fixed
+  after this run (review of #56):** at a change-never-made point the script counted the last turn's
+  own changes as already made, though that turn is the one rewritten, so a correct rewrite that
+  redid them was refused. Calls the environment rejected ("Error…") also counted as changes. Both
+  are fixed; a re-run would find different fix points and accept different fixes, so the 29 of 54
+  and v4's data are from the earlier version.
+- **OpenRouter credit ran out** at fix point 51: the last 3 were refused for that reason.
+- **A spot check of 8** found the accepted turns sound: they confirm, re-check or hold back instead of
+  v2's premature or wrong change.
+
+**Data and training:** `just sft-v4-data` (v2's file + 29 on-policy, group `onpolicy`); trains on 175
+(112 + 34 + 29) for 74 steps; held-out loss tracked SL's and v3's.
+
+**Result** (validation, 2 samples each, the runs' own verdicts): retail **7.0**, airline **3.5** (best
+of any arm), telecom 6.5, total **17.0** (samples 18, 16). **Not adopted:** total below 19.5, telecom
+−1.5 against v2. The rule's third part, Tool/Arg at or below 5%, isn't computed yet
+(`classify_record` on `S4-*-val.jsonl`); the decision holds whatever it is. The
+fixes moved the domains they target, and telecom fell as it did for v3: at a fixed 74 steps, more
+non-telecom examples mean fewer passes over telecom's (about 2.0 per example for v2, 1.7 for v4).
+
+**Next, after submission:** v4's data at about 90 steps (restore telecom's passes); a stop-short rule
+that accepts a look-up or confirmation and checks the following turns.
 
 ## Version log
 
-| Version | Date | Data | Change from the previous version | Dev success (mean of 2 samples) | Tool/Arg | Gate against P | Adapter |
-|---|---|---|---|---|---|---|---|
-| v1 | 8 Nov | 112 healable fixes (golden v1.1) | — | 13.5/36 (38%) | 0% | Reject (airline −2) | `reagent-lexsi/sft-aya32b-r16` |
-| v2 | 8 Nov | v1 + 34 extra airline passes (airline 19 → 53) | Data only (airline); 74 steps against 56 | **21.5/36 (60%)** | 4.2% | **Promote** (airline +1) | `reagent-lexsi/sft-aya32b-r16-v2` |
+| Version | Date | Data | Change from the previous version | Dev success (mean of 2 samples) | Validation, mean of 2 (of 30) | Tool/Arg | Gate against P | Adapter |
+|---|---|---|---|---|---|---|---|---|
+| v1 | 8 Nov | 112 healable fixes (golden v1.1) | — | 13.5/36 (38%) | 14.0 | 0% | Reject (airline −2) | `reagent-lexsi/sft-aya32b-r16` |
+| v2 | 8 Nov | v1 + 34 extra airline passes (airline 19 → 53) | Data only (airline); 74 steps against 56 | **21.5/36 (60%)** | **17.0** | 4.2% | **Promote** (airline +1) | `reagent-lexsi/sft-aya32b-r16-v2` |
+| SL | 9 Nov | v1's 112 | Steps only: 74 (the ablation for v2's confound) | — | 15.5 | | | `reagent-lexsi/sft-aya32b-r16-long` |
+| v3 | 9 Nov | v2 + 20 extra retail passes (retail 46 → 66) | Data only (retail), at 74 steps (SEL-72) | — | 17.0 (not adopted) | | | `reagent-lexsi/sft-aya32b-r16-v3` |
+| v4 | 9 Nov | v2 + 29 on-policy teacher fixes (retail, airline, telecom) | Data only (on-policy), at 74 steps (SEL-73) | — | 17.0 (not adopted) | | | `reagent-lexsi/sft-aya32b-r16-v4` |
 
-## Next idea, beyond v2
+## Next ideas
 
-v2 adds *off-policy* data: teacher conversations, which never reach the states where S goes wrong. On-policy corrections are the standard fix in imitation learning (DAgger): run S on train tasks, find its first wrong action, and have the teacher continue from that point (#50's `PrefixTeacher`). That's the project's heal loop with this adapter as the student, and it's to discuss with Chiara (SEL-68).
+v2's teacher data is off-policy; v3 added more of it and v4 added on-policy fixes (DAgger, above).
+Neither beat v2 on validation. After submission: v4's data at about 90 steps (restoring telecom's
+passes), and a stop-short rule that accepts a look-up or a confirmation and checks the turns that
+follow it. GRPO from v2 (SEL-21, SEL-49) is the next step for the project itself.

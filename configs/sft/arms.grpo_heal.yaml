@@ -1,0 +1,28 @@
+# Arm H: Aya Expanse 32B + SFT v2 + heal GRPO (SEL-75), served alone as "heal":
+#   ADAPTER= EXTRA_ADAPTERS="heal=runs/grpo-heal-aya32b-v2" just sft-serve
+# Same harness, prompt, decoding and customer as S2 and G; only the adapter differs.
+# Run on the pod, one arm at a time:
+#   just arm-val H configs/sft/arms.grpo_heal.yaml                    # the 30 validation tasks, 2 samples
+#   just rollout H <domain> --split dev --samples 2 --config configs/sft/arms.grpo_heal.yaml
+# Test only if H passes its validation rule (SEL-75), fixed before any H result.
+
+student:
+  name: aya32-grpo-heal-v2
+  model: heal
+  api_base: http://localhost:8000/v1
+  api_key_env: null
+  mode: prompted          # the data contract (SEL-35): don't change these two
+  style: cohere
+  temperature: 0.0
+  max_tokens: 1024
+  max_context: 32768      # = serve.sh MAX_LEN
+  reserve: 4096
+  rpm: 0
+
+customer: null            # GPT-4.1, as for every arm
+
+arms:
+  H:
+    name: grpo-heal-v2
+    description: "SFT v2 + heal GRPO on the teacher's fixes at Tool / Arg / Loop failures (SEL-75)"
+    prompt_variant: default
