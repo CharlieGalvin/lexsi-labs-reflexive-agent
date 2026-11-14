@@ -8,6 +8,7 @@ abstract: >-
 type: software
 authors:
   - given-names: Katie
+    family-names: Kitchen
     alias: katiemarieek
   - given-names: Chiara
     family-names: Picardi
@@ -16,7 +17,7 @@ authors:
     family-names: Galvin
     alias: cg3849
 repository-code: "https://github.com/CharlieGalvin/lexsi-labs-reflexive-agent"
-url: "https://huggingface.co/reagent-lexsi"
+url: "https://huggingface.co/blog/cg3849/reflexive-agents"
 license: MIT
 date-released: "2026-11-16"
 keywords:
