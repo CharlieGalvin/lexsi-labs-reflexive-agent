@@ -123,14 +123,21 @@ It had trained on 16 rewritten turns, about 1% of the conversations' tokens: it 
 bluff at the start of a call, not how to finish one.
 
 **Then, at the grain that worked by hand: the teacher's whole verified conversation for each
-failure.** TODO (Charlie): the trajectory cycle's result (gate decision, dev tasks before and
-after, conversations trained on).
+failure.** The base model failed 106 of 112 train tasks; the loop trained on the 136 verified
+conversations for them, and the gate ran both adapters on the 36 dev tasks. The healed adapter solved
+**22 against 6**, and made **87% fewer** Tool, Arg and Loop errors per conversation (8.2 → 1.0). The gate
+promoted it and swapped it in, with no one in the loop.
 
-This second cycle feeds the loop what Result 1 taught, so a promotion was the expected outcome:
-it shows the automated pipeline can do what we did by hand, not new evidence that healing works.
-That evidence is the test result above. What the two cycles show together is that **the grain of
-the fix decides whether healing moves success**: fixing where an agent first goes wrong isn't
-enough; it has to learn how to finish the job.
+| The loop, run automatically | Fix | Dev tasks (base → healed) | Hallucination findings per conversation | Gate |
+|---|---|---:|---:|---|
+| Cycle 1 | one rewritten turn per failure | 4 → 4 | −71% | reject |
+| Cycle 2 | whole verified conversations | **6 → 22** | **−87%** | **promote** |
+
+This second cycle feeds the loop what Result 1 taught, so a promotion was the expected outcome, and
+22 of 36 matches what we got by hand (60% on dev). It shows the automated pipeline can do what we did
+by hand, not new evidence that healing works: that evidence is the test result above. What the two
+cycles show together is that **the grain of the fix decides whether healing moves success**: fixing
+where an agent first goes wrong isn't enough; it has to learn how to finish the job.
 
 ### Result 3: what reinforcement learning taught us
 
@@ -202,5 +209,12 @@ conversations rather than single turns. We'd love to hear how others approach it
 
 ### Acknowledgements
 
-TODO: thanks to Lexsi Labs for the hackathon and the stack, with our feedback on AgentTune,
-AuditKIT and DECIDE.
+Thanks to **Lexsi Labs** for the hackathon and the stack. Two notes from using it:
+
+* **AgentTune:** its `FailureDetector` sees only tool calls, so it misses loops made of repeated
+  replies; we added a turn-level monitor for those. `lexsi_provenance.json` worked well as the
+  lineage record for every adapter we published.
+* **AuditKIT:** its outcome oracle agreed with τ²-bench's own verdicts on all 600 test conversations.
+  Its `agent_loop_detection` counts near-identical replies, such as repeated goodbyes, as loops, so it
+  couldn't separate the untuned and healed agents (125 and 126 of 200) where our classifier could
+  (49% and 27%).
