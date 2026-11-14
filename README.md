@@ -1,7 +1,7 @@
 <!-- prettier-ignore -->
 <div align="center">
 
-<img src="docs/img/logo.svg" alt="" height="96">
+<img src="docs/img/logo-animated.png" alt="Reflexive Agents logo: a sad robot goes round the healing loop, gets a plaster and smiles" height="112">
 
 # Reflexive Agents
 
