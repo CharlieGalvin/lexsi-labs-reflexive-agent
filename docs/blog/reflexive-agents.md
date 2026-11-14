@@ -1,15 +1,15 @@
 ---
-title: "Reflexive Agents: Teaching a 32B Model to Heal Its Own Hallucinations"
-thumbnail: /blog/assets/reflexive-agents/test-results.png
+title: "Reflexive Agents: Cutting a 32B Agent's Hallucinations from 95% to 10%"
+thumbnail: /blog/assets/reflexive-agents/social-preview.png
 authors:
 - user: katiemarieek
 - user: cp89
 - user: cg3849
 ---
 
-# Reflexive Agents: Teaching a 32B Model to Heal Its Own Hallucinations
+# Reflexive Agents: Cutting a 32B Agent's Hallucinations from 95% to 10%
 
-*8 min read*
+*10 min read*
 
 Agents are increasingly trusted with write access: cancelling orders, changing flights, editing
 accounts. When they hallucinate, the result isn't a wrong sentence but a wrong action. They call a
@@ -30,6 +30,13 @@ gate. We built this loop on [τ²-bench](https://github.com/sierra-research/tau2
 * **Reinforcement learning didn't beat fine-tuning.** But it showed what a healing reward has to
   measure: not just *how* the agent acts, but *whether* it should.
 
+![The self-healing loop, animated. The student agent, Aya Expanse 32B with a LoRA adapter, fails a conversation. 1, Detect: a classifier finds the failing turn and flags an invented argument, email="something@example.com". 2, Fix: the teacher rewrites the turn as "Could you confirm your email?". 3, Retrain: the student trains on 146 verified conversations. 4, Gate: dev success rises from 11% to 60%, so the new adapter is promoted and the student moves from adapter v1 to v2.](img/heal-loop.gif)
+
+<iframe src="https://reagent-lexsi-spot-the-hallucination.static.hf.space" frameborder="0" width="100%" height="760"></iframe>
+
+**Try it:** [Spot the hallucination](https://huggingface.co/spaces/reagent-lexsi/spot-the-hallucination),
+ten real agent turns from our test runs. Can you tell a hallucination from a fine call?
+
 ### The idea, without the jargon
 
 Picture a new trainee on a customer help desk. They're quick and polite, but under pressure they
@@ -48,7 +55,7 @@ stronger model, and the manager is a benchmark with a rulebook fixed in advance.
 
 ### The loop: detect, fix, retrain, gate
 
-![The self-healing loop, animated. The student agent, Aya Expanse 32B with a LoRA adapter, fails a conversation. 1, Detect: a classifier finds the failing turn and flags an invented argument, email="something@example.com". 2, Fix: the teacher rewrites the turn as "Could you confirm your email?". 3, Retrain: the student trains on 146 verified conversations. 4, Gate: dev success rises from 11% to 60%, so the new adapter is promoted and the student moves from adapter v1 to v2.](img/heal-loop.gif)
+The animation at the top shows one turn of the loop:
 
 1. **Detect.** A classifier finds the first failing turn and its type: Tool, Arg or Loop.
 2. **Fix.** The teacher sees the conversation exactly as the student did, up to that turn, and
@@ -111,6 +118,41 @@ untuned student (**Arm A**) and the careful prompt (**Arm C**):
 **Arm B beats Arm A by 37 points** (95% range +28 to +46). The gain is largest in retail and
 telecom, and smallest in airline, where the remaining failures are policy decisions rather than
 hallucinations.
+
+### Before and after: one real conversation
+
+Here is the same test task, a customer returning a broken office chair, before and after healing.
+Both excerpts are unedited, apart from line breaks and the customer's opening line, which we shortened.
+
+**Untuned (Arm A).** Before the customer has given any details, the agent invents an email and
+chains three calls on IDs it doesn't have yet:
+
+```text
+Customer: The office chair I ordered showed up with broken pieces. I want to return it.
+Agent:    find_user_id_by_email(email="something@example.com")
+          get_user_details(user_id="<user_id_from_previous_tool_result>")
+          get_order_details(order_id="<latest_order_id_from_user_details>")
+Tools:    Error: User not found · Error: User not found · Error: Order not found
+```
+
+It goes on to repeat the same failing pattern, with 19 Tool, Arg and Loop findings in one
+conversation, until τ²-bench ends it for too many errors.
+
+**Healed (Arm B).** The agent asks first, then uses only what it has been told or shown:
+
+```text
+Customer: The office chair I ordered showed up with broken pieces. I want to return it.
+Agent:    I'm sorry to hear that! I'd be happy to help you with the return. First, I need
+          to verify your identity. Could you please provide me with the email address
+          associated with your account? Or, if you prefer, your first name, last name,
+          and zip code.
+Customer: I don’t remember my email. My name's Mei Davis, zip code 80217.
+Agent:    find_user_id_by_name_zip(first_name="Mei", last_name="Davis", zip="80217")
+Tools:    mei_davis_8935
+Agent:    get_user_details(user_id="mei_davis_8935")
+```
+
+No findings, and the task passes.
 
 ### Result 2: the loop, run automatically
 
@@ -195,6 +237,18 @@ just reproduce            # or: python scripts/blog/reproduce.py
 
 It ends by checking that every number it recomputed appears in this post exactly as written.
 
+### Limitations
+
+* **One benchmark.** Every result is on τ²-bench, with 100 test tasks in three customer-service
+  domains. We haven't shown that the healing transfers to other tools or domains.
+* **Airline improves least.** Arm B solves 30% of airline tasks: its remaining failures there are
+  policy decisions, which our classifier doesn't measure.
+* **It depends on a stronger teacher.** The fixes come from GLM-5.3-Flash. The loop can't teach the
+  student what the teacher can't do, and it needs the teacher's conversations to be verified.
+* **The automated loop wasn't run on test.** Its promoted adapter reproduces Arm B's training on dev;
+  the test result is Arm B's.
+* **Non-commercial.** The adapters inherit Aya Expanse 32B's CC BY-NC 4.0 licence.
+
 ### What's next
 
 The next step is a reward that judges decisions as well as structure, and scores whole
@@ -209,6 +263,18 @@ conversations rather than single turns. We'd love to hear how others approach it
 * **Data:** [reagent-lexsi/tau2-golden-trajectories](https://huggingface.co/datasets/reagent-lexsi/tau2-golden-trajectories),
   the teacher's verified conversations and the hard subset (CC BY-NC 4.0).
 
+**Use the healed model:**
+
+```python
+from peft import PeftModel
+from transformers import AutoModelForCausalLM
+
+base = AutoModelForCausalLM.from_pretrained("CohereLabs/aya-expanse-32b", device_map="auto")
+model = PeftModel.from_pretrained(base, "reagent-lexsi/sft-aya32b-r16-v2")
+```
+
+The agent prompt and tool-call format it was trained with are in the code.
+
 ### Acknowledgements
 
 Thanks to **Lexsi Labs** for the hackathon and the stack. Two notes from using it:
@@ -220,3 +286,14 @@ Thanks to **Lexsi Labs** for the hackathon and the stack. Two notes from using i
   Its `agent_loop_detection` counts near-identical replies, such as repeated goodbyes, as loops, so it
   couldn't separate the untuned and healed agents (125 and 126 of 200) where our classifier could
   (49% and 27%).
+
+### Citation
+
+```bibtex
+@software{reflexive_agents_2026,
+  title  = {Reflexive Agents: a self-healing loop for AI agent hallucination},
+  author = {Kitchen, Katie and Picardi, Chiara and Galvin, Charlie},
+  year   = {2026},
+  url    = {https://github.com/CharlieGalvin/lexsi-labs-reflexive-agent}
+}
+```
