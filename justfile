@@ -311,3 +311,17 @@ compare a="base" b="messy-grpo":
 # Record an eval that already ran, e.g. `just record runs/base-messy/eval_eval.csv base --arm A`
 record csv run *args:
     python scripts/experiment_log.py record {{csv}} {{run}} {{args}}
+
+# Blog (SEL-77): recompute every number in docs/blog/reflexive-agents.md from results/ and check the post
+blog-check:
+    python scripts/blog/check_numbers.py
+
+# Blog figures: redraw the chart, the animated loop and the example graphics (matplotlib, fetched by uv on the fly)
+blog-figures:
+    uv run --no-project --with matplotlib python scripts/blog/test_results_chart.py
+    uv run --no-project --with matplotlib python scripts/blog/loop_diagram.py
+    uv run --no-project --with matplotlib python scripts/blog/examples.py
+
+# Walk through the blog's experiments and reproduce each result from results/ (no GPU or keys): `just reproduce 3`, `--list`
+reproduce *args:
+    python scripts/blog/reproduce.py {{args}}
