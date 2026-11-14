@@ -133,7 +133,7 @@ Files (private): `reagent-lexsi/heal-runs` (`trajectory-cycle/`); adapter `reage
 | Net by domain | | retail +5, airline +1, telecom +10 |
 
 **Decision: PROMOTE** (rule part 1): net gain **+16** (17 tasks only the healed adapter passed, 1 only
-the base model), needs +2; findings down 87%, allowed up 10%; no domain lost a task. McNemar
+the base model), needs +2; findings down 87%, allowed up 10%; every domain gained on net. McNemar
 p = 0.0001 and a bootstrap 95% range for the gain of +28 to +61 points (neither required). The
 adapter was swapped in (`adapter now: heal-20261114-114936-c1`). This is the gate's second decision.
 
