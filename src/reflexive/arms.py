@@ -89,6 +89,15 @@ def get_arm(key: str, path: str | Path | None = None) -> Arm:
     )
 
 
+def recorded_api_base(student: dict) -> str | None:
+    """The server as records keep it: ``api_base``, or ``$<api_base_env>`` (the variable's name, never
+    the pod's URL: metrics files built from records are committed), or None for a hosted API."""
+    if student.get("api_base"):
+        return student["api_base"]
+    env = student.get("api_base_env")
+    return f"${env}" if env else None
+
+
 def student_api_base(student: dict) -> str:
     """The student's server: ``api_base``, or the URL in the environment variable ``api_base_env``
     (the pod's public vLLM endpoint, which changes with every pod and isn't committed)."""
@@ -200,8 +209,8 @@ def run_episode(
                 ep.end_for_context()
             act = watch.after_turn(ep.messages())
             nudge = act == "nudge"
-            if act == "stop":
-                ep.finish()
+            if act == "stop":  # the guard's stop, recorded as termination monitor_stop
+                ep.stop_for_monitor()
     except Exception as e:  # noqa: BLE001 - one bad conversation shouldn't stop the run
         error = f"{type(e).__name__}: {str(e)[:300]}"
         if ep.has_env and not ep.done:
@@ -215,7 +224,7 @@ def run_episode(
         "student": arm.student.get("name"),
         "agent_llm": arm.student.get("model"),
         # the variable's name, not the pod's URL: metrics files built from records are committed
-        "agent_api_base": arm.student.get("api_base") or f"${arm.student.get('api_base_env')}",
+        "agent_api_base": recorded_api_base(arm.student),
         "agent_mode": arm.student.get("mode", "prompted"),
         "agent_style": arm.student.get("style", "cohere"),
         "agent_usage": usage,

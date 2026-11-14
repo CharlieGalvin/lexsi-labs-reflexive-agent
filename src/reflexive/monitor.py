@@ -32,7 +32,9 @@ adapters: the rest is stdlib.
 benchmark arms: a guard that changes the conversation is measured as its own ablation, so Arm
 B's gain isn't confused with it). In ``act`` mode, the first ``no_progress`` adds a nudge to
 the agent's next prompt; if the agent keeps looping (another ``no_progress`` after the nudge),
-the conversation is stopped. Other findings are only logged.
+the conversation is stopped, with its own termination ``monitor_stop`` (SEL-69): τ²-bench
+grades it as an agent stop, but metrics report those runs on their own. Other findings are only
+logged.
 
 **Checked against AgentTune itself** (7 Nov, the 148 Arm A and C telecom conversations written
 as audit logs after every message): its own ``FailureDetector`` reads our lines with no schema
@@ -173,6 +175,7 @@ class Guard:
     mode: str = "log"
     nudged_at: int | None = None  # agent turn of the nudge
     stopped_at: int | None = None
+    nudge: dict[str, Any] | None = None  # the nudge as the agent saw it (`nudged`)
 
     def __post_init__(self) -> None:
         if self.mode not in MODES:
@@ -191,13 +194,30 @@ class Guard:
         self.stopped_at = loop.agent_turn
         return "stop"
 
-    @staticmethod
-    def nudged(prompt: list[Message]) -> list[Message]:
-        """The prompt with the nudge as a last user turn (a system turn would repeat the tool list)."""
+    def nudged(self, prompt: list[Message]) -> list[Message]:
+        """The prompt with the nudge as a last user turn (a system turn would repeat the tool list).
+
+        The nudge goes into this one prompt only, never into the conversation τ²-bench keeps, so
+        it is recorded here (`nudge`, SEL-69): its text, where it went in the agent's view (after
+        message ``after_view_index``, whose role is ``after_role``) and the agent turn it was
+        shown before. After a customer message, the agent sees two user turns in a row."""
+        last = prompt[-1] if prompt else {}
+        self.nudge = {
+            "text": NUDGE,
+            "role": "user",
+            "after_view_index": len(prompt) - 1,
+            "after_role": last.get("role"),
+            "before_agent_turn": (self.nudged_at or 0) + 1,
+        }
         return [*prompt, {"role": "user", "content": NUDGE}]
 
     def to_dict(self) -> dict[str, Any]:
-        return {"mode": self.mode, "nudged_at": self.nudged_at, "stopped_at": self.stopped_at}
+        return {
+            "mode": self.mode,
+            "nudged_at": self.nudged_at,
+            "stopped_at": self.stopped_at,
+            "nudge": self.nudge,
+        }
 
 
 # --- The audit log (what FullClosedLoop reads) ----------------------------------------------

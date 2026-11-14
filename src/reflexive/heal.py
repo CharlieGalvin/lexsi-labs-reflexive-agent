@@ -181,11 +181,17 @@ class PrefixTeacher:
     ``make_agent(temperature)`` builds the teacher; by default GLM-5.3-Flash via
     `reflexive.runner`. Only train tasks are fixed. ``tried`` keeps every attempt per task (what
     it wrote, why it was refused, cost) for the audit record.
+
+    ``extra_check(fixed)``: more reasons to refuse a turn, on top of `check_fix` (e.g. the
+    on-policy fixes' rule that every change must be one the task still expects). Running out of
+    credits or a model that can't be reached (`reflexive.runner.OutOfCredits`, ``ModelUnavailable``)
+    stops the run: every later attempt would fail too, so they aren't logged as refusals.
     """
 
     make_agent: Callable[[float], TurnAgent] | None = None
     model: str = TEACHER
     attempts: int = 3
+    extra_check: Callable[[Message], list[str]] | None = None
     tried: dict[Task, list[dict[str, Any]]] = field(default_factory=dict)
 
     def _agent(self, temperature: float) -> TurnAgent:
@@ -216,6 +222,10 @@ class PrefixTeacher:
             try:
                 fixed = _clean_turn(agent.turn([dict(m) for m in prefix], tools))
             except Exception as e:  # noqa: BLE001 - an API failure is a refused attempt, not a crash
+                from reflexive.runner import ModelUnavailable, OutOfCredits
+
+                if isinstance(e, (OutOfCredits, ModelUnavailable)):
+                    raise
                 log.append(
                     {
                         "attempt": i,
@@ -226,6 +236,8 @@ class PrefixTeacher:
                 )
                 continue
             problems = check_fix(domain, prefix, fixed, failed)
+            if self.extra_check is not None:
+                problems += self.extra_check(fixed)
             usage = dict(getattr(agent, "usage", {}) or {})
             log.append(
                 {

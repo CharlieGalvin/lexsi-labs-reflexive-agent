@@ -67,6 +67,8 @@ def tool_problems(view: list[dict]) -> dict:
 
 def why_not_clean(rec: dict) -> str | None:
     """None for a clean pass; otherwise the first reason it isn't one."""
+    if rec.get("termination") == "monitor_stop":  # the harness ended it, not the agent (SEL-69)
+        return "ended by the runtime monitor's guard"
     if rec.get("error") or rec.get("termination") not in GOOD_ENDINGS:
         return f"run broke ({rec.get('termination')})"
     if not rec["outcome"]["passed"]:

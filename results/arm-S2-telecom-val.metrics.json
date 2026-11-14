@@ -1,0 +1,76 @@
+{
+  "run": "arm-S2-telecom-val",
+  "monitor": "log or off",
+  "date": "2026-11-12",
+  "owner": "Charlie",
+  "commit": "d2fe483",
+  "config": "configs/arms.yaml",
+  "arm": "S2",
+  "prompt_variant": "default",
+  "prompt_version": "tau2/default",
+  "student": "sft2 (http://localhost:8000/v1, prompted, cohere Action: format)",
+  "customer": "gpt-4.1-2025-04-14",
+  "domain": "telecom",
+  "split": "train (frozen splits, configs/splits.json)",
+  "samples_per_task": 2,
+  "judges": false,
+  "note_judges": "telecom has no LLM judges: scores are complete",
+  "note_cost": "the saved records' spend: a resumed rollout drops crashed conversations before retrying them, so their first attempts aren't counted (a lower bound)",
+  "records": "results/episodes/arms/S2-telecom-val.jsonl (not committed)",
+  "note_samples": "the 95% range counts every conversation as independent: too narrow",
+  "conversations": 24,
+  "crashed": 0,
+  "passed": 16,
+  "task_success": 0.6667,
+  "task_success_wilson95": [
+    0.4671,
+    0.8203
+  ],
+  "by_issue": {
+    "mms_issue": {
+      "passed": 7,
+      "n": 10
+    },
+    "mobile_data_issue": {
+      "passed": 9,
+      "n": 12
+    },
+    "service_issue": {
+      "passed": 0,
+      "n": 2
+    }
+  },
+  "termination": {
+    "user_stop": 20,
+    "too_many_errors": 2,
+    "max_steps": 2
+  },
+  "monitor_stopped": {
+    "conversations": 0,
+    "passed": 0,
+    "task_success_if_failed": 0.6667
+  },
+  "context_overflow": 0,
+  "conversations_flagged": {
+    "tool_unknown_tool": 4,
+    "arg_unseen_id_like_argument": 1,
+    "loop_repeated_failed_call": 1,
+    "tool_or_arg": 4
+  },
+  "flag_method": "heuristic diagnostics (reflexive.teacher.unseen_arguments / tool_errors), not the SEL-12 classifier",
+  "hallucination_rate_tool_or_arg": 0.1667,
+  "transferred_to_human": 2,
+  "judged": 0,
+  "skipped_checks": 0,
+  "student_calls": 668,
+  "student_calls_per_success": 41.8,
+  "student_replies_cut_off": 0,
+  "tool_calls_per_conversation": 12,
+  "student_tokens_per_conversation_median": 196889,
+  "cost_usd": {
+    "customer": 2.65,
+    "student_est": 0.0,
+    "total": 2.65
+  },
+  "history": "Validation: the 30 train tasks no arm trained on (13 retail, 5 airline, 12 telecom), 2 samples each; the runs' own verdicts (judges on during the run)"
+}

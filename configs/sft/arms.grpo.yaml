@@ -1,0 +1,29 @@
+# Arm G: Aya Expanse 32B + SFT v2 + single-turn GRPO (SEL-21, SEL-49), served alone as "grpo":
+#   ADAPTER= EXTRA_ADAPTERS="grpo=runs/grpo-aya32b-v2" just sft-serve
+# GRPO continued SFT v2's adapter, so it's a complete adapter on the base model: no "sft" needed.
+# Same harness, prompt, decoding and customer as S2 (configs/sft/arms.sft2.yaml); only the adapter differs.
+# Run on the pod, one arm at a time:
+#   just arm-val G configs/sft/arms.grpo.yaml                         # the 30 validation tasks, 2 samples
+#   just rollout G <domain> --split dev --samples 2 --config configs/sft/arms.grpo.yaml
+# Test only if G passes its validation rule (SEL-49), as declared before the test run (SEL-26).
+
+student:
+  name: aya32-grpo-v2
+  model: grpo
+  api_base: http://localhost:8000/v1
+  api_key_env: null
+  mode: prompted          # the data contract (SEL-35): don't change these two
+  style: cohere
+  temperature: 0.0
+  max_tokens: 1024
+  max_context: 32768      # = serve.sh MAX_LEN (the GPU's limit; Cohere's API allows 128K)
+  reserve: 4096
+  rpm: 0
+
+customer: null            # GPT-4.1, as for every arm
+
+arms:
+  G:
+    name: grpo-v2
+    description: "SFT v2 + single-turn GRPO on the teacher's verified tool-call turns (SEL-21; scored in SEL-49)"
+    prompt_variant: default

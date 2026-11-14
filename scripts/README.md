@@ -33,6 +33,7 @@ prints. **Cost** is the API spend of one run; "none" means no API calls.
 |---|---|---|---|
 | `rollout.py` | `just rollout A retail` | Runs an arm (`configs/arms.yaml`) on a domain's split → `results/episodes/arms/` | Aya + customer: Arm A on telecom train (74 tasks) was $11.25 |
 | `compare.py` | `just arm-compare <a.jsonl> <b.jsonl>` | Two rollout files compared with 95% bootstrap CIs: success, hallucination (Tool or Arg), loops, steps per task, redundant calls; the difference paired on shared tasks → `results/<a>-vs-<b>.compare.md` and `.compare.metrics.json` | none |
+| `monitor_replay.py` | (none) | Saved rollouts replayed turn by turn through the runtime monitor (`Watcher`, act mode): where `no_progress` fires, what the guard would do, and false alarms (`--metrics`, `--json`) | none |
 | `spot_check_hallucination.py` | `just hallucination-spot-check` | Samples the classifier's findings to check by hand; with `--labels`, reports precision | none |
 
 ## teacher/: the teacher bake-off and the fix run (SEL-58, SEL-45)
@@ -51,7 +52,7 @@ prints. **Cost** is the API spend of one run; "none" means no API calls.
 |---|---|---|---|
 | `cycle.py` | `just heal --fixes-only --sample 3` | Heal cycles end to end: the student on train tasks, the teacher fixing each failing turn, training on the fixes, the gate on all 36 dev tasks, the adapter swapped only on a pass; an audit record per cycle → `results/heal/`. `--fixes-only` stops before training (works with Cohere's Aya); a full cycle needs the student served by vLLM | the student + customer per conversation, as `rollout.py`; the teacher ~$0.001 a failure per attempt |
 | `train_and_serve.sh` | `--train-cmd "bash scripts/heal/train_and_serve.sh {data} {out} {base}"` | A full cycle's training command on the pod (SEL-68): stops vLLM, trains the adapter on the cycle's fixes (`train_sft.py`, `configs/train/sft_heal.yaml`; from the second cycle on, continuing the adapter being healed), starts vLLM again with runtime LoRA loading and the gate's baseline adapter, and waits until it answers | GPU time: one QLoRA run per cycle, plus vLLM's restart |
-| `../pod/heal_service.py` | `just heal-service` (on the pod) | The pod's heal service (SEL-68): a cycle running elsewhere (`just heal --config configs/sft/arms.pod.yaml --arm P`, `--train-url`) sends its fixes; the pod runs `train_and_serve.sh` and serves the new adapter on its vLLM endpoint. Token-protected (`HEAL_TOKEN`), one job at a time | GPU time, as above |
+| `../pod/heal_service.py` | `just heal-service` (on the pod) | The pod's heal service (SEL-68): a cycle running elsewhere (`just heal --config configs/sft/arms.pod.yaml --arm P`, `--train-url`) sends its fixes; the pod runs `train_and_serve.sh` and serves the new adapter on its vLLM endpoint. Token-protected (`HEAL_TOKEN`), one job at a time; needs `VLLM_API_KEY`, as vLLM is restarted with the service's environment | GPU time, as above |
 
 ## student/: the student
 

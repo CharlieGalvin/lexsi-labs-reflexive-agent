@@ -104,8 +104,8 @@ successful rollouts), to isolate the teacher's contribution.
   subset** (tasks that reliably trigger Tool / Arg / Loop failures in the baseline).
 - Run the teacher (**GLM-5.3-Flash**) to generate **golden trajectories** on train tasks,
   verified by τ²-bench's own evaluator, then convert them to the student's format and publish
-  them for the Trainer (**published 5 Nov: [v1](https://huggingface.co/datasets/reagent-lexsi/tau2-golden-trajectories), private, 127 train + 31 dev reference
-  records**; the hard subset follows as v1.1, SEL-60).
+  them for the Trainer (**[v1.1](https://huggingface.co/datasets/reagent-lexsi/tau2-golden-trajectories), public, CC BY-NC 4.0: 127 train + 31 dev reference
+  records, plus the hard subset**; SEL-60).
 - Run the AuditKIT verification suite; produce the final ROI and success-per-token charts.
 
 ### Role 2 — Systems & Logic ("the Architect")

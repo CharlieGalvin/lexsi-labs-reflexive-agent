@@ -9,7 +9,11 @@ job is done, then gates the adapter through the endpoint, as any other model.
 On the pod, after ``scripts/pod/setup.sh`` and with vLLM running (``RUNTIME_LORA=1 ADAPTER=
 just sft-serve``):
 
-    HEAL_TOKEN=<a secret> .venv/bin/python scripts/pod/heal_service.py      # port 8001
+    HEAL_TOKEN=<a secret> VLLM_API_KEY=<the pod's vLLM key> .venv/bin/python scripts/pod/heal_service.py
+                                                                            # port 8001
+
+``VLLM_API_KEY`` is required: each job restarts vLLM with this service's environment, and vLLM
+only asks for a key when it's set, so without it the public endpoint would come back open.
 
 Expose port 8001 (RunPod: "Expose HTTP ports"), and give the cycle the URL and the token
 (``HEAL_SERVICE_URL``, ``HEAL_TOKEN`` in its ``.env``). Every request needs
@@ -28,6 +32,7 @@ are read from this service's environment.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hmac
 import json
 import os
@@ -56,11 +61,26 @@ class HealService:
         self.root.mkdir(parents=True, exist_ok=True)
         self.lock = threading.Lock()
         self.busy: str | None = None
+        self._interrupted()
+
+    def _interrupted(self) -> None:
+        """Jobs still "running" from before a restart: their thread is gone, so they never finish."""
+        for path in sorted(self.root.glob("*/status.json")):
+            try:
+                status = json.loads(path.read_text())
+            except (OSError, json.JSONDecodeError):
+                continue
+            if status.get("status") == "running":
+                self._status(
+                    path.parent.name, status="failed", exit_code=None, adapter=None, interrupted=True
+                )
 
     # --- Requests -------------------------------------------------------------------------------
 
     def authorised(self, header: str | None) -> bool:
-        return bool(header) and hmac.compare_digest(header or "", f"Bearer {self.token}")
+        # bytes: compare_digest raises TypeError on a str with non-ASCII characters
+        want = f"Bearer {self.token}".encode()
+        return bool(header) and hmac.compare_digest((header or "").encode("utf-8", "replace"), want)
 
     def submit(self, body: dict[str, Any]) -> tuple[int, dict[str, Any]]:
         name, base, fixes = body.get("name"), body.get("base") or None, body.get("fixes")
@@ -82,9 +102,17 @@ class HealService:
             folder.mkdir()
             self.busy = name
         data = folder / "fixes.jsonl"
-        data.write_text("".join(json.dumps(f) + "\n" for f in fixes))
-        self._status(name, status="running", base=base, examples=len(fixes), started=time.time())
-        threading.Thread(target=self._run, args=(name, base, data), daemon=True).start()
+        try:
+            data.write_text("".join(json.dumps(f) + "\n" for f in fixes))
+            self._status(name, status="running", base=base, examples=len(fixes), started=time.time())
+            threading.Thread(target=self._run, args=(name, base, data), daemon=True).start()
+        except Exception as e:  # noqa: BLE001 - e.g. the disk quota: the job fails, the service stays free
+            error = f"{type(e).__name__}: {e}"
+            with contextlib.suppress(Exception):
+                self._status(name, status="failed", exit_code=None, adapter=None, error=error)
+            with self.lock:
+                self.busy = None
+            return 500, {"error": f"couldn't start {name}: {error}"}
         return 202, {"name": name, "status": "running"}
 
     def job(self, name: str) -> tuple[int, dict[str, Any]]:
@@ -194,6 +222,13 @@ def main(argv: list[str] | None = None) -> int:
     token = os.environ.get("HEAL_TOKEN", "")
     if len(token) < 16:
         print("⛔ set HEAL_TOKEN (16 characters or more): the service's port is public", file=sys.stderr)
+        return 1
+    if not os.environ.get("VLLM_API_KEY"):
+        print(
+            "⛔ set VLLM_API_KEY (the key vLLM is serving with): each job restarts vLLM with this "
+            "service's environment, and without it vLLM comes back on its public port with no key",
+            file=sys.stderr,
+        )
         return 1
     service = HealService(a.root, token)
     server = ThreadingHTTPServer((a.host, a.port), handler(service))

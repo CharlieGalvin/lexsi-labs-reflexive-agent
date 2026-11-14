@@ -1,0 +1,86 @@
+# Every adapter of the student (SEL-22): one entry each, never edited away. Written by hand when
+# an adapter is trained; `just adapter-publish <id>` adds its model card, lexsi_provenance.json and
+# eval metrics to its Hub repo, and `just adapter-use <id>` / `just adapter-rollback` switch which
+# one is served as Arm B (state and history: results/adapters/state.json).
+#
+# Naming: the Hub repo is reagent-lexsi/<repo>. Existing SFT names are kept (docs and configs point
+# at them); new adapters are named `aya32b-<method>-<version>`, e.g. aya32b-grpo-v1, aya32b-heal-c1.
+# The id is short and stable (sft-v2); `served_as` is the name vLLM serves it under.
+#
+# status: what was decided about it. adopted (passed its rule: can be Arm B) | candidate (not yet
+#         decided) | superseded (replaced by a better one) | not_adopted (decided against by its
+#         rule) | control (an ablation, never a candidate). Which adapter IS Arm B lives only in
+#         results/adapters/state.json (`just adapter-use`), never here, so the two can't disagree.
+#         adapter-use refuses not_adopted and control adapters unless --force.
+# eval: val = the 30 validation tasks (13 retail, 5 airline, 12 telecom), dev = the 36 dev tasks;
+# mean over `samples` (each sample a full run), `of` tasks (default 30 / 36 / 100 for val / dev /
+# test). Numbers are copied from docs/experiments/SFT.md, which links the runs.
+
+base: CohereLabs/aya-expanse-32b
+hub_org: reagent-lexsi
+
+adapters:
+  - id: sft-v1
+    repo: sft-aya32b-r16
+    parent: null
+    method: SFT (QLoRA r16, 2 epochs, 56 steps)
+    data: 112 healable golden fixes (golden v1.1)
+    train_config: configs/train/sft_aya32b.yaml
+    arm_config: configs/sft/arms.sft.yaml
+    served_as: sft
+    ticket: SEL-65
+    status: superseded
+    eval: {val: {mean: 14.0, samples: [16, 12]}, dev: {mean: 13.5, of: 36, samples: [16, 11]}}
+    metrics: [results/arm-S-retail-dev.metrics.json, results/arm-S-airline-dev.metrics.json, results/arm-S-telecom-dev.metrics.json]
+
+  - id: sft-long
+    repo: sft-aya32b-r16-long
+    parent: null
+    method: SFT (QLoRA r16, v1's data for 74 steps)
+    data: v1's 112 examples
+    train_config: configs/train/sft_aya32b_long.yaml
+    arm_config: configs/sft/arms.sftlong.yaml
+    served_as: sftlong
+    ticket: SEL-71
+    status: control
+    eval: {val: {mean: 15.5, samples: [15, 16]}}
+    metrics: []
+
+  - id: sft-v2
+    repo: sft-aya32b-r16-v2
+    parent: null
+    method: SFT (QLoRA r16, 74 steps)
+    data: v1's 112 + 34 extra verified airline teacher passes
+    train_config: configs/train/sft_aya32b_v2.yaml
+    arm_config: configs/sft/arms.sft2.yaml
+    served_as: sft2
+    ticket: SEL-71
+    status: adopted
+    eval: {val: {mean: 17.0, samples: [16, 18]}, dev: {mean: 21.5, of: 36, samples: [24, 19]}}
+    metrics: [results/arm-S2-retail-dev.metrics.json, results/arm-S2-airline-dev.metrics.json, results/arm-S2-telecom-dev.metrics.json]
+
+  - id: sft-v3
+    repo: sft-aya32b-r16-v3
+    parent: null
+    method: SFT (QLoRA r16, 74 steps)
+    data: v2's + 20 extra verified retail teacher passes
+    train_config: configs/train/sft_aya32b_v3.yaml
+    arm_config: configs/sft/arms.sft3.yaml
+    served_as: sft3
+    ticket: SEL-72
+    status: not_adopted
+    eval: {val: {mean: 17.0, samples: [16, 18]}}
+    metrics: []
+
+  - id: sft-v4
+    repo: sft-aya32b-r16-v4
+    parent: null
+    method: SFT (QLoRA r16, 74 steps)
+    data: v2's + 29 on-policy teacher fixes at v2's own wrong decisions
+    train_config: configs/train/sft_aya32b_v4.yaml
+    arm_config: configs/sft/arms.sft4.yaml
+    served_as: sft4
+    ticket: SEL-73
+    status: not_adopted
+    eval: {val: {mean: 17.0, samples: [18, 16]}}
+    metrics: []
