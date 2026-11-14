@@ -32,10 +32,10 @@ gate. We built this loop on [τ²-bench](https://github.com/sierra-research/tau2
 
 ![The self-healing loop, animated. The student agent, Aya Expanse 32B with a LoRA adapter, fails a conversation. 1, Detect: a classifier finds the failing turn and flags an invented argument, email="something@example.com". 2, Fix: the teacher rewrites the turn as "Could you confirm your email?". 3, Retrain: the student trains on 146 verified conversations. 4, Gate: dev success rises from 11% to 60%, so the new adapter is promoted and the student moves from adapter v1 to v2.](img/heal-loop.gif)
 
-<iframe src="https://reagent-lexsi-spot-the-hallucination.static.hf.space" frameborder="0" width="100%" height="760"></iframe>
+<iframe src="https://reagent-lexsi-spot-the-hallucination.static.hf.space" frameborder="0" width="100%" height="820"></iframe>
 
 **Try it:** [Spot the hallucination](https://huggingface.co/spaces/reagent-lexsi/spot-the-hallucination),
-ten real agent turns from our test runs. Can you tell a hallucination from a fine call?
+three real moments from our test runs. Can you tell when the agent is bluffing?
 
 ### The idea, without the jargon
 
