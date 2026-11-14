@@ -187,7 +187,7 @@ def watch_requests() -> None:
             )
         return r
 
-    httpx.post = post
+    httpx.post = post  # ty: ignore[invalid-assignment]  # a logging wrapper with the same call signature
 
 
 def teach(

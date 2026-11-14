@@ -18,9 +18,11 @@ from reflexive.heal import (
     SFT_FORMAT,
     CommandTrainer,
     PrefixTeacher,
+    VerifiedTeacher,
     audit_record,
     check_fix,
     fix_point,
+    lesson,
     write_audit,
 )
 from reflexive.splits import task_ids
@@ -335,3 +337,70 @@ def test_running_out_of_credits_stops_instead_of_refusing():
     teacher = PrefixTeacher(make_agent=FakeModel([OutOfCredits("402"), GOOD]))
     with pytest.raises(OutOfCredits):
         teacher.fix(failure())
+
+
+# --- Trajectory-level fixes (HEAL_FROM_V2.md) --------------------------------------------------
+
+
+def verified(task, n, group="healable"):
+    domain, task_id = task
+    msgs = [{"role": "system", "content": "policy"}, {"role": "assistant", "content": "Hi"},
+            {"role": "user", "content": "help"}, {"role": "assistant", "content": "Done."}]  # fmt: skip
+    return {"id": f"glm53f/{domain}/{task_id}/{n}", "format": SFT_FORMAT, "domain": domain,
+            "task_id": str(task_id), "group": group, "labels": ["ARG"], "messages": msgs,
+            "train_on": [1, 3]}  # fmt: skip
+
+
+def library(tmp_path, rows):
+    path = tmp_path / "sft-v2.jsonl"
+    path.write_text("".join(json.dumps(r) + "\n" for r in rows))
+    return path
+
+
+def test_a_trajectory_fix_is_every_verified_conversation_for_the_task_with_all_its_agent_turns(tmp_path):
+    lib = library(tmp_path, [verified(TRAIN[0], 1), verified(TRAIN[0], 2, "extra"), verified(TRAIN[1], 1),
+                             verified(TRAIN[0], 3, "solved_by_aya")])  # fmt: skip
+    teacher = VerifiedTeacher(library=lib)
+
+    fixes = teacher.fix(failure(TRAIN[0]))
+
+    assert fixes is not None
+    assert [f["source"]["from"] for f in fixes] == [f"glm53f/{TRAIN[0][0]}/{TRAIN[0][1]}/{n}" for n in (1, 2)]
+    assert all(f["group"] == "heal" and f["train_on"] == [1, 3] for f in fixes)  # every agent turn
+    assert all(f["source"]["kind"] == "verified_trajectory" for f in fixes)
+    assert teacher.fix(failure(TRAIN[2])) is None  # no verified conversation for it
+    assert teacher.tried[TRAIN[2]][0]["accepted"] is False
+
+
+def test_the_verified_teacher_never_fixes_a_dev_task(tmp_path):
+    with pytest.raises(ValueError, match="isn't a train task"):
+        VerifiedTeacher(library=library(tmp_path, [])).fix(failure(DEV[0]))
+
+
+def test_whole_conversations_are_never_deduplicated_as_one_lesson(tmp_path):
+    fixes = VerifiedTeacher(library=library(tmp_path, [verified(TRAIN[0], 1), verified(TRAIN[0], 2)])).fix(
+        failure(TRAIN[0]))  # fmt: skip
+    assert fixes is not None
+    trainer = CommandTrainer(tmp_path / "runs", per_lesson=None)
+    trainer.train(fixes, None)
+    assert trainer.calls[-1]["examples"] == 2 and len({lesson(f) for f in fixes}) == 2
+
+
+def test_a_cycle_trains_on_every_conversation_a_teacher_returns_for_a_failure(tmp_path):
+    def rollout(adapter, domain, task_id):
+        if (domain, task_id) in TRAIN:
+            return failed_record(domain, task_id, adapter)
+        view = [SYS, HI, {"role": "assistant", "content": "Done."}]
+        return {"domain": domain, "task_id": task_id, "termination": "user_stop",
+                "outcome": {"passed": adapter is not None}, "messages": view, "agent_view": view,
+                "adapter": adapter}  # fmt: skip
+
+    lib = library(tmp_path, [verified(TRAIN[0], 1), verified(TRAIN[0], 2, "extra"), verified(TRAIN[1], 1)])
+    teacher, trainer = VerifiedTeacher(library=lib), CommandTrainer(tmp_path / "runs", per_lesson=None)
+    report = ReflexiveAgent(rollout, teacher=teacher, trainer=trainer, gate=PassRateGate()).run_cycle(
+        TRAIN, DEV
+    )
+
+    assert len(report.fixes) == 3 and trainer.calls[-1]["examples"] == 3
+    rec = audit_record(report, cycle=1, teacher=teacher, trainer=trainer)
+    assert [f["fixed"] for f in rec["failures"]] == [True, True, False]

@@ -12,7 +12,10 @@ Run it with ``just heal ...``, which loads the API keys from ``.env``.
 **What it runs.** The student from ``--config``'s arm (default Arm A, `configs/arms.yaml`) on the
 train tasks of ``--domains``: all of them, the first ``--limit`` per domain, or a random
 ``--sample`` per domain (seed ``--seed``, default 0, so a rerun picks the same tasks; the first
-tasks of a split are often one family, e.g. telecom's MMS issue). Failures go to `heal.PrefixTeacher`
+tasks of a split are often one family, e.g. telecom's MMS issue). The 30 **validation** tasks (train
+tasks no arm trains on: the hard subset's ``solved_by_aya`` and ``teacher_unsolved`` groups) are
+left out, so a healed adapter can still be scored on them; ``--keep-validation`` keeps them.
+Failures go to `heal.PrefixTeacher`
 (GLM-5.3-Flash via OpenRouter, fixing the failing turn from the agent's view), the accepted fixes
 to `heal.CommandTrainer` and the candidate adapter to the agreed gate (`gate.DevGate`,
 `configs/gate.yaml`): both adapters on **every dev task** (36), oracle-scored with judges on.
@@ -77,17 +80,41 @@ from typing import Any
 from reflexive import splits
 from reflexive.agent import Adapter, CycleReport, Record, ReflexiveAgent, Task, arm_rollout
 from reflexive.arms import get_arm, make_student, student_api_base
-from reflexive.files import read_jsonl
-from reflexive.heal import TEACHER, CommandTrainer, PrefixTeacher, run_metrics, write_audit
+from reflexive.files import ROOT, read_jsonl
+from reflexive.heal import TEACHER, CommandTrainer, PrefixTeacher, VerifiedTeacher, run_metrics, write_audit
 
 DOMAINS = ("retail", "airline", "telecom")
 COHERE = "api.cohere.ai"
 
 
+VALIDATION_GROUPS = ("solved_by_aya", "teacher_unsolved")  # docs/experiments/SFT.md: the 30 validation tasks
+HARD_SUBSET = (  # golden v1.1's hard subset: where setup.sh puts it on the pod, and `just train-data`'s copy
+    ROOT / "data" / "golden" / "hub-v1.1" / "hard_subset.jsonl",
+    ROOT / "data" / "golden" / "hard" / "hard_subset.jsonl",
+)
+
+
+def validation_tasks(paths: tuple[Path, ...] = HARD_SUBSET) -> set[Task]:
+    """The validation tasks: train tasks no arm trains on, so heal cycles must not train on them either."""
+    for path in paths:
+        if path.exists():
+            rows = read_jsonl(path)
+            return {(r["domain"], str(r["task_id"])) for r in rows if r.get("group") in VALIDATION_GROUPS}
+    raise FileNotFoundError(
+        f"no hard subset in {', '.join(str(p) for p in paths)}: it lists the validation tasks "
+        "(run scripts/pod/setup.sh, or pass --keep-validation)"
+    )
+
+
 def heal_tasks(
-    domains: list[str], limit: int | None = None, sample: int | None = None, seed: int = 0
+    domains: list[str],
+    limit: int | None = None,
+    sample: int | None = None,
+    seed: int = 0,
+    exclude: set[Task] | None = None,
 ) -> list[Task]:
-    """The train tasks to heal on: all, the first ``limit``, or a random ``sample`` per domain.
+    """The train tasks to heal on: all, the first ``limit``, or a random ``sample`` per domain,
+    never one in ``exclude`` (the validation tasks).
 
     A sample keeps the split's order and is the same for the same seed.
     """
@@ -95,7 +122,7 @@ def heal_tasks(
         raise ValueError("pass --limit or --sample, not both")
     out = []
     for d in domains:
-        ids = splits.task_ids(d, "train")
+        ids = [t for t in splits.task_ids(d, "train") if (d, str(t)) not in (exclude or set())]
         if sample is not None:
             picked = set(random.Random(f"{seed}:{d}").sample(ids, min(sample, len(ids))))
             ids = [t for t in ids if t in picked]
@@ -343,6 +370,11 @@ def main() -> int:
     ap.add_argument("--limit", type=int, help="the first N train tasks per domain (default all)")
     ap.add_argument("--sample", type=int, help="a random N train tasks per domain (see --seed)")
     ap.add_argument("--seed", type=int, default=0, help="the --sample seed (default 0)")
+    ap.add_argument(
+        "--keep-validation",
+        action="store_true",
+        help="also heal on the 30 validation tasks (left out by default, so they stay unseen)",
+    )
     ap.add_argument("--cycles", type=int, default=1)
     ap.add_argument("--fixes-only", action="store_true", help="stop after the fixes: no training, no gate")
     ap.add_argument("--train-cmd", help="training command; {data} {out} {name} {base} are filled in")
@@ -363,6 +395,19 @@ def main() -> int:
         "a full cycle needs them on",
     )
     ap.add_argument("--attempts", type=int, default=3, help="teacher attempts per failure (default 3)")
+    ap.add_argument(
+        "--fix-mode",
+        choices=["turn", "trajectory"],
+        default="turn",
+        help="turn: the teacher rewrites the failing turn (default); trajectory: the task's whole "
+        "verified teacher conversations from --library (HEAL_FROM_V2.md)",
+    )
+    ap.add_argument(
+        "--library",
+        type=Path,
+        default=Path("data/train/sft-v2.jsonl"),
+        help="with --fix-mode trajectory: the verified conversations (default SFT v2's data)",
+    )
     ap.add_argument("--out", type=Path, help="default results/heal/<time>")
     ap.add_argument("--gate-history", type=Path, default=Path("results/heal/gate_history.jsonl"))
     ap.add_argument(
@@ -409,9 +454,17 @@ def main() -> int:
         "judges": judges,
         "fixes_only": a.fixes_only,
         "attempts": a.attempts,
+        "fix_mode": a.fix_mode,
+        "library": str(a.library) if a.fix_mode == "trajectory" else None,
     }
     (out / "run.json").write_text(json.dumps(run, indent=1) + "\n")
-    teacher = PrefixTeacher(attempts=a.attempts)
+    # trajectory: whole verified conversations, each its own lesson, so nothing is deduplicated
+    teacher: Any = (
+        VerifiedTeacher(library=a.library)
+        if a.fix_mode == "trajectory"
+        else PrefixTeacher(attempts=a.attempts)
+    )
+    per_lesson = None if a.fix_mode == "trajectory" else 2
     command = shlex.split(a.train_cmd) if a.train_cmd else None
     if a.train_url and not a.fixes_only:
         key_env = arm.student.get("api_key_env")
@@ -421,11 +474,14 @@ def main() -> int:
             token=os.environ["HEAL_TOKEN"],
             api_base=student_api_base(arm.student),
             api_key=os.environ.get(key_env) if key_env else None,
+            per_lesson=per_lesson,
         )
     elif a.load_adapter:
-        trainer = LoadingTrainer(out / "runs", command=command, api_base=student_api_base(arm.student))
+        trainer = LoadingTrainer(
+            out / "runs", command=command, api_base=student_api_base(arm.student), per_lesson=per_lesson
+        )
     else:
-        trainer = CommandTrainer(out / "runs", command=command)
+        trainer = CommandTrainer(out / "runs", command=command, per_lesson=per_lesson)
 
     if a.fixes_only:
         from reflexive.agent import PassRateGate
@@ -444,7 +500,8 @@ def main() -> int:
         adapter=a.adapter,
         workers=a.workers,
     )
-    heal, dev = heal_tasks(a.domains, a.limit, a.sample, a.seed), gate_tasks()
+    exclude = set() if a.keep_validation else validation_tasks()
+    heal, dev = heal_tasks(a.domains, a.limit, a.sample, a.seed, exclude=exclude), gate_tasks()
     print(f"== heal {len(heal)} train tasks ({', '.join(a.domains)}); gate on {len(dev)} dev tasks → {out}")
     if a.fixes_only:
         print("   --fixes-only: nothing will be trained or gated")

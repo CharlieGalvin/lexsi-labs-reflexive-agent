@@ -75,8 +75,8 @@ class Failure:
 
 
 class Teacher(Protocol):
-    def fix(self, failure: Failure) -> Record | None:
-        """A corrected trajectory for this failure, or None if the teacher couldn't fix it."""
+    def fix(self, failure: Failure) -> Record | list[Record] | None:
+        """A corrected trajectory for this failure (or several), or None if the teacher couldn't fix it."""
 
 
 class Trainer(Protocol):
@@ -232,7 +232,11 @@ class ReflexiveAgent:
         rollouts = self._run(before, heal_tasks)
         broken = [r for r in rollouts if is_broken(r)]
         failures = [Failure(r, classify_record(r)) for r in rollouts if not passed(r) and not is_broken(r)]
-        fixes = [fx for f in failures if (fx := self.teacher.fix(f)) is not None]
+        fixes: list[Record] = []
+        for f in failures:  # a teacher returns one fix, or several (whole verified conversations)
+            fx = self.teacher.fix(f)
+            if fx is not None:
+                fixes.extend(fx if isinstance(fx, list) else [fx])
         gate_runs: dict[str, Any] = {}
 
         def done(

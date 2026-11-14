@@ -1,0 +1,35 @@
+# SFT v2 on the pod, reached through its vLLM endpoint: the student of a heal cycle that starts from
+# v2 rather than the base model (docs/experiments/HEAL_FROM_V2.md).
+#
+#   just heal --config configs/sft/arms.pod_sft2.yaml --arm S2 --sample 20 --out results/heal/from-v2
+# (validation tasks are left out by default)
+#
+# Same .env as configs/sft/arms.pod.yaml (POD_STUDENT_URL, POD_API_KEY, HEAL_SERVICE_URL, HEAL_TOKEN).
+# On the pod, vLLM serves v2 as "sft2", and the heal service starts training from it:
+#   RUNTIME_LORA=1 ADAPTER= EXTRA_ADAPTERS="sft2=runs/sft-aya32b-r16-v2" VLLM_API_KEY=... bash scripts/pod/serve.sh
+#   HEAL_INIT_ADAPTER=runs/sft-aya32b-r16-v2 HEAL_SERVE_ADAPTERS="sft2=runs/sft-aya32b-r16-v2" \
+#     HEAL_TOKEN=... VLLM_API_KEY=... python scripts/pod/heal_service.py
+# The gate's baseline is the student as configured here (v2); the candidate is the healed adapter.
+# Same harness, prompt, decoding and customer as configs/sft/arms.sft2.yaml (arm S2). Never on test.
+
+student:
+  name: aya32-sft-r16-v2-pod
+  model: sft2
+  api_base_env: POD_STUDENT_URL
+  api_key_env: POD_API_KEY
+  self_hosted: true       # our own server: no per-token price
+  mode: prompted          # the data contract (SEL-35): don't change these two
+  style: cohere
+  temperature: 0.0
+  max_tokens: 1024
+  max_context: 32768      # = serve.sh MAX_LEN
+  reserve: 4096
+  rpm: 0
+
+customer: null            # GPT-4.1, as for every arm
+
+arms:
+  S2:
+    name: sft-v2-pod
+    description: "SFT v2 (sft2 on vLLM), reached through the pod's endpoint: the student a heal cycle starts from"
+    prompt_variant: default

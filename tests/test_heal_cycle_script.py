@@ -36,6 +36,24 @@ def test_a_sample_is_random_per_domain_but_the_same_for_a_seed():
         cycle.heal_tasks(["airline"], limit=2, sample=2)
 
 
+def test_validation_tasks_are_never_healed_on(tmp_path):
+    from reflexive.splits import task_ids
+
+    hard = tmp_path / "hard_subset.jsonl"
+    rows = [
+        {"domain": "airline", "task_id": task_ids("airline", "train")[0], "group": "solved_by_aya"},
+        {"domain": "airline", "task_id": task_ids("airline", "train")[1], "group": "teacher_unsolved"},
+        {"domain": "airline", "task_id": task_ids("airline", "train")[2], "group": "healable"},
+    ]
+    hard.write_text("".join(json.dumps(r) + "\n" for r in rows))
+    val = cycle.validation_tasks((tmp_path / "missing.jsonl", hard))
+    assert val == {("airline", str(r["task_id"])) for r in rows[:2]}  # healable isn't validation
+    everything = cycle.heal_tasks(["airline"], sample=500, exclude=val)
+    assert len(everything) == len(task_ids("airline", "train")) - 2 and not set(everything) & val
+    with pytest.raises(FileNotFoundError, match="--keep-validation"):
+        cycle.validation_tasks((tmp_path / "missing.jsonl",))
+
+
 def test_the_cohere_student_refuses_an_adapter(monkeypatch):
     made = []
     monkeypatch.setattr(cycle, "make_student", lambda s: made.append(s) or s)

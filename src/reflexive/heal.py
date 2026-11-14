@@ -262,6 +262,71 @@ class PrefixTeacher:
         return None
 
 
+@dataclass
+class VerifiedTeacher:
+    """Fixes a failure with the teacher's whole verified conversations for that task, not one turn.
+
+    The trajectory-level fix (HEAL_FROM_V2.md): a turn-level fix (`PrefixTeacher`) teaches the turn
+    where the student first went wrong, about 1% of a conversation's tokens; SFT v2 trained on every
+    agent turn of the teacher's verified solutions and is what moved success. Here the loop is the
+    same (detect on train tasks, fix, retrain, gate), and a failure's fix is every conversation in
+    ``library`` for its task: ``reagent.sft/v1`` examples the teacher solved and τ²-bench's evaluator
+    verified offline (default: SFT v2's data, the golden trajectories plus the extra airline passes).
+    A failure whose task has none isn't fixed. Only train tasks are fixed, and validation tasks are
+    never in the library's training groups.
+    """
+
+    library: Path | str = "data/train/sft-v2.jsonl"
+    groups: tuple[str, ...] = ("healable", "extra")
+    tried: dict[Task, list[dict[str, Any]]] = field(default_factory=dict)
+    _by_task: dict[Task, list[Record]] | None = None
+
+    def _index(self) -> dict[Task, list[Record]]:
+        if self._by_task is None:
+            path = Path(self.library)
+            if not path.exists():
+                raise FileNotFoundError(f"no verified conversations at {path} (build it: just sft-v2-data)")
+            by: dict[Task, list[Record]] = {}
+            for line in path.read_text().splitlines():
+                r = json.loads(line)
+                if r.get("format") == SFT_FORMAT and r.get("group") in self.groups:
+                    by.setdefault((r["domain"], str(r["task_id"])), []).append(r)
+            self._by_task = by
+        return self._by_task
+
+    def fix(self, failure: Failure) -> list[Record] | None:
+        domain, task_id = failure.task
+        if split_of(domain, task_id) != "train":
+            raise ValueError(f"{domain} task {task_id!r} isn't a train task: fixes are only made on train")
+        found = self._index().get((domain, str(task_id)), [])
+        log = self.tried.setdefault(failure.task, [])
+        if not found:
+            log.append(
+                {"attempt": 0, "accepted": False, "problems": ["no verified conversation for this task"]}
+            )
+            return None
+        first = failure.diagnosis.first
+        out = []
+        for r in found:
+            out.append(
+                {
+                    **r,
+                    "id": f"heal/verified/{r['id']}",
+                    "group": "heal",
+                    "labels": [failure.diagnosis.failure.value],
+                    "source": {
+                        "kind": "verified_trajectory",
+                        "from": r.get("id"),
+                        "library": str(self.library),
+                        "adapter": failure.record.get("adapter"),
+                        "finding": first.to_dict() if first else None,
+                    },
+                }
+            )
+        log.append({"attempt": 1, "accepted": True, "problems": [], "conversations": len(out)})
+        return out
+
+
 # --- The trainer ------------------------------------------------------------------------------
 
 
@@ -328,6 +393,8 @@ def lesson(example: Record) -> str:
     for it", whichever conversation it came from. Fixes with the same lesson are near-duplicates.
     """
     src = example.get("source") or {}
+    if src.get("kind") == "verified_trajectory":  # a whole solved task: its own lesson, never a duplicate
+        return f"{example.get('domain')}:trajectory/{src.get('from')}"
     f = src.get("finding") or {}
     turn = src.get("fixed_turn_message") or {}
     calls = sorted({tc["function"]["name"] for tc in turn.get("tool_calls") or []})
