@@ -1,8 +1,10 @@
 # A heal cycle from SFT v2 (SEL-68 follow-up)
 
-**Status:** the 13 Nov plan below (healing v2 turn by turn) was **not run**: its diagnosis was checked
-on 14 Nov and showed it would find little to fix. It's replaced by a **trajectory-level cycle from the
-base model**, fixed 14 Nov before any run ([below](#amended-14-nov-before-any-run-a-trajectory-level-cycle)).
+**Status: done, 14 Nov. The gate promoted the trajectory-level cycle: dev 6 → 22 of 36 (net +16),
+Tool/Arg/Loop findings 8.22 → 1.03 per conversation, adapter swapped in.** [Result](#result-14-nov-gate-promotes).
+The 13 Nov plan below (healing v2 turn by turn) was **not run**: its diagnosis was checked on 14 Nov
+and showed it would find little to fix. It was replaced by this trajectory-level cycle from the base
+model, fixed 14 Nov before any run ([below](#amended-14-nov-before-any-run-a-trajectory-level-cycle)).
 **Owner:** Charlie. Code: SEL-68 (#61), plus the validation exclusion and `--fix-mode trajectory` on
 `charliegalvin/sel-68-heal-from-v2`.
 
@@ -107,4 +109,44 @@ what the offline experiments did by hand. It is **not new evidence** that healin
 v2's data (v1's airline rejection led to the airline passes), so a pass on dev is expected, and the
 held-out claim stays v2's test result. The comparison it adds is the grain of the fix: one turn
 (findings −71%, success unchanged, rejected) against whole conversations.
+
+## Result (14 Nov): gate promotes
+
+Run on the pod, 11:27–14:50, end to end with no one in the loop: rollouts, fixes, training (the heal
+service stopped vLLM, trained, and restarted it serving the new adapter), the gate and the swap.
+Command `python scripts/heal/cycle.py --config configs/sft/arms.pod.yaml --arm P --fix-mode trajectory
+--out results/heal/trajectory-cycle` @ `6c2bef8`. Metrics: [`results/heal-trajectory-cycle.metrics.json`](../../results/heal-trajectory-cycle.metrics.json).
+Files (private): `reagent-lexsi/heal-runs` (`trajectory-cycle/`); adapter `reagent-lexsi/heal-trajectory-cycle-c1`.
+
+| | |
+|---|---|
+| Heal rollouts | 112 train tasks (validation left out), base model: **6 passed**, 106 failed, 0 broken. First finding of the failures: ARG 84, TOOL 16, none 6 |
+| Fixes | **all 106** failures had verified teacher conversations: **136 conversations** trained on (some tasks have the extra airline passes) |
+| Training | 2 epochs, 68 steps, 23 min on the H100 (36 min with the vLLM restart); train loss 0.425 |
+
+**The gate (DevGate, 36 dev tasks, one sample each, oracle-scored with judges on):**
+
+| | Base model | Healed adapter |
+|---|---:|---:|
+| Dev tasks passed | 6 (17%) | **22 (61%)** |
+| Findings per conversation (TOOL / ARG / LOOP) | 8.22 (2.25 / 3.81 / 2.17) | **1.03** (0.61 / 0.17 / 0.25) |
+| Net by domain | | retail +5, airline +1, telecom +10 |
+
+**Decision: PROMOTE** (rule part 1): net gain **+16** (17 tasks only the healed adapter passed, 1 only
+the base model), needs +2; findings down 87%, allowed up 10%; no domain lost a task. McNemar
+p = 0.0001 and a bootstrap 95% range for the gain of +28 to +61 points (neither required). The
+adapter was swapped in (`adapter now: heal-20261114-114936-c1`). This is the gate's second decision.
+
+**Reading it, as fixed before the run:**
+
+- **The automated loop reproduces the offline result.** 22 of 36 on dev (61%) sits with SFT v2's own
+  two dev samples (24 and 19, mean 60%), from v2's data with v2's settings, with no human step.
+- **The grain of the fix decides the outcome.** The same automated loop, the same base model and the
+  same gate: one rewritten turn per failure gave 4 → 4 and a rejection (findings −71%); whole verified
+  conversations gave 6 → 22 and a promotion (findings −87%).
+- **Not new held-out evidence.** It's dev, one sample, and dev shaped v2's data, so a pass was
+  expected. No validation or test run follows (rule part 3): the held-out claim stays v2's test result,
+  51.5%.
+
+**Cost:** the customer (GPT-4.1) $5.89 (judges not included); about 3.7 hours of one H100.
 

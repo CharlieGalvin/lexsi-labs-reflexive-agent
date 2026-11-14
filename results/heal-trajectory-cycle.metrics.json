@@ -1,0 +1,2459 @@
+{
+ "format": "reagent.heal.metrics/v1",
+ "run": {
+  "command": "python scripts/heal/cycle.py --config configs/sft/arms.pod.yaml --arm P --fix-mode trajectory --out results/heal/trajectory-cycle",
+  "started": "2026-11-14T11:27:09+0000",
+  "commit": "6c2bef8",
+  "arm": "P",
+  "config": "configs/sft/arms.pod.yaml",
+  "student": "CohereLabs/aya-expanse-32b",
+  "customer": null,
+  "teacher": "glm53f",
+  "domains": [
+   "retail",
+   "airline",
+   "telecom"
+  ],
+  "limit": null,
+  "sample": null,
+  "seed": 0,
+  "judges": true,
+  "fixes_only": false,
+  "attempts": 3,
+  "fix_mode": "trajectory",
+  "library": "data/train/sft-v2.jsonl",
+  "folder": "results/heal/trajectory-cycle"
+ },
+ "conversations": 184,
+ "cycles": [
+  {
+   "cycle": 1,
+   "adapter": {
+    "before": null,
+    "candidate": "heal-20261114-114936-c1",
+    "after": "heal-20261114-114936-c1",
+    "swapped": true
+   },
+   "skipped": "",
+   "conversations": 112,
+   "passed": 6,
+   "task_success": 0.0536,
+   "task_success_wilson95": [
+    0.0248,
+    0.112
+   ],
+   "broken": 0,
+   "failures": 106,
+   "failure_types": {
+    "TOOL": 16,
+    "ARG": 84,
+    "LOOP": 0,
+    "NONE": 6
+   },
+   "fixable": 100,
+   "fixed": 106,
+   "first_try": 106,
+   "fixed_at_turn": {
+    "3": 93,
+    "33": 1,
+    "7": 1,
+    "9": 3,
+    "5": 1,
+    "17": 1
+   },
+   "lessons": {
+    "retail:trajectory/glm53f/retail/2/1": 1,
+    "retail:trajectory/glm53f/retail/3/2": 1,
+    "retail:trajectory/glm53f/retail/6/1": 1,
+    "retail:trajectory/glm53f/retail/7/1": 1,
+    "retail:trajectory/glm53f/retail/8/1": 1,
+    "retail:trajectory/glm53f/retail/11/1": 1,
+    "retail:trajectory/glm53f/retail/14/1": 1,
+    "retail:trajectory/glm53f/retail/16/1": 1,
+    "retail:trajectory/glm53f/retail/19/1": 1,
+    "retail:trajectory/glm53f/retail/20/1": 1,
+    "retail:trajectory/glm53f/retail/21/1": 1,
+    "retail:trajectory/glm53f/retail/22/1": 1,
+    "retail:trajectory/glm53f/retail/24/1": 1,
+    "retail:trajectory/glm53f/retail/28/1": 1,
+    "retail:trajectory/glm53f/retail/29/1": 1,
+    "retail:trajectory/glm53f/retail/30/1": 1,
+    "retail:trajectory/glm53f/retail/31/1": 1,
+    "retail:trajectory/glm53f/retail/37/2": 1,
+    "retail:trajectory/glm53f/retail/43/1": 1,
+    "retail:trajectory/glm53f/retail/48/1": 1,
+    "retail:trajectory/glm53f/retail/54/1": 1,
+    "retail:trajectory/glm53f/retail/57/1": 1,
+    "retail:trajectory/glm53f/retail/58/1": 1,
+    "retail:trajectory/glm53f/retail/63/1": 1,
+    "retail:trajectory/glm53f/retail/66/1": 1,
+    "retail:trajectory/glm53f/retail/67/1": 1,
+    "retail:trajectory/glm53f/retail/69/1": 1,
+    "retail:trajectory/glm53f/retail/72/1": 1,
+    "retail:trajectory/glm53f/retail/81/1": 1,
+    "retail:trajectory/glm53f/retail/84/1": 1,
+    "retail:trajectory/glm53f/retail/85/1": 1,
+    "retail:trajectory/glm53f/retail/87/1": 1,
+    "retail:trajectory/glm53f/retail/88/1": 1,
+    "retail:trajectory/glm53f/retail/89/1": 1,
+    "retail:trajectory/glm53f/retail/91/1": 1,
+    "retail:trajectory/glm53f/retail/92/1": 1,
+    "retail:trajectory/glm53f/retail/93/1": 1,
+    "retail:trajectory/glm53f/retail/95/1": 1,
+    "retail:trajectory/glm53f/retail/98/1": 1,
+    "retail:trajectory/glm53f/retail/99/1": 1,
+    "retail:trajectory/glm53f/retail/103/1": 1,
+    "retail:trajectory/glm53f/retail/104/1": 1,
+    "retail:trajectory/glm53f/retail/107/1": 1,
+    "retail:trajectory/glm53f/retail/109/1": 1,
+    "retail:trajectory/glm53f/retail/113/1": 1,
+    "airline:trajectory/glm53f/airline/0/1": 1,
+    "airline:trajectory/glm53f/airline/0/2": 1,
+    "airline:trajectory/glm53f/airline/0/3": 1,
+    "airline:trajectory/glm53f/airline/5/1": 1,
+    "airline:trajectory/glm53f/airline/5/2": 1,
+    "airline:trajectory/glm53f/airline/5/3": 1,
+    "airline:trajectory/glm53f/airline/9/1": 1,
+    "airline:trajectory/glm53f/airline/9/2": 1,
+    "airline:trajectory/glm53f/airline/9/3": 1,
+    "airline:trajectory/glm53f/airline/11/1": 1,
+    "airline:trajectory/glm53f/airline/11/2": 1,
+    "airline:trajectory/glm53f/airline/11/3": 1,
+    "airline:trajectory/glm53f/airline/14/1": 1,
+    "airline:trajectory/glm53f/airline/14/2": 1,
+    "airline:trajectory/glm53f/airline/15/1": 1,
+    "airline:trajectory/glm53f/airline/15/2": 1,
+    "airline:trajectory/glm53f/airline/15/3": 1,
+    "airline:trajectory/glm53f/airline/17/1": 1,
+    "airline:trajectory/glm53f/airline/17/2": 1,
+    "airline:trajectory/glm53f/airline/17/3": 1,
+    "airline:trajectory/glm53f/airline/20/1": 1,
+    "airline:trajectory/glm53f/airline/20/2": 1,
+    "airline:trajectory/glm53f/airline/20/3": 1,
+    "airline:trajectory/glm53f/airline/21/1": 1,
+    "airline:trajectory/glm53f/airline/21/3": 1,
+    "airline:trajectory/glm53f/airline/23/1": 1,
+    "airline:trajectory/glm53f/airline/28/1": 1,
+    "airline:trajectory/glm53f/airline/28/2": 1,
+    "airline:trajectory/glm53f/airline/28/3": 1,
+    "airline:trajectory/glm53f/airline/33/1": 1,
+    "airline:trajectory/glm53f/airline/33/2": 1,
+    "airline:trajectory/glm53f/airline/33/3": 1,
+    "airline:trajectory/glm53f/airline/34/1": 1,
+    "airline:trajectory/glm53f/airline/34/2": 1,
+    "airline:trajectory/glm53f/airline/34/3": 1,
+    "airline:trajectory/glm53f/airline/40/1": 1,
+    "airline:trajectory/glm53f/airline/40/2": 1,
+    "airline:trajectory/glm53f/airline/40/3": 1,
+    "airline:trajectory/glm53f/airline/42/1": 1,
+    "airline:trajectory/glm53f/airline/42/2": 1,
+    "airline:trajectory/glm53f/airline/42/3": 1,
+    "airline:trajectory/glm53f/airline/46/1": 1,
+    "airline:trajectory/glm53f/airline/46/2": 1,
+    "airline:trajectory/glm53f/airline/46/3": 1,
+    "airline:trajectory/glm53f/airline/47/1": 1,
+    "airline:trajectory/glm53f/airline/47/2": 1,
+    "airline:trajectory/glm53f/airline/47/3": 1,
+    "telecom:trajectory/glm53f/telecom/[mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|break_apn_mms_setting|break_app_both_permissions|data_mode_off|data_usage_exceeded|unseat_sim_card|user_abroad_roaming_disabled_off[PERSONA:Hard]/1": 1,
+    "telecom:trajectory/glm53f/telecom/[mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|break_apn_mms_setting|break_app_sms_permission|data_mode_off|data_usage_exceeded|unseat_sim_card|user_abroad_roaming_enabled_off[PERSONA:None]/1": 1,
+    "telecom:trajectory/glm53f/telecom/[mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|break_apn_mms_setting|break_app_storage_permission|data_mode_off|data_usage_exceeded|unseat_sim_card|user_abroad_roaming_disabled_off[PERSONA:Easy]/1": 1,
+    "telecom:trajectory/glm53f/telecom/[mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|break_apn_mms_setting|break_app_storage_permission|data_usage_exceeded|unseat_sim_card|user_abroad_roaming_disabled_off[PERSONA:Easy]/1": 1,
+    "telecom:trajectory/glm53f/telecom/[mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|break_app_sms_permission|data_mode_off|data_usage_exceeded|unseat_sim_card|user_abroad_roaming_disabled_off[PERSONA:None]/1": 1,
+    "telecom:trajectory/glm53f/telecom/[mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|break_app_storage_permission|data_mode_off|data_usage_exceeded|unseat_sim_card|user_abroad_roaming_enabled_off[PERSONA:Hard]/1": 1,
+    "telecom:trajectory/glm53f/telecom/[mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|break_app_storage_permission|unseat_sim_card[PERSONA:Hard]/1": 1,
+    "telecom:trajectory/glm53f/telecom/[mms_issue]airplane_mode_on|bad_network_preference|break_apn_mms_setting|break_app_both_permissions|data_mode_off|data_usage_exceeded|user_abroad_roaming_enabled_off[PERSONA:None]/1": 1,
+    "telecom:trajectory/glm53f/telecom/[mms_issue]bad_network_preference|bad_wifi_calling|break_app_both_permissions|data_usage_exceeded|unseat_sim_card|user_abroad_roaming_disabled_off[PERSONA:None]/1": 1,
+    "telecom:trajectory/glm53f/telecom/[mms_issue]bad_network_preference|bad_wifi_calling|break_app_both_permissions|data_usage_exceeded|user_abroad_roaming_disabled_off[PERSONA:Hard]/1": 1,
+    "telecom:trajectory/glm53f/telecom/[mms_issue]bad_network_preference|break_app_sms_permission|data_mode_off|data_usage_exceeded|user_abroad_roaming_enabled_off[PERSONA:None]/1": 1,
+    "telecom:trajectory/glm53f/telecom/[mms_issue]bad_network_preference|user_abroad_roaming_disabled_off[PERSONA:None]/1": 1,
+    "telecom:trajectory/glm53f/telecom/[mms_issue]bad_network_preference|user_abroad_roaming_disabled_on[PERSONA:None]/1": 1,
+    "telecom:trajectory/glm53f/telecom/[mms_issue]bad_wifi_calling|break_apn_mms_setting|break_app_sms_permission|data_usage_exceeded[PERSONA:Hard]/1": 1,
+    "telecom:trajectory/glm53f/telecom/[mms_issue]bad_wifi_calling|data_mode_off|data_usage_exceeded[PERSONA:Easy]/1": 1,
+    "telecom:trajectory/glm53f/telecom/[mms_issue]break_apn_mms_setting|data_mode_off|user_abroad_roaming_disabled_on[PERSONA:Hard]/1": 1,
+    "telecom:trajectory/glm53f/telecom/[mms_issue]break_app_both_permissions|data_usage_exceeded[PERSONA:Hard]/1": 1,
+    "telecom:trajectory/glm53f/telecom/[mms_issue]break_app_both_permissions|unseat_sim_card|user_abroad_roaming_disabled_on[PERSONA:Hard]/1": 1,
+    "telecom:trajectory/glm53f/telecom/[mms_issue]break_app_storage_permission|data_usage_exceeded[PERSONA:Easy]/1": 1,
+    "telecom:trajectory/glm53f/telecom/[mms_issue]break_app_storage_permission|unseat_sim_card|user_abroad_roaming_disabled_on[PERSONA:Easy]/1": 1,
+    "telecom:trajectory/glm53f/telecom/[mobile_data_issue]airplane_mode_on|bad_network_preference|bad_vpn|data_mode_off|data_saver_mode_on|data_usage_exceeded|user_abroad_roaming_disabled_on[PERSONA:None]/1": 1,
+    "telecom:trajectory/glm53f/telecom/[mobile_data_issue]airplane_mode_on|bad_network_preference|bad_vpn|data_mode_off|data_saver_mode_on|user_abroad_roaming_disabled_off[PERSONA:Hard]/1": 1,
+    "telecom:trajectory/glm53f/telecom/[mobile_data_issue]airplane_mode_on|bad_network_preference|bad_vpn|data_mode_off|data_usage_exceeded|user_abroad_roaming_enabled_off[PERSONA:Easy]/1": 1,
+    "telecom:trajectory/glm53f/telecom/[mobile_data_issue]airplane_mode_on|bad_network_preference|bad_vpn|data_saver_mode_on|data_usage_exceeded|user_abroad_roaming_enabled_off[PERSONA:None]/1": 1,
+    "telecom:trajectory/glm53f/telecom/[mobile_data_issue]airplane_mode_on|bad_network_preference|bad_vpn|data_saver_mode_on|user_abroad_roaming_disabled_on[PERSONA:Easy]/1": 1,
+    "telecom:trajectory/glm53f/telecom/[mobile_data_issue]airplane_mode_on|bad_network_preference|data_mode_off|data_usage_exceeded|user_abroad_roaming_disabled_on[PERSONA:None]/1": 1,
+    "telecom:trajectory/glm53f/telecom/[mobile_data_issue]airplane_mode_on|bad_network_preference|data_usage_exceeded|user_abroad_roaming_disabled_off[PERSONA:Easy]/1": 1,
+    "telecom:trajectory/glm53f/telecom/[mobile_data_issue]airplane_mode_on|bad_network_preference|user_abroad_roaming_enabled_off[PERSONA:Easy]/1": 1,
+    "telecom:trajectory/glm53f/telecom/[mobile_data_issue]airplane_mode_on|user_abroad_roaming_enabled_off[PERSONA:None]/1": 1,
+    "telecom:trajectory/glm53f/telecom/[mobile_data_issue]bad_network_preference|bad_vpn|data_usage_exceeded|user_abroad_roaming_disabled_off[PERSONA:Easy]/1": 1,
+    "telecom:trajectory/glm53f/telecom/[mobile_data_issue]bad_network_preference|bad_vpn|user_abroad_roaming_disabled_on[PERSONA:None]/1": 1,
+    "telecom:trajectory/glm53f/telecom/[mobile_data_issue]bad_network_preference|bad_vpn|user_abroad_roaming_enabled_off[PERSONA:Easy]/1": 1,
+    "telecom:trajectory/glm53f/telecom/[mobile_data_issue]bad_network_preference|data_mode_off|data_saver_mode_on|data_usage_exceeded|user_abroad_roaming_disabled_off[PERSONA:Easy]/1": 1,
+    "telecom:trajectory/glm53f/telecom/[mobile_data_issue]bad_vpn|data_saver_mode_on|user_abroad_roaming_disabled_on[PERSONA:None]/1": 1,
+    "telecom:trajectory/glm53f/telecom/[mobile_data_issue]data_mode_off|data_usage_exceeded[PERSONA:None]/1": 1,
+    "telecom:trajectory/glm53f/telecom/[mobile_data_issue]data_mode_off|data_usage_exceeded|user_abroad_roaming_disabled_off[PERSONA:Hard]/1": 1,
+    "telecom:trajectory/glm53f/telecom/[mobile_data_issue]data_saver_mode_on|data_usage_exceeded[PERSONA:Easy]/1": 1,
+    "telecom:trajectory/glm53f/telecom/[mobile_data_issue]data_usage_exceeded|user_abroad_roaming_enabled_off[PERSONA:Easy]/1": 1,
+    "telecom:trajectory/glm53f/telecom/[service_issue]airplane_mode_on|lock_sim_card_pin|overdue_bill_suspension|unseat_sim_card[PERSONA:Easy]/1": 1,
+    "telecom:trajectory/glm53f/telecom/[service_issue]airplane_mode_on|lock_sim_card_pin|unseat_sim_card[PERSONA:Hard]/1": 1,
+    "telecom:trajectory/glm53f/telecom/[service_issue]airplane_mode_on|overdue_bill_suspension|unseat_sim_card[PERSONA:Easy]/1": 1,
+    "telecom:trajectory/glm53f/telecom/[service_issue]airplane_mode_on|unseat_sim_card[PERSONA:None]/1": 1,
+    "telecom:trajectory/glm53f/telecom/[service_issue]break_apn_settings|overdue_bill_suspension|unseat_sim_card[PERSONA:Hard]/1": 1,
+    "telecom:trajectory/glm53f/telecom/[service_issue]lock_sim_card_pin|overdue_bill_suspension[PERSONA:Easy]/1": 1
+   },
+   "training": {
+    "name": "heal-20261114-114936-c1",
+    "base": null,
+    "data": "results/heal/trajectory-cycle/runs/heal-20261114-114936-c1/fixes.jsonl",
+    "examples": 136,
+    "per_lesson": null,
+    "dropped_duplicates": [],
+    "lessons": {
+     "retail:trajectory/glm53f/retail/2/1": 1,
+     "retail:trajectory/glm53f/retail/3/2": 1,
+     "retail:trajectory/glm53f/retail/6/1": 1,
+     "retail:trajectory/glm53f/retail/7/1": 1,
+     "retail:trajectory/glm53f/retail/8/1": 1,
+     "retail:trajectory/glm53f/retail/11/1": 1,
+     "retail:trajectory/glm53f/retail/14/1": 1,
+     "retail:trajectory/glm53f/retail/16/1": 1,
+     "retail:trajectory/glm53f/retail/19/1": 1,
+     "retail:trajectory/glm53f/retail/20/1": 1,
+     "retail:trajectory/glm53f/retail/21/1": 1,
+     "retail:trajectory/glm53f/retail/22/1": 1,
+     "retail:trajectory/glm53f/retail/24/1": 1,
+     "retail:trajectory/glm53f/retail/28/1": 1,
+     "retail:trajectory/glm53f/retail/29/1": 1,
+     "retail:trajectory/glm53f/retail/30/1": 1,
+     "retail:trajectory/glm53f/retail/31/1": 1,
+     "retail:trajectory/glm53f/retail/37/2": 1,
+     "retail:trajectory/glm53f/retail/43/1": 1,
+     "retail:trajectory/glm53f/retail/48/1": 1,
+     "retail:trajectory/glm53f/retail/54/1": 1,
+     "retail:trajectory/glm53f/retail/57/1": 1,
+     "retail:trajectory/glm53f/retail/58/1": 1,
+     "retail:trajectory/glm53f/retail/63/1": 1,
+     "retail:trajectory/glm53f/retail/66/1": 1,
+     "retail:trajectory/glm53f/retail/67/1": 1,
+     "retail:trajectory/glm53f/retail/69/1": 1,
+     "retail:trajectory/glm53f/retail/72/1": 1,
+     "retail:trajectory/glm53f/retail/81/1": 1,
+     "retail:trajectory/glm53f/retail/84/1": 1,
+     "retail:trajectory/glm53f/retail/85/1": 1,
+     "retail:trajectory/glm53f/retail/87/1": 1,
+     "retail:trajectory/glm53f/retail/88/1": 1,
+     "retail:trajectory/glm53f/retail/89/1": 1,
+     "retail:trajectory/glm53f/retail/91/1": 1,
+     "retail:trajectory/glm53f/retail/92/1": 1,
+     "retail:trajectory/glm53f/retail/93/1": 1,
+     "retail:trajectory/glm53f/retail/95/1": 1,
+     "retail:trajectory/glm53f/retail/98/1": 1,
+     "retail:trajectory/glm53f/retail/99/1": 1,
+     "retail:trajectory/glm53f/retail/103/1": 1,
+     "retail:trajectory/glm53f/retail/104/1": 1,
+     "retail:trajectory/glm53f/retail/107/1": 1,
+     "retail:trajectory/glm53f/retail/109/1": 1,
+     "retail:trajectory/glm53f/retail/113/1": 1,
+     "airline:trajectory/glm53f/airline/0/1": 1,
+     "airline:trajectory/glm53f/airline/0/2": 1,
+     "airline:trajectory/glm53f/airline/0/3": 1,
+     "airline:trajectory/glm53f/airline/5/1": 1,
+     "airline:trajectory/glm53f/airline/5/2": 1,
+     "airline:trajectory/glm53f/airline/5/3": 1,
+     "airline:trajectory/glm53f/airline/9/1": 1,
+     "airline:trajectory/glm53f/airline/9/2": 1,
+     "airline:trajectory/glm53f/airline/9/3": 1,
+     "airline:trajectory/glm53f/airline/11/1": 1,
+     "airline:trajectory/glm53f/airline/11/2": 1,
+     "airline:trajectory/glm53f/airline/11/3": 1,
+     "airline:trajectory/glm53f/airline/14/1": 1,
+     "airline:trajectory/glm53f/airline/14/2": 1,
+     "airline:trajectory/glm53f/airline/15/1": 1,
+     "airline:trajectory/glm53f/airline/15/2": 1,
+     "airline:trajectory/glm53f/airline/15/3": 1,
+     "airline:trajectory/glm53f/airline/17/1": 1,
+     "airline:trajectory/glm53f/airline/17/2": 1,
+     "airline:trajectory/glm53f/airline/17/3": 1,
+     "airline:trajectory/glm53f/airline/20/1": 1,
+     "airline:trajectory/glm53f/airline/20/2": 1,
+     "airline:trajectory/glm53f/airline/20/3": 1,
+     "airline:trajectory/glm53f/airline/21/1": 1,
+     "airline:trajectory/glm53f/airline/21/3": 1,
+     "airline:trajectory/glm53f/airline/23/1": 1,
+     "airline:trajectory/glm53f/airline/28/1": 1,
+     "airline:trajectory/glm53f/airline/28/2": 1,
+     "airline:trajectory/glm53f/airline/28/3": 1,
+     "airline:trajectory/glm53f/airline/33/1": 1,
+     "airline:trajectory/glm53f/airline/33/2": 1,
+     "airline:trajectory/glm53f/airline/33/3": 1,
+     "airline:trajectory/glm53f/airline/34/1": 1,
+     "airline:trajectory/glm53f/airline/34/2": 1,
+     "airline:trajectory/glm53f/airline/34/3": 1,
+     "airline:trajectory/glm53f/airline/40/1": 1,
+     "airline:trajectory/glm53f/airline/40/2": 1,
+     "airline:trajectory/glm53f/airline/40/3": 1,
+     "airline:trajectory/glm53f/airline/42/1": 1,
+     "airline:trajectory/glm53f/airline/42/2": 1,
+     "airline:trajectory/glm53f/airline/42/3": 1,
+     "airline:trajectory/glm53f/airline/46/1": 1,
+     "airline:trajectory/glm53f/airline/46/2": 1,
+     "airline:trajectory/glm53f/airline/46/3": 1,
+     "airline:trajectory/glm53f/airline/47/1": 1,
+     "airline:trajectory/glm53f/airline/47/2": 1,
+     "airline:trajectory/glm53f/airline/47/3": 1,
+     "telecom:trajectory/glm53f/telecom/[mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|break_apn_mms_setting|break_app_both_permissions|data_mode_off|data_usage_exceeded|unseat_sim_card|user_abroad_roaming_disabled_off[PERSONA:Hard]/1": 1,
+     "telecom:trajectory/glm53f/telecom/[mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|break_apn_mms_setting|break_app_sms_permission|data_mode_off|data_usage_exceeded|unseat_sim_card|user_abroad_roaming_enabled_off[PERSONA:None]/1": 1,
+     "telecom:trajectory/glm53f/telecom/[mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|break_apn_mms_setting|break_app_storage_permission|data_mode_off|data_usage_exceeded|unseat_sim_card|user_abroad_roaming_disabled_off[PERSONA:Easy]/1": 1,
+     "telecom:trajectory/glm53f/telecom/[mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|break_apn_mms_setting|break_app_storage_permission|data_usage_exceeded|unseat_sim_card|user_abroad_roaming_disabled_off[PERSONA:Easy]/1": 1,
+     "telecom:trajectory/glm53f/telecom/[mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|break_app_sms_permission|data_mode_off|data_usage_exceeded|unseat_sim_card|user_abroad_roaming_disabled_off[PERSONA:None]/1": 1,
+     "telecom:trajectory/glm53f/telecom/[mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|break_app_storage_permission|data_mode_off|data_usage_exceeded|unseat_sim_card|user_abroad_roaming_enabled_off[PERSONA:Hard]/1": 1,
+     "telecom:trajectory/glm53f/telecom/[mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|break_app_storage_permission|unseat_sim_card[PERSONA:Hard]/1": 1,
+     "telecom:trajectory/glm53f/telecom/[mms_issue]airplane_mode_on|bad_network_preference|break_apn_mms_setting|break_app_both_permissions|data_mode_off|data_usage_exceeded|user_abroad_roaming_enabled_off[PERSONA:None]/1": 1,
+     "telecom:trajectory/glm53f/telecom/[mms_issue]bad_network_preference|bad_wifi_calling|break_app_both_permissions|data_usage_exceeded|unseat_sim_card|user_abroad_roaming_disabled_off[PERSONA:None]/1": 1,
+     "telecom:trajectory/glm53f/telecom/[mms_issue]bad_network_preference|bad_wifi_calling|break_app_both_permissions|data_usage_exceeded|user_abroad_roaming_disabled_off[PERSONA:Hard]/1": 1,
+     "telecom:trajectory/glm53f/telecom/[mms_issue]bad_network_preference|break_app_sms_permission|data_mode_off|data_usage_exceeded|user_abroad_roaming_enabled_off[PERSONA:None]/1": 1,
+     "telecom:trajectory/glm53f/telecom/[mms_issue]bad_network_preference|user_abroad_roaming_disabled_off[PERSONA:None]/1": 1,
+     "telecom:trajectory/glm53f/telecom/[mms_issue]bad_network_preference|user_abroad_roaming_disabled_on[PERSONA:None]/1": 1,
+     "telecom:trajectory/glm53f/telecom/[mms_issue]bad_wifi_calling|break_apn_mms_setting|break_app_sms_permission|data_usage_exceeded[PERSONA:Hard]/1": 1,
+     "telecom:trajectory/glm53f/telecom/[mms_issue]bad_wifi_calling|data_mode_off|data_usage_exceeded[PERSONA:Easy]/1": 1,
+     "telecom:trajectory/glm53f/telecom/[mms_issue]break_apn_mms_setting|data_mode_off|user_abroad_roaming_disabled_on[PERSONA:Hard]/1": 1,
+     "telecom:trajectory/glm53f/telecom/[mms_issue]break_app_both_permissions|data_usage_exceeded[PERSONA:Hard]/1": 1,
+     "telecom:trajectory/glm53f/telecom/[mms_issue]break_app_both_permissions|unseat_sim_card|user_abroad_roaming_disabled_on[PERSONA:Hard]/1": 1,
+     "telecom:trajectory/glm53f/telecom/[mms_issue]break_app_storage_permission|data_usage_exceeded[PERSONA:Easy]/1": 1,
+     "telecom:trajectory/glm53f/telecom/[mms_issue]break_app_storage_permission|unseat_sim_card|user_abroad_roaming_disabled_on[PERSONA:Easy]/1": 1,
+     "telecom:trajectory/glm53f/telecom/[mobile_data_issue]airplane_mode_on|bad_network_preference|bad_vpn|data_mode_off|data_saver_mode_on|data_usage_exceeded|user_abroad_roaming_disabled_on[PERSONA:None]/1": 1,
+     "telecom:trajectory/glm53f/telecom/[mobile_data_issue]airplane_mode_on|bad_network_preference|bad_vpn|data_mode_off|data_saver_mode_on|user_abroad_roaming_disabled_off[PERSONA:Hard]/1": 1,
+     "telecom:trajectory/glm53f/telecom/[mobile_data_issue]airplane_mode_on|bad_network_preference|bad_vpn|data_mode_off|data_usage_exceeded|user_abroad_roaming_enabled_off[PERSONA:Easy]/1": 1,
+     "telecom:trajectory/glm53f/telecom/[mobile_data_issue]airplane_mode_on|bad_network_preference|bad_vpn|data_saver_mode_on|data_usage_exceeded|user_abroad_roaming_enabled_off[PERSONA:None]/1": 1,
+     "telecom:trajectory/glm53f/telecom/[mobile_data_issue]airplane_mode_on|bad_network_preference|bad_vpn|data_saver_mode_on|user_abroad_roaming_disabled_on[PERSONA:Easy]/1": 1,
+     "telecom:trajectory/glm53f/telecom/[mobile_data_issue]airplane_mode_on|bad_network_preference|data_mode_off|data_usage_exceeded|user_abroad_roaming_disabled_on[PERSONA:None]/1": 1,
+     "telecom:trajectory/glm53f/telecom/[mobile_data_issue]airplane_mode_on|bad_network_preference|data_usage_exceeded|user_abroad_roaming_disabled_off[PERSONA:Easy]/1": 1,
+     "telecom:trajectory/glm53f/telecom/[mobile_data_issue]airplane_mode_on|bad_network_preference|user_abroad_roaming_enabled_off[PERSONA:Easy]/1": 1,
+     "telecom:trajectory/glm53f/telecom/[mobile_data_issue]airplane_mode_on|user_abroad_roaming_enabled_off[PERSONA:None]/1": 1,
+     "telecom:trajectory/glm53f/telecom/[mobile_data_issue]bad_network_preference|bad_vpn|data_usage_exceeded|user_abroad_roaming_disabled_off[PERSONA:Easy]/1": 1,
+     "telecom:trajectory/glm53f/telecom/[mobile_data_issue]bad_network_preference|bad_vpn|user_abroad_roaming_disabled_on[PERSONA:None]/1": 1,
+     "telecom:trajectory/glm53f/telecom/[mobile_data_issue]bad_network_preference|bad_vpn|user_abroad_roaming_enabled_off[PERSONA:Easy]/1": 1,
+     "telecom:trajectory/glm53f/telecom/[mobile_data_issue]bad_network_preference|data_mode_off|data_saver_mode_on|data_usage_exceeded|user_abroad_roaming_disabled_off[PERSONA:Easy]/1": 1,
+     "telecom:trajectory/glm53f/telecom/[mobile_data_issue]bad_vpn|data_saver_mode_on|user_abroad_roaming_disabled_on[PERSONA:None]/1": 1,
+     "telecom:trajectory/glm53f/telecom/[mobile_data_issue]data_mode_off|data_usage_exceeded[PERSONA:None]/1": 1,
+     "telecom:trajectory/glm53f/telecom/[mobile_data_issue]data_mode_off|data_usage_exceeded|user_abroad_roaming_disabled_off[PERSONA:Hard]/1": 1,
+     "telecom:trajectory/glm53f/telecom/[mobile_data_issue]data_saver_mode_on|data_usage_exceeded[PERSONA:Easy]/1": 1,
+     "telecom:trajectory/glm53f/telecom/[mobile_data_issue]data_usage_exceeded|user_abroad_roaming_enabled_off[PERSONA:Easy]/1": 1,
+     "telecom:trajectory/glm53f/telecom/[service_issue]airplane_mode_on|lock_sim_card_pin|overdue_bill_suspension|unseat_sim_card[PERSONA:Easy]/1": 1,
+     "telecom:trajectory/glm53f/telecom/[service_issue]airplane_mode_on|lock_sim_card_pin|unseat_sim_card[PERSONA:Hard]/1": 1,
+     "telecom:trajectory/glm53f/telecom/[service_issue]airplane_mode_on|overdue_bill_suspension|unseat_sim_card[PERSONA:Easy]/1": 1,
+     "telecom:trajectory/glm53f/telecom/[service_issue]airplane_mode_on|unseat_sim_card[PERSONA:None]/1": 1,
+     "telecom:trajectory/glm53f/telecom/[service_issue]break_apn_settings|overdue_bill_suspension|unseat_sim_card[PERSONA:Hard]/1": 1,
+     "telecom:trajectory/glm53f/telecom/[service_issue]lock_sim_card_pin|overdue_bill_suspension[PERSONA:Easy]/1": 1
+    },
+    "remote": "http://localhost:8003",
+    "returncode": 0,
+    "seconds": 2132.1
+   },
+   "gate": {
+    "passed": true,
+    "baseline_rate": 0.16666666666666666,
+    "candidate_rate": 0.6111111111111112,
+    "reason": "net gain +16 tasks (needs +2); findings per conversation 8.22 -> 1.03 (up to 9.04); no domain lost 2+ (McNemar p 0.000, not required)",
+    "verdict": "promote",
+    "check": "all",
+    "details": {
+     "scored_by": {
+      "type": "tau2_score",
+      "version": "tau2-bench 2.0.0; scoring v3; judges on",
+      "fn": "reflexive.outcome.score"
+     },
+     "tasks": 36,
+     "scored": 36,
+     "dropped": [],
+     "passed": {
+      "baseline": 6,
+      "candidate": 22
+     },
+     "only_baseline_passed": 1,
+     "only_candidate_passed": 17,
+     "net_gain": 16,
+     "mcnemar_p": 0.0001,
+     "bootstrap95_gain": [
+      0.2778,
+      0.6111
+     ],
+     "findings_per_conversation": {
+      "baseline": {
+       "TOOL": 2.25,
+       "ARG": 3.8056,
+       "LOOP": 2.1667,
+       "total": 8.2222
+      },
+      "candidate": {
+       "TOOL": 0.6111,
+       "ARG": 0.1667,
+       "LOOP": 0.25,
+       "total": 1.0278
+      }
+     },
+     "domains_net": {
+      "airline": 1,
+      "retail": 5,
+      "telecom": 10
+     }
+    },
+    "dropped": [],
+    "tasks": [
+     [
+      "retail",
+      "1"
+     ],
+     [
+      "retail",
+      "4"
+     ],
+     [
+      "retail",
+      "13"
+     ],
+     [
+      "retail",
+      "23"
+     ],
+     [
+      "retail",
+      "34"
+     ],
+     [
+      "retail",
+      "35"
+     ],
+     [
+      "retail",
+      "50"
+     ],
+     [
+      "retail",
+      "52"
+     ],
+     [
+      "retail",
+      "73"
+     ],
+     [
+      "retail",
+      "76"
+     ],
+     [
+      "retail",
+      "78"
+     ],
+     [
+      "retail",
+      "82"
+     ],
+     [
+      "retail",
+      "96"
+     ],
+     [
+      "retail",
+      "106"
+     ],
+     [
+      "retail",
+      "112"
+     ],
+     [
+      "airline",
+      "10"
+     ],
+     [
+      "airline",
+      "27"
+     ],
+     [
+      "airline",
+      "36"
+     ],
+     [
+      "airline",
+      "39"
+     ],
+     [
+      "airline",
+      "41"
+     ],
+     [
+      "airline",
+      "43"
+     ],
+     [
+      "telecom",
+      "[mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|break_apn_mms_setting|break_app_storage_permission|data_mode_off|data_usage_exceeded|unseat_sim_card[PERSONA:Easy]"
+     ],
+     [
+      "telecom",
+      "[mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|data_usage_exceeded|unseat_sim_card|user_abroad_roaming_disabled_on[PERSONA:Easy]"
+     ],
+     [
+      "telecom",
+      "[mms_issue]airplane_mode_on|bad_network_preference|data_usage_exceeded[PERSONA:None]"
+     ],
+     [
+      "telecom",
+      "[mms_issue]bad_network_preference|bad_wifi_calling|break_apn_mms_setting|break_app_storage_permission|data_mode_off|data_usage_exceeded|unseat_sim_card[PERSONA:Easy]"
+     ],
+     [
+      "telecom",
+      "[mms_issue]bad_wifi_calling|break_apn_mms_setting|data_mode_off|data_usage_exceeded|unseat_sim_card[PERSONA:None]"
+     ],
+     [
+      "telecom",
+      "[mms_issue]bad_wifi_calling|break_apn_mms_setting|unseat_sim_card|user_abroad_roaming_enabled_off[PERSONA:Easy]"
+     ],
+     [
+      "telecom",
+      "[mms_issue]break_apn_mms_setting|data_mode_off|data_usage_exceeded|user_abroad_roaming_disabled_on[PERSONA:Hard]"
+     ],
+     [
+      "telecom",
+      "[mms_issue]break_app_sms_permission|data_usage_exceeded|user_abroad_roaming_disabled_on[PERSONA:None]"
+     ],
+     [
+      "telecom",
+      "[mobile_data_issue]airplane_mode_on|bad_network_preference|data_saver_mode_on|data_usage_exceeded|user_abroad_roaming_disabled_off[PERSONA:None]"
+     ],
+     [
+      "telecom",
+      "[mobile_data_issue]bad_network_preference|data_saver_mode_on|data_usage_exceeded[PERSONA:Hard]"
+     ],
+     [
+      "telecom",
+      "[mobile_data_issue]bad_network_preference|user_abroad_roaming_enabled_off[PERSONA:Hard]"
+     ],
+     [
+      "telecom",
+      "[service_issue]airplane_mode_on|break_apn_settings[PERSONA:Hard]"
+     ],
+     [
+      "telecom",
+      "[service_issue]airplane_mode_on|break_apn_settings|lock_sim_card_pin[PERSONA:None]"
+     ],
+     [
+      "telecom",
+      "[service_issue]airplane_mode_on|break_apn_settings|overdue_bill_suspension|unseat_sim_card[PERSONA:None]"
+     ],
+     [
+      "telecom",
+      "[service_issue]contract_end_suspension|lock_sim_card_pin[PERSONA:Hard]"
+     ]
+    ]
+   },
+   "tasks": [
+    {
+     "domain": "retail",
+     "task_id": "2",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "NL_ASSERTION": 1.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "ungrounded",
+      "tool": "find_user_id_by_email",
+      "turn": 3,
+      "detail": "email='something@example.com' never appeared before this call"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "retail",
+     "task_id": "3",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "NL_ASSERTION": 0.0
+     },
+     "failure": "NONE",
+     "first": null,
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "retail",
+     "task_id": "6",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "NL_ASSERTION": 1.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "ungrounded",
+      "tool": "find_user_id_by_email",
+      "turn": 3,
+      "detail": "email='something@example.com' never appeared before this call"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "retail",
+     "task_id": "7",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "NL_ASSERTION": 1.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "ungrounded",
+      "tool": "find_user_id_by_email",
+      "turn": 3,
+      "detail": "email='something@example.com' never appeared before this call"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "retail",
+     "task_id": "8",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "NL_ASSERTION": 1.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "ungrounded",
+      "tool": "find_user_id_by_email",
+      "turn": 3,
+      "detail": "email='something@example.com' never appeared before this call"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "retail",
+     "task_id": "11",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "NL_ASSERTION": 1.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "ungrounded",
+      "tool": "find_user_id_by_email",
+      "turn": 3,
+      "detail": "email='something@example.com' never appeared before this call"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "retail",
+     "task_id": "14",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "NL_ASSERTION": 1.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "placeholder",
+      "tool": "find_user_id_by_email",
+      "turn": 3,
+      "detail": "email=\"user's email address\""
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "retail",
+     "task_id": "16",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "NL_ASSERTION": 0.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "ungrounded",
+      "tool": "find_user_id_by_email",
+      "turn": 3,
+      "detail": "email='something@example.com' never appeared before this call"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "retail",
+     "task_id": "19",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "NL_ASSERTION": 0.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "ungrounded",
+      "tool": "modify_pending_order_items",
+      "turn": 33,
+      "detail": "new_item_ids='cheapest_pet_bed_id' never appeared before this call"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "retail",
+     "task_id": "20",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "NL_ASSERTION": 1.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "placeholder",
+      "tool": "get_user_details",
+      "turn": 3,
+      "detail": "user_id='not specified yet'"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "retail",
+     "task_id": "21",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "NL_ASSERTION": 0.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "ungrounded",
+      "tool": "find_user_id_by_email",
+      "turn": 3,
+      "detail": "email='something@example.com' never appeared before this call"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "retail",
+     "task_id": "22",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "NL_ASSERTION": 1.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "ungrounded",
+      "tool": "get_user_details",
+      "turn": 3,
+      "detail": "user_id='sara_doe_496' never appeared before this call"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "retail",
+     "task_id": "24",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 1.0,
+      "NL_ASSERTION": 0.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "ungrounded",
+      "tool": "find_user_id_by_email",
+      "turn": 3,
+      "detail": "email='something@example.com' never appeared before this call"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "retail",
+     "task_id": "28",
+     "termination": "too_many_errors",
+     "checks": {},
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "ungrounded",
+      "tool": "find_user_id_by_email",
+      "turn": 3,
+      "detail": "email='something@example.com' never appeared before this call"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "retail",
+     "task_id": "29",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "NL_ASSERTION": 0.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "placeholder",
+      "tool": "get_user_details",
+      "turn": 7,
+      "detail": "user_id='<user_id_from_previous_tool_result>'"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "retail",
+     "task_id": "30",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "NL_ASSERTION": 1.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "ungrounded",
+      "tool": "get_order_details",
+      "turn": 3,
+      "detail": "order_id='#W0000000' never appeared before this call"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "retail",
+     "task_id": "31",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "NL_ASSERTION": 1.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "ungrounded",
+      "tool": "get_order_details",
+      "turn": 3,
+      "detail": "order_id='#W0000000' never appeared before this call"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "retail",
+     "task_id": "37",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "NL_ASSERTION": 0.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "ungrounded",
+      "tool": "get_order_details",
+      "turn": 3,
+      "detail": "order_id='#W0000000' never appeared before this call"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "retail",
+     "task_id": "43",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "NL_ASSERTION": 0.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "ungrounded",
+      "tool": "get_order_details",
+      "turn": 3,
+      "detail": "order_id='#W0000000' never appeared before this call"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "retail",
+     "task_id": "48",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "NL_ASSERTION": 1.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "ungrounded",
+      "tool": "find_user_id_by_email",
+      "turn": 3,
+      "detail": "email='something@example.com' never appeared before this call"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "retail",
+     "task_id": "54",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 1.0,
+      "NL_ASSERTION": 0.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "placeholder",
+      "tool": "get_user_details",
+      "turn": 3,
+      "detail": "user_id='not_provided'"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "retail",
+     "task_id": "57",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "NL_ASSERTION": 1.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "ungrounded",
+      "tool": "modify_pending_order_payment",
+      "turn": 9,
+      "detail": "payment_method_id='gift_card_0000001' never appeared before this call"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "retail",
+     "task_id": "58",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "NL_ASSERTION": 1.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "ungrounded",
+      "tool": "find_user_id_by_email",
+      "turn": 3,
+      "detail": "email='something@example.com' never appeared before this call"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "retail",
+     "task_id": "63",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "NL_ASSERTION": 0.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "ungrounded",
+      "tool": "get_order_details",
+      "turn": 5,
+      "detail": "order_id='#W0000000' never appeared before this call"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "retail",
+     "task_id": "66",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "NL_ASSERTION": 1.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "ungrounded",
+      "tool": "get_order_details",
+      "turn": 3,
+      "detail": "order_id='#W0000000' never appeared before this call"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "retail",
+     "task_id": "67",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 1.0,
+      "NL_ASSERTION": 0.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "placeholder",
+      "tool": "get_user_details",
+      "turn": 3,
+      "detail": "user_id='not specified yet'"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "retail",
+     "task_id": "69",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "NL_ASSERTION": 1.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "ungrounded",
+      "tool": "find_user_id_by_email",
+      "turn": 3,
+      "detail": "email='something@example.com' never appeared before this call"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "retail",
+     "task_id": "72",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "NL_ASSERTION": 1.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "ungrounded",
+      "tool": "get_order_details",
+      "turn": 3,
+      "detail": "order_id='#W0000000' never appeared before this call"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "retail",
+     "task_id": "81",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "NL_ASSERTION": 1.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "ungrounded",
+      "tool": "find_user_id_by_email",
+      "turn": 3,
+      "detail": "email='something@example.com' never appeared before this call"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "retail",
+     "task_id": "84",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "NL_ASSERTION": 1.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "ungrounded",
+      "tool": "get_order_details",
+      "turn": 3,
+      "detail": "order_id='#W0000000' never appeared before this call"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "retail",
+     "task_id": "85",
+     "termination": "too_many_errors",
+     "checks": {},
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "ungrounded",
+      "tool": "find_user_id_by_email",
+      "turn": 3,
+      "detail": "email='something@example.com' never appeared before this call"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "retail",
+     "task_id": "87",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "NL_ASSERTION": 1.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "placeholder",
+      "tool": "find_user_id_by_email",
+      "turn": 3,
+      "detail": "email=\"user's email address\""
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "retail",
+     "task_id": "88",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "NL_ASSERTION": 1.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "ungrounded",
+      "tool": "modify_pending_order_items",
+      "turn": 9,
+      "detail": "order_id='#W0000000' never appeared before this call"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "retail",
+     "task_id": "89",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "NL_ASSERTION": 0.0
+     },
+     "failure": "NONE",
+     "first": null,
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "retail",
+     "task_id": "91",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "NL_ASSERTION": 1.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "ungrounded",
+      "tool": "find_user_id_by_email",
+      "turn": 3,
+      "detail": "email='something@example.com' never appeared before this call"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "retail",
+     "task_id": "92",
+     "termination": "too_many_errors",
+     "checks": {},
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "ungrounded",
+      "tool": "find_user_id_by_email",
+      "turn": 3,
+      "detail": "email='something@example.com' never appeared before this call"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "retail",
+     "task_id": "93",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "NL_ASSERTION": 1.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "ungrounded",
+      "tool": "find_user_id_by_email",
+      "turn": 3,
+      "detail": "email='something@example.com' never appeared before this call"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "retail",
+     "task_id": "95",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "NL_ASSERTION": 0.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "ungrounded",
+      "tool": "exchange_delivered_order_items",
+      "turn": 17,
+      "detail": "item_ids='8473921569' never appeared before this call"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "retail",
+     "task_id": "98",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "NL_ASSERTION": 1.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "ungrounded",
+      "tool": "get_user_details",
+      "turn": 3,
+      "detail": "user_id='sara_doe_496' never appeared before this call"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "retail",
+     "task_id": "99",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "NL_ASSERTION": 1.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "ungrounded",
+      "tool": "get_user_details",
+      "turn": 3,
+      "detail": "user_id='sara_doe_496' never appeared before this call"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "retail",
+     "task_id": "103",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "NL_ASSERTION": 0.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "ungrounded",
+      "tool": "find_user_id_by_email",
+      "turn": 3,
+      "detail": "email='something@example.com' never appeared before this call"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "retail",
+     "task_id": "104",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "NL_ASSERTION": 0.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "ungrounded",
+      "tool": "find_user_id_by_email",
+      "turn": 3,
+      "detail": "email='something@example.com' never appeared before this call"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "retail",
+     "task_id": "107",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "NL_ASSERTION": 0.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "ungrounded",
+      "tool": "get_order_details",
+      "turn": 3,
+      "detail": "order_id='#W0000000' never appeared before this call"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "retail",
+     "task_id": "109",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "NL_ASSERTION": 0.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "placeholder",
+      "tool": "get_user_details",
+      "turn": 3,
+      "detail": "user_id='<user_id_from_previous_interaction>'"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "retail",
+     "task_id": "113",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "NL_ASSERTION": 1.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "ungrounded",
+      "tool": "get_user_details",
+      "turn": 3,
+      "detail": "user_id='sara_doe_496' never appeared before this call"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "airline",
+     "task_id": "0",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "COMMUNICATE": 1.0
+     },
+     "failure": "NONE",
+     "first": null,
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "airline",
+     "task_id": "5",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "COMMUNICATE": 1.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "ungrounded",
+      "tool": "get_user_details",
+      "turn": 3,
+      "detail": "user_id='gold_member' never appeared before this call"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "airline",
+     "task_id": "9",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "COMMUNICATE": 1.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "ungrounded",
+      "tool": "get_user_details",
+      "turn": 3,
+      "detail": "user_id='sara_doe_496' never appeared before this call"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "airline",
+     "task_id": "11",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "COMMUNICATE": 0.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "ungrounded",
+      "tool": "get_user_details",
+      "turn": 3,
+      "detail": "user_id='sara_doe_496' never appeared before this call"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "airline",
+     "task_id": "14",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "COMMUNICATE": 0.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "ungrounded",
+      "tool": "get_user_details",
+      "turn": 3,
+      "detail": "user_id='sara_doe_496' never appeared before this call"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "airline",
+     "task_id": "15",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "COMMUNICATE": 1.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "ungrounded",
+      "tool": "get_user_details",
+      "turn": 3,
+      "detail": "user_id='sara_doe_496' never appeared before this call"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "airline",
+     "task_id": "17",
+     "termination": "too_many_errors",
+     "checks": {},
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "ungrounded",
+      "tool": "get_user_details",
+      "turn": 3,
+      "detail": "user_id='sara_doe_496' never appeared before this call"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "airline",
+     "task_id": "20",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "COMMUNICATE": 1.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "unknown_param",
+      "tool": "search_direct_flight",
+      "turn": 9,
+      "detail": "no parameter departure_time_after"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "airline",
+     "task_id": "21",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "COMMUNICATE": 1.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "ungrounded",
+      "tool": "get_user_details",
+      "turn": 3,
+      "detail": "user_id='sara_doe_496' never appeared before this call"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "airline",
+     "task_id": "23",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "COMMUNICATE": 0.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "ungrounded",
+      "tool": "get_user_details",
+      "turn": 3,
+      "detail": "user_id='sara_doe_496' never appeared before this call"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "airline",
+     "task_id": "28",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "COMMUNICATE": 1.0
+     },
+     "failure": "NONE",
+     "first": null,
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "airline",
+     "task_id": "33",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "COMMUNICATE": 1.0
+     },
+     "failure": "NONE",
+     "first": null,
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "airline",
+     "task_id": "34",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "COMMUNICATE": 1.0
+     },
+     "failure": "NONE",
+     "first": null,
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "airline",
+     "task_id": "40",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "COMMUNICATE": 1.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "ungrounded",
+      "tool": "get_user_details",
+      "turn": 3,
+      "detail": "user_id='mei_lee_456' never appeared before this call"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "airline",
+     "task_id": "42",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "COMMUNICATE": 1.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "ungrounded",
+      "tool": "get_user_details",
+      "turn": 3,
+      "detail": "user_id='sara_doe_496' never appeared before this call"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "airline",
+     "task_id": "46",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "COMMUNICATE": 1.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "ungrounded",
+      "tool": "get_user_details",
+      "turn": 3,
+      "detail": "user_id='sara_doe_496' never appeared before this call"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "airline",
+     "task_id": "47",
+     "termination": "user_stop",
+     "checks": {
+      "DB": 0.0,
+      "COMMUNICATE": 1.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "ungrounded",
+      "tool": "get_user_details",
+      "turn": 3,
+      "detail": "user_id='sara_doe_496' never appeared before this call"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "telecom",
+     "task_id": "[mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|break_apn_mms_setting|break_app_both_permissions|data_mode_off|data_usage_exceeded|unseat_sim_card|user_abroad_roaming_disabled_off[PERSONA:Hard]",
+     "termination": "user_stop",
+     "checks": {
+      "ENV_ASSERTION": 0.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "placeholder",
+      "tool": "get_customer_by_phone",
+      "turn": 3,
+      "detail": "phone_number=\"customer's phone number\""
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "telecom",
+     "task_id": "[mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|break_apn_mms_setting|break_app_sms_permission|data_mode_off|data_usage_exceeded|unseat_sim_card|user_abroad_roaming_enabled_off[PERSONA:None]",
+     "termination": "user_stop",
+     "checks": {
+      "ENV_ASSERTION": 0.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "placeholder",
+      "tool": "get_customer_by_phone",
+      "turn": 3,
+      "detail": "phone_number=\"customer's phone number\""
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "telecom",
+     "task_id": "[mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|break_apn_mms_setting|break_app_storage_permission|data_mode_off|data_usage_exceeded|unseat_sim_card|user_abroad_roaming_disabled_off[PERSONA:Easy]",
+     "termination": "user_stop",
+     "checks": {
+      "ENV_ASSERTION": 0.0
+     },
+     "failure": "TOOL",
+     "first": {
+      "type": "TOOL",
+      "kind": "customer_tool",
+      "tool": "check_apn_settings",
+      "turn": 3,
+      "detail": "the agent has no tool 'check_apn_settings'"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "telecom",
+     "task_id": "[mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|break_apn_mms_setting|break_app_storage_permission|data_usage_exceeded|unseat_sim_card|user_abroad_roaming_disabled_off[PERSONA:Easy]",
+     "termination": "too_many_errors",
+     "checks": {},
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "placeholder",
+      "tool": "get_customer_by_phone",
+      "turn": 3,
+      "detail": "phone_number=\"customer's phone number\""
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "telecom",
+     "task_id": "[mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|break_app_sms_permission|data_mode_off|data_usage_exceeded|unseat_sim_card|user_abroad_roaming_disabled_off[PERSONA:None]",
+     "termination": "user_stop",
+     "checks": {
+      "ENV_ASSERTION": 0.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "placeholder",
+      "tool": "get_customer_by_phone",
+      "turn": 3,
+      "detail": "phone_number=\"customer's phone number\""
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "telecom",
+     "task_id": "[mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|break_app_storage_permission|data_mode_off|data_usage_exceeded|unseat_sim_card|user_abroad_roaming_enabled_off[PERSONA:Hard]",
+     "termination": "user_stop",
+     "checks": {
+      "ENV_ASSERTION": 0.0
+     },
+     "failure": "TOOL",
+     "first": {
+      "type": "TOOL",
+      "kind": "customer_tool",
+      "tool": "check_apn_settings",
+      "turn": 3,
+      "detail": "the agent has no tool 'check_apn_settings'"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "telecom",
+     "task_id": "[mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|break_app_storage_permission|unseat_sim_card[PERSONA:Hard]",
+     "termination": "user_stop",
+     "checks": {
+      "ENV_ASSERTION": 0.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "placeholder",
+      "tool": "get_customer_by_phone",
+      "turn": 3,
+      "detail": "phone_number=\"customer's phone number\""
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "telecom",
+     "task_id": "[mms_issue]airplane_mode_on|bad_network_preference|break_apn_mms_setting|break_app_both_permissions|data_mode_off|data_usage_exceeded|user_abroad_roaming_enabled_off[PERSONA:None]",
+     "termination": "too_many_errors",
+     "checks": {},
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "placeholder",
+      "tool": "get_customer_by_phone",
+      "turn": 3,
+      "detail": "phone_number=\"customer's phone number\""
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "telecom",
+     "task_id": "[mms_issue]bad_network_preference|bad_wifi_calling|break_app_both_permissions|data_usage_exceeded|unseat_sim_card|user_abroad_roaming_disabled_off[PERSONA:None]",
+     "termination": "too_many_errors",
+     "checks": {},
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "placeholder",
+      "tool": "get_customer_by_phone",
+      "turn": 3,
+      "detail": "phone_number=\"customer's phone number\""
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "telecom",
+     "task_id": "[mms_issue]bad_network_preference|bad_wifi_calling|break_app_both_permissions|data_usage_exceeded|user_abroad_roaming_disabled_off[PERSONA:Hard]",
+     "termination": "too_many_errors",
+     "checks": {},
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "placeholder",
+      "tool": "get_customer_by_phone",
+      "turn": 3,
+      "detail": "phone_number=\"customer's phone number\""
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "telecom",
+     "task_id": "[mms_issue]bad_network_preference|break_app_sms_permission|data_mode_off|data_usage_exceeded|user_abroad_roaming_enabled_off[PERSONA:None]",
+     "termination": "too_many_errors",
+     "checks": {},
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "placeholder",
+      "tool": "get_customer_by_phone",
+      "turn": 3,
+      "detail": "phone_number=\"customer's phone number\""
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "telecom",
+     "task_id": "[mms_issue]bad_network_preference|user_abroad_roaming_disabled_off[PERSONA:None]",
+     "termination": "too_many_errors",
+     "checks": {},
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "placeholder",
+      "tool": "get_customer_by_phone",
+      "turn": 3,
+      "detail": "phone_number=\"customer's phone number\""
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "telecom",
+     "task_id": "[mms_issue]bad_network_preference|user_abroad_roaming_disabled_on[PERSONA:None]",
+     "termination": "user_stop",
+     "checks": {
+      "ENV_ASSERTION": 0.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "placeholder",
+      "tool": "get_customer_by_phone",
+      "turn": 3,
+      "detail": "phone_number=\"customer's phone number\""
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "telecom",
+     "task_id": "[mms_issue]bad_wifi_calling|break_apn_mms_setting|break_app_sms_permission|data_usage_exceeded[PERSONA:Hard]",
+     "termination": "user_stop",
+     "checks": {
+      "ENV_ASSERTION": 0.0
+     },
+     "failure": "TOOL",
+     "first": {
+      "type": "TOOL",
+      "kind": "customer_tool",
+      "tool": "check_status_bar",
+      "turn": 3,
+      "detail": "the agent has no tool 'check_status_bar'"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "telecom",
+     "task_id": "[mms_issue]bad_wifi_calling|data_mode_off|data_usage_exceeded[PERSONA:Easy]",
+     "termination": "user_stop",
+     "checks": {
+      "ENV_ASSERTION": 0.0
+     },
+     "failure": "TOOL",
+     "first": {
+      "type": "TOOL",
+      "kind": "customer_tool",
+      "tool": "check_apn_settings",
+      "turn": 3,
+      "detail": "the agent has no tool 'check_apn_settings'"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "telecom",
+     "task_id": "[mms_issue]break_apn_mms_setting|data_mode_off|user_abroad_roaming_disabled_on[PERSONA:Hard]",
+     "termination": "user_stop",
+     "checks": {
+      "ENV_ASSERTION": 0.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "placeholder",
+      "tool": "get_customer_by_phone",
+      "turn": 3,
+      "detail": "phone_number=\"customer's phone number\""
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "telecom",
+     "task_id": "[mms_issue]break_app_both_permissions|data_usage_exceeded[PERSONA:Hard]",
+     "termination": "user_stop",
+     "checks": {
+      "ENV_ASSERTION": 0.0
+     },
+     "failure": "TOOL",
+     "first": {
+      "type": "TOOL",
+      "kind": "customer_tool",
+      "tool": "check_apn_settings",
+      "turn": 3,
+      "detail": "the agent has no tool 'check_apn_settings'"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "telecom",
+     "task_id": "[mms_issue]break_app_both_permissions|unseat_sim_card|user_abroad_roaming_disabled_on[PERSONA:Hard]",
+     "termination": "user_stop",
+     "checks": {
+      "ENV_ASSERTION": 0.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "placeholder",
+      "tool": "get_customer_by_phone",
+      "turn": 3,
+      "detail": "phone_number=\"customer's phone number\""
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "telecom",
+     "task_id": "[mms_issue]break_app_storage_permission|data_usage_exceeded[PERSONA:Easy]",
+     "termination": "user_stop",
+     "checks": {
+      "ENV_ASSERTION": 0.0
+     },
+     "failure": "TOOL",
+     "first": {
+      "type": "TOOL",
+      "kind": "customer_tool",
+      "tool": "check_apn_settings",
+      "turn": 3,
+      "detail": "the agent has no tool 'check_apn_settings'"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "telecom",
+     "task_id": "[mms_issue]break_app_storage_permission|unseat_sim_card|user_abroad_roaming_disabled_on[PERSONA:Easy]",
+     "termination": "user_stop",
+     "checks": {
+      "ENV_ASSERTION": 0.0
+     },
+     "failure": "TOOL",
+     "first": {
+      "type": "TOOL",
+      "kind": "customer_tool",
+      "tool": "check_apn_settings",
+      "turn": 3,
+      "detail": "the agent has no tool 'check_apn_settings'"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "telecom",
+     "task_id": "[mobile_data_issue]airplane_mode_on|bad_network_preference|bad_vpn|data_mode_off|data_saver_mode_on|data_usage_exceeded|user_abroad_roaming_disabled_on[PERSONA:None]",
+     "termination": "user_stop",
+     "checks": {
+      "ENV_ASSERTION": 0.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "placeholder",
+      "tool": "get_customer_by_phone",
+      "turn": 3,
+      "detail": "phone_number=\"user's phone number\""
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "telecom",
+     "task_id": "[mobile_data_issue]airplane_mode_on|bad_network_preference|bad_vpn|data_mode_off|data_saver_mode_on|user_abroad_roaming_disabled_off[PERSONA:Hard]",
+     "termination": "user_stop",
+     "checks": {
+      "ENV_ASSERTION": 0.0
+     },
+     "failure": "TOOL",
+     "first": {
+      "type": "TOOL",
+      "kind": "customer_tool",
+      "tool": "check_network_status",
+      "turn": 3,
+      "detail": "the agent has no tool 'check_network_status'"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "telecom",
+     "task_id": "[mobile_data_issue]airplane_mode_on|bad_network_preference|bad_vpn|data_mode_off|data_usage_exceeded|user_abroad_roaming_enabled_off[PERSONA:Easy]",
+     "termination": "user_stop",
+     "checks": {
+      "ENV_ASSERTION": 0.0
+     },
+     "failure": "TOOL",
+     "first": {
+      "type": "TOOL",
+      "kind": "customer_tool",
+      "tool": "run_speed_test",
+      "turn": 3,
+      "detail": "the agent has no tool 'run_speed_test'"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "telecom",
+     "task_id": "[mobile_data_issue]airplane_mode_on|bad_network_preference|bad_vpn|data_saver_mode_on|data_usage_exceeded|user_abroad_roaming_enabled_off[PERSONA:None]",
+     "termination": "user_stop",
+     "checks": {
+      "ENV_ASSERTION": 0.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "placeholder",
+      "tool": "get_customer_by_phone",
+      "turn": 3,
+      "detail": "phone_number=\"user's phone number\""
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "telecom",
+     "task_id": "[mobile_data_issue]airplane_mode_on|bad_network_preference|bad_vpn|data_saver_mode_on|user_abroad_roaming_disabled_on[PERSONA:Easy]",
+     "termination": "user_stop",
+     "checks": {
+      "ENV_ASSERTION": 0.0
+     },
+     "failure": "TOOL",
+     "first": {
+      "type": "TOOL",
+      "kind": "customer_tool",
+      "tool": "check_status_bar",
+      "turn": 3,
+      "detail": "the agent has no tool 'check_status_bar'"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "telecom",
+     "task_id": "[mobile_data_issue]airplane_mode_on|bad_network_preference|data_mode_off|data_usage_exceeded|user_abroad_roaming_disabled_on[PERSONA:None]",
+     "termination": "user_stop",
+     "checks": {
+      "ENV_ASSERTION": 0.0
+     },
+     "failure": "TOOL",
+     "first": {
+      "type": "TOOL",
+      "kind": "customer_tool",
+      "tool": "run_speed_test",
+      "turn": 3,
+      "detail": "the agent has no tool 'run_speed_test'"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "telecom",
+     "task_id": "[mobile_data_issue]airplane_mode_on|bad_network_preference|data_usage_exceeded|user_abroad_roaming_disabled_off[PERSONA:Easy]",
+     "termination": "user_stop",
+     "checks": {
+      "ENV_ASSERTION": 0.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "placeholder",
+      "tool": "get_customer_by_phone",
+      "turn": 3,
+      "detail": "phone_number=\"user's phone number\""
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "telecom",
+     "task_id": "[mobile_data_issue]airplane_mode_on|bad_network_preference|user_abroad_roaming_enabled_off[PERSONA:Easy]",
+     "termination": "too_many_errors",
+     "checks": {},
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "placeholder",
+      "tool": "get_customer_by_phone",
+      "turn": 3,
+      "detail": "phone_number=\"customer's phone number\""
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "telecom",
+     "task_id": "[mobile_data_issue]airplane_mode_on|user_abroad_roaming_enabled_off[PERSONA:None]",
+     "termination": "user_stop",
+     "checks": {
+      "ENV_ASSERTION": 0.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "placeholder",
+      "tool": "get_customer_by_phone",
+      "turn": 3,
+      "detail": "phone_number=\"user's phone number\""
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "telecom",
+     "task_id": "[mobile_data_issue]bad_network_preference|bad_vpn|data_usage_exceeded|user_abroad_roaming_disabled_off[PERSONA:Easy]",
+     "termination": "too_many_errors",
+     "checks": {},
+     "failure": "TOOL",
+     "first": {
+      "type": "TOOL",
+      "kind": "customer_tool",
+      "tool": "run_speed_test",
+      "turn": 3,
+      "detail": "the agent has no tool 'run_speed_test'"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "telecom",
+     "task_id": "[mobile_data_issue]bad_network_preference|bad_vpn|user_abroad_roaming_disabled_on[PERSONA:None]",
+     "termination": "user_stop",
+     "checks": {
+      "ENV_ASSERTION": 0.0
+     },
+     "failure": "TOOL",
+     "first": {
+      "type": "TOOL",
+      "kind": "customer_tool",
+      "tool": "run_speed_test",
+      "turn": 3,
+      "detail": "the agent has no tool 'run_speed_test'"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "telecom",
+     "task_id": "[mobile_data_issue]bad_network_preference|bad_vpn|user_abroad_roaming_enabled_off[PERSONA:Easy]",
+     "termination": "user_stop",
+     "checks": {
+      "ENV_ASSERTION": 0.0
+     },
+     "failure": "TOOL",
+     "first": {
+      "type": "TOOL",
+      "kind": "customer_tool",
+      "tool": "check_status_bar",
+      "turn": 3,
+      "detail": "the agent has no tool 'check_status_bar'"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "telecom",
+     "task_id": "[mobile_data_issue]bad_network_preference|data_mode_off|data_saver_mode_on|data_usage_exceeded|user_abroad_roaming_disabled_off[PERSONA:Easy]",
+     "termination": "user_stop",
+     "checks": {
+      "ENV_ASSERTION": 0.0
+     },
+     "failure": "TOOL",
+     "first": {
+      "type": "TOOL",
+      "kind": "customer_tool",
+      "tool": "run_speed_test",
+      "turn": 3,
+      "detail": "the agent has no tool 'run_speed_test'"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "telecom",
+     "task_id": "[mobile_data_issue]bad_vpn|data_saver_mode_on|user_abroad_roaming_disabled_on[PERSONA:None]",
+     "termination": "user_stop",
+     "checks": {
+      "ENV_ASSERTION": 0.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "placeholder",
+      "tool": "get_customer_by_phone",
+      "turn": 3,
+      "detail": "phone_number=\"user's phone number\""
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "telecom",
+     "task_id": "[mobile_data_issue]data_mode_off|data_usage_exceeded[PERSONA:None]",
+     "termination": "too_many_errors",
+     "checks": {},
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "placeholder",
+      "tool": "get_customer_by_phone",
+      "turn": 3,
+      "detail": "phone_number=\"customer's phone number\""
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "telecom",
+     "task_id": "[mobile_data_issue]data_mode_off|data_usage_exceeded|user_abroad_roaming_disabled_off[PERSONA:Hard]",
+     "termination": "user_stop",
+     "checks": {
+      "ENV_ASSERTION": 0.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "placeholder",
+      "tool": "get_customer_by_phone",
+      "turn": 3,
+      "detail": "phone_number=\"customer's phone number\""
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "telecom",
+     "task_id": "[mobile_data_issue]data_saver_mode_on|data_usage_exceeded[PERSONA:Easy]",
+     "termination": "too_many_errors",
+     "checks": {},
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "placeholder",
+      "tool": "get_customer_by_phone",
+      "turn": 3,
+      "detail": "phone_number=\"user's phone number\""
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "telecom",
+     "task_id": "[mobile_data_issue]data_usage_exceeded|user_abroad_roaming_enabled_off[PERSONA:Easy]",
+     "termination": "user_stop",
+     "checks": {
+      "ENV_ASSERTION": 0.0
+     },
+     "failure": "TOOL",
+     "first": {
+      "type": "TOOL",
+      "kind": "customer_tool",
+      "tool": "check_network_status",
+      "turn": 3,
+      "detail": "the agent has no tool 'check_network_status'"
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "telecom",
+     "task_id": "[service_issue]airplane_mode_on|lock_sim_card_pin|overdue_bill_suspension|unseat_sim_card[PERSONA:Easy]",
+     "termination": "user_stop",
+     "checks": {
+      "ENV_ASSERTION": 1.0,
+      "ACTION": 0.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "placeholder",
+      "tool": "get_customer_by_phone",
+      "turn": 3,
+      "detail": "phone_number=\"customer's phone number\""
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "telecom",
+     "task_id": "[service_issue]airplane_mode_on|lock_sim_card_pin|unseat_sim_card[PERSONA:Hard]",
+     "termination": "user_stop",
+     "checks": {
+      "ENV_ASSERTION": 1.0,
+      "ACTION": 0.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "placeholder",
+      "tool": "get_customer_by_phone",
+      "turn": 3,
+      "detail": "phone_number=\"customer's phone number\""
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "telecom",
+     "task_id": "[service_issue]airplane_mode_on|overdue_bill_suspension|unseat_sim_card[PERSONA:Easy]",
+     "termination": "too_many_errors",
+     "checks": {},
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "placeholder",
+      "tool": "get_customer_by_phone",
+      "turn": 3,
+      "detail": "phone_number=\"customer's phone number\""
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "telecom",
+     "task_id": "[service_issue]airplane_mode_on|unseat_sim_card[PERSONA:None]",
+     "termination": "user_stop",
+     "checks": {
+      "ENV_ASSERTION": 0.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "placeholder",
+      "tool": "get_customer_by_phone",
+      "turn": 3,
+      "detail": "phone_number=\"customer's phone number\""
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "telecom",
+     "task_id": "[service_issue]break_apn_settings|overdue_bill_suspension|unseat_sim_card[PERSONA:Hard]",
+     "termination": "too_many_errors",
+     "checks": {},
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "placeholder",
+      "tool": "get_customer_by_phone",
+      "turn": 3,
+      "detail": "phone_number=\"customer's phone number\""
+     },
+     "fixed": true,
+     "attempts": 1
+    },
+    {
+     "domain": "telecom",
+     "task_id": "[service_issue]lock_sim_card_pin|overdue_bill_suspension[PERSONA:Easy]",
+     "termination": "user_stop",
+     "checks": {
+      "ENV_ASSERTION": 1.0,
+      "ACTION": 0.0
+     },
+     "failure": "ARG",
+     "first": {
+      "type": "ARG",
+      "kind": "placeholder",
+      "tool": "get_customer_by_phone",
+      "turn": 3,
+      "detail": "phone_number=\"customer's phone number\""
+     },
+     "fixed": true,
+     "attempts": 1
+    }
+   ]
+  }
+ ],
+ "cost_usd": {
+  "student": 0,
+  "customer": 5.8894,
+  "teacher": 0,
+  "total": 5.8894,
+  "note": "judge calls not included"
+ }
+}
