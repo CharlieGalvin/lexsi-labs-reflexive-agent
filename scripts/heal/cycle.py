@@ -81,7 +81,7 @@ from reflexive import splits
 from reflexive.agent import Adapter, CycleReport, Record, ReflexiveAgent, Task, arm_rollout
 from reflexive.arms import get_arm, make_student, student_api_base
 from reflexive.files import ROOT, read_jsonl
-from reflexive.heal import TEACHER, CommandTrainer, PrefixTeacher, run_metrics, write_audit
+from reflexive.heal import TEACHER, CommandTrainer, PrefixTeacher, VerifiedTeacher, run_metrics, write_audit
 
 DOMAINS = ("retail", "airline", "telecom")
 COHERE = "api.cohere.ai"
@@ -395,6 +395,19 @@ def main() -> int:
         "a full cycle needs them on",
     )
     ap.add_argument("--attempts", type=int, default=3, help="teacher attempts per failure (default 3)")
+    ap.add_argument(
+        "--fix-mode",
+        choices=["turn", "trajectory"],
+        default="turn",
+        help="turn: the teacher rewrites the failing turn (default); trajectory: the task's whole "
+        "verified teacher conversations from --library (HEAL_FROM_V2.md)",
+    )
+    ap.add_argument(
+        "--library",
+        type=Path,
+        default=Path("data/train/sft-v2.jsonl"),
+        help="with --fix-mode trajectory: the verified conversations (default SFT v2's data)",
+    )
     ap.add_argument("--out", type=Path, help="default results/heal/<time>")
     ap.add_argument("--gate-history", type=Path, default=Path("results/heal/gate_history.jsonl"))
     ap.add_argument(
@@ -441,9 +454,17 @@ def main() -> int:
         "judges": judges,
         "fixes_only": a.fixes_only,
         "attempts": a.attempts,
+        "fix_mode": a.fix_mode,
+        "library": str(a.library) if a.fix_mode == "trajectory" else None,
     }
     (out / "run.json").write_text(json.dumps(run, indent=1) + "\n")
-    teacher = PrefixTeacher(attempts=a.attempts)
+    # trajectory: whole verified conversations, each its own lesson, so nothing is deduplicated
+    teacher: Any = (
+        VerifiedTeacher(library=a.library)
+        if a.fix_mode == "trajectory"
+        else PrefixTeacher(attempts=a.attempts)
+    )
+    per_lesson = None if a.fix_mode == "trajectory" else 2
     command = shlex.split(a.train_cmd) if a.train_cmd else None
     if a.train_url and not a.fixes_only:
         key_env = arm.student.get("api_key_env")
@@ -453,11 +474,14 @@ def main() -> int:
             token=os.environ["HEAL_TOKEN"],
             api_base=student_api_base(arm.student),
             api_key=os.environ.get(key_env) if key_env else None,
+            per_lesson=per_lesson,
         )
     elif a.load_adapter:
-        trainer = LoadingTrainer(out / "runs", command=command, api_base=student_api_base(arm.student))
+        trainer = LoadingTrainer(
+            out / "runs", command=command, api_base=student_api_base(arm.student), per_lesson=per_lesson
+        )
     else:
-        trainer = CommandTrainer(out / "runs", command=command)
+        trainer = CommandTrainer(out / "runs", command=command, per_lesson=per_lesson)
 
     if a.fixes_only:
         from reflexive.agent import PassRateGate
