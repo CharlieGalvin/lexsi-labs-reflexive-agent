@@ -32,11 +32,6 @@ gate. We built this loop on [τ²-bench](https://github.com/sierra-research/tau2
 
 ![The self-healing loop, animated. The student agent, Aya Expanse 32B with a LoRA adapter, fails a conversation. 1, Detect: a classifier finds the failing turn and flags an invented argument, email="something@example.com". 2, Fix: the teacher rewrites the turn as "Could you confirm your email?". 3, Retrain: the student trains on 146 verified conversations. 4, Gate: dev success rises from 11% to 60%, so the new adapter is promoted and the student moves from adapter v1 to v2.](img/heal-loop.gif)
 
-<iframe src="https://reagent-lexsi-spot-the-hallucination.static.hf.space" frameborder="0" width="100%" height="820"></iframe>
-
-**Try it:** [Spot the hallucination](https://huggingface.co/spaces/reagent-lexsi/spot-the-hallucination),
-three real moments from our test runs. Can you tell when the agent is bluffing?
-
 ### The idea, without the jargon
 
 Picture a new trainee on a customer help desk. They're quick and polite, but under pressure they
@@ -96,6 +91,12 @@ conversation:
 
 On the test split, the untuned student had a Tool or Arg failure in **95% of conversations**.
 
+Think you'd catch them? Here are three real moments from our test runs:
+
+<iframe src="https://reagent-lexsi-spot-the-hallucination.static.hf.space" frameborder="0" width="100%" height="820"></iframe>
+
+**Play it full size:** [Spot the hallucination](https://huggingface.co/spaces/reagent-lexsi/spot-the-hallucination).
+
 ### Can you just tell it to be careful?
 
 The cheapest fix is a prompt. With a fixed instruction not to hallucinate, the student scored
@@ -111,13 +112,11 @@ changes nobody had asked for. Adding 34 airline conversations fixed that, and re
 dev**. We declared this version as **Arm B** and ran it on the 100 test tasks, against the
 untuned student (**Arm A**) and the careful prompt (**Arm C**):
 
-![Test results by domain. Task success for arms A, C and B: all 100 tasks 14.5%, 13% and 51.5%; retail 12.5%, 10% and 60%; airline 17.5%, 20% and 30%; telecom 15%, 12.5% and 53.8%. Conversations with a Tool or Arg hallucination: 95%, 95.5% and 10%.](img/test-results.png)
-
-![Test split, 100 tasks × 2 samples. Success: Arm A 14.5%, Arm C 13.0%, Arm B 51.5%; Conversations with a Tool or Arg failure: Arm A 95.0%, Arm C 95.5%, Arm B 10.0%; Conversations with a loop: Arm A 49.0%, Arm C 49.5%, Arm B 27.0%](img/test-table.png)
+![Test results by domain. Task success for arms A, C and B: all 100 tasks 14.5%, 13% and 51.5%; retail 12.5%, 10% and 60%; airline 17.5%, 20% and 30%; telecom 15%, 12.5% and 53.8%. Conversations with a Tool or Arg hallucination: 95%, 95.5% and 10%. Test split, 100 tasks × 2 samples. Success: Arm A 14.5%, Arm C 13.0%, Arm B 51.5%; Conversations with a Tool or Arg failure: Arm A 95.0%, Arm C 95.5%, Arm B 10.0%; Conversations with a loop: Arm A 49.0%, Arm C 49.5%, Arm B 27.0%.](img/test-results.png)
 
 **Arm B beats Arm A by 37 points** (95% range +28 to +46). The gain is largest in retail and
 telecom, and smallest in airline, where the remaining failures are policy decisions rather than
-hallucinations.
+hallucinations. Conversations where the agent repeats itself fell too, from 49% to 27%.
 
 ### Before and after: one real conversation
 
@@ -220,22 +219,10 @@ replies stopped training early. It scored 14.5 of 30, below Arm B's 17.0.
 * **Hallucinations and decision errors are different problems.** Once the hallucinations were
   gone, the remaining failures were about what to change, and when: in 37 of Arm B's 55 failed dev
   and validation conversations, the classifier finds no hallucination at all. A loop that heals
-  hallucinations has nothing left to fix there. That's the next frontier for self-healing agents.
-
-### Reproduce it yourself
-
-Every run saved its results, so you can step through all five experiments on a laptop in seconds,
-with no GPU or API keys. Each one is introduced, recomputed from the saved results, and ends with
-the commands that rerun it from scratch:
-
-```bash
-git clone <repo> && cd <repo>
-just reproduce            # or: python scripts/blog/reproduce.py
-```
-
-![Terminal output of just reproduce 2. Experiment 2 of 5: Can you just tell it to be careful? Success: Arm A 14.5%, Arm C 13.0%, a difference of −1.5 points (−7.0 to +4.0). Tool or Arg failure: 95.0% and 95.5%. Loop: 49.0% and 49.5%. Result: no clear difference, the 95% range of C − A includes zero. Asking nicely doesn't work.](img/reproduce-output.png)
-
-It ends by checking that every number it recomputed appears in this post exactly as written.
+  hallucinations has nothing left to fix there. Some of these are hallucinations in a wider sense,
+  such as acting on a request the customer never made, but they can't be seen in the transcript
+  alone: catching them means knowing what the task required. That's the next frontier for
+  self-healing agents.
 
 ### Limitations
 
@@ -274,6 +261,21 @@ model = PeftModel.from_pretrained(base, "reagent-lexsi/sft-aya32b-r16-v2")
 ```
 
 The agent prompt and tool-call format it was trained with are in the code.
+
+### Reproduce it yourself
+
+Every run saved its results, so you can step through all five experiments on a laptop in seconds,
+with no GPU or API keys. Each one is introduced, recomputed from the saved results, and ends with
+the commands that rerun it from scratch:
+
+```bash
+git clone https://github.com/CharlieGalvin/lexsi-labs-reflexive-agent && cd lexsi-labs-reflexive-agent
+just reproduce            # or: python scripts/blog/reproduce.py
+```
+
+![Terminal output of just reproduce 2. Experiment 2 of 5: Can you just tell it to be careful? Success: Arm A 14.5%, Arm C 13.0%, a difference of −1.5 points (−7.0 to +4.0). Tool or Arg failure: 95.0% and 95.5%. Loop: 49.0% and 49.5%. Result: no clear difference, the 95% range of C − A includes zero. Asking nicely doesn't work.](img/reproduce-output.png)
+
+It ends by checking that every number it recomputed appears in this post exactly as written.
 
 ### Acknowledgements
 
