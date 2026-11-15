@@ -242,6 +242,7 @@ results/*.metrics.json   committed evidence for the demo
 - **[Blog post on Hugging Face](https://huggingface.co/blog/cg3849/reflexive-agents):** the project, told end to end ([source](docs/blog/reflexive-agents.md)).
 - **[Spot the hallucination](https://huggingface.co/spaces/reagent-lexsi/spot-the-hallucination):** a three-round game with real agent moments from our test runs. Is the agent bluffing?
 - **[Experiments, in order](docs/experiments/README.md)** and **[every run](docs/EXPERIMENTS.md)**.
+- **[Future work](docs/FUTURE_WORK.md):** healing decision errors, and learning from more than one teacher.
 - **[τ²-bench](https://github.com/sierra-research/tau2-bench)** and the Lexsi Labs stack:
   [AgentTune](https://github.com/Lexsi-Labs/AgentTune), [AuditKIT](https://github.com/Lexsi-Labs/AuditKIT),
   [CuratorKIT](https://github.com/Lexsi-Labs/CuratorKIT).

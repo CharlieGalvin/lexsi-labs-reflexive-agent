@@ -9,7 +9,7 @@ authors:
 
 # Reflexive Agents: Cutting a 32B Agent's Hallucinations from 95% to 10%
 
-*10 min read*
+*11 min read*
 
 Agents are increasingly trusted with write access: cancelling orders, changing flights, editing
 accounts. When they hallucinate, the result isn't a wrong sentence but a wrong action. They call a
@@ -226,9 +226,9 @@ replies stopped training early. It scored 14.5 of 30, below Arm B's 17.0.
   gone, the remaining failures were about what to change, and when: in 37 of Arm B's 55 failed dev
   and validation conversations, the classifier finds no hallucination at all. A loop that heals
   hallucinations has nothing left to fix there. Some of these are hallucinations in a wider sense,
-  such as acting on a request the customer never made, but they can't be seen in the transcript
-  alone: catching them means knowing what the task required. That's the next frontier for
-  self-healing agents.
+  such as acting on a request the customer never made. Many could be caught by checking each change
+  against what the customer asked for and the policy. That's the next frontier for self-healing
+  agents.
 
 ### Limitations
 
@@ -244,8 +244,23 @@ replies stopped training early. It scored 14.5 of 30, below Arm B's 17.0.
 
 ### What's next
 
-The next step is a reward that judges decisions as well as structure, and scores whole
-conversations rather than single turns. We'd love to hear how others approach it.
+We plan to widen what counts as a hallucination, from made-up tools and values to made-up
+*intent*. Three kinds of decision error can be caught from the conversation and the policy alone:
+
+* **changes nobody asked for**, such as a cancellation the customer never requested;
+* **acting without confirmation**, when the policy requires the customer to say yes first;
+* **breaking a written policy rule**, which an LLM judge given the policy can check.
+
+Others still need the answer key: errors of judgement where the conversation is ambiguous, steps
+the agent skipped, and stopping too early. These are reasoning mistakes, not made-up information.
+
+The plan: sort the 37 failures by hand to size the opportunity; build a detector for the three
+kinds above and check it against τ²-bench's verdicts; use it as a **guard** that blocks a flagged
+change and has the agent ask the customer first, rather than as a reward the model can game; and
+evaluate on fresh tasks, with the rule written down first. We'll also try **more than one
+teacher**, to cover tasks GLM-5.3-Flash can't solve and to show the student more than one correct
+path. The full plan is in [Future work](https://github.com/CharlieGalvin/lexsi-labs-reflexive-agent/blob/main/docs/FUTURE_WORK.md).
+We'd love to hear how others approach it.
 
 **Everything is public:**
 
