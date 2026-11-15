@@ -290,12 +290,13 @@ It ends by checking that every number it recomputed appears in this post exactly
 Thanks to **Lexsi Labs** for the hackathon and the stack. Two notes from using it:
 
 * **AgentTune:** its `FailureDetector` sees only tool calls, so it misses loops made of repeated
-  replies; we added a turn-level monitor for those. `lexsi_provenance.json` worked well as the
+  replies; we added a turn-level monitor for those, and the detector could watch the agent's messages too. `lexsi_provenance.json` worked well as the
   lineage record for every adapter we published.
 * **AuditKIT:** its outcome oracle agreed with τ²-bench's own verdicts on all 600 test conversations.
   Its `agent_loop_detection` counts near-identical replies, such as repeated goodbyes, as loops, so it
   couldn't separate the untuned and healed agents (125 and 126 of 200) where our classifier could
-  (49% and 27%).
+  (49% and 27%). Ignoring short closing messages, or counting only repeated tool
+  calls, would fix this.
 
 ### Citation
 
