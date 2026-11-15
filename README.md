@@ -199,18 +199,24 @@ between splits, since τ²-bench tasks within a domain share tools and policy by
 | Conversations with a Tool or Arg hallucination (our classifier) | ↓ | The failure we heal: a tool the agent lacks, or an invented argument |
 | Conversations with a loop (our classifier) | ↓ | Repeated or already-failed calls and replies |
 | Tool-call validity (AuditKIT) | ↑ | Track 3's tool-call accuracy: well-formed calls to real tools |
-| Redundant tool calls (AuditKIT) | ↓ | Wasted calls |
-| Steps and seconds per conversation | ↓ | Efficiency and latency |
+| Seconds per conversation | ↓ | Latency: how long a customer waits for the whole conversation |
 
-| Test split | Untuned (A) | Healed (B) |
-|---|---:|---:|
-| Tool-call validity (AuditKIT) | 72.2% | **97.6%** |
-| Redundant tool calls (AuditKIT) | 16.0% | 18.4% |
-| Steps per conversation, median | 11 | 18 |
-| Seconds per conversation, median | 44 | 74 |
+**Tool-call accuracy** (AuditKIT's tool-call validity: the tool exists and every argument matches its
+schema), test split:
 
-Steps rise because the healed agent works through tasks it used to abandon. Latency isn't a like-for-like
-comparison: A ran on Cohere's API and B self-hosted on one H100 with vLLM.
+| | All | Retail | Airline | Telecom |
+|---|---:|---:|---:|---:|
+| Untuned (A) | 72.2% | 98.8% | 97.7% | 32.8% |
+| **Healed (B)** | **97.6%** | **100%** | **99.9%** | **94.1%** |
+
+The gain is in telecom, where the untuned agent kept calling tools that only the customer can use
+on their own phone. Validity checks the form of a call, not its content, so an invented but
+well-formed value (such as `email="something@example.com"`) passes it; our classifier's Arg findings
+catch those.
+
+**Latency:** the healed agent's median conversation takes **74 seconds** (retail 61, airline 80,
+telecom 85), self-hosted on one H100 with vLLM. The untuned arms ran on Cohere's hosted API, so their
+times aren't a like-for-like comparison.
 
 ## Training setup
 
