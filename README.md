@@ -16,6 +16,7 @@ teacher's verified fix, and keeps the update only if it passes a gate.*
 [![Model on HF](https://img.shields.io/badge/🤗_Model-sft--aya32b--r16--v2-ffcc4d?style=flat-square)](https://huggingface.co/reagent-lexsi/sft-aya32b-r16-v2)
 [![Dataset on HF](https://img.shields.io/badge/🤗_Dataset-tau2--golden--trajectories-ffcc4d?style=flat-square)](https://huggingface.co/datasets/reagent-lexsi/tau2-golden-trajectories)
 [![Blog post](https://img.shields.io/badge/🤗_Read-the_blog_post-ff6b35?style=flat-square)](https://huggingface.co/blog/cg3849/reflexive-agents)
+[![Play Spot the hallucination](https://img.shields.io/badge/🔎_Play-Spot_the_hallucination-7c5cd6?style=flat-square)](https://huggingface.co/spaces/reagent-lexsi/spot-the-hallucination)
 
 [Overview](#overview) • [Results](#results) • [How it works](#how-it-works) • [Experiments](#experiments) • [Get started](#get-started) • [Models and data](#models-and-data) • [Resources](#resources)
 
@@ -239,6 +240,7 @@ results/*.metrics.json   committed evidence for the demo
 ## Resources
 
 - **[Blog post on Hugging Face](https://huggingface.co/blog/cg3849/reflexive-agents):** the project, told end to end ([source](docs/blog/reflexive-agents.md)).
+- **[Spot the hallucination](https://huggingface.co/spaces/reagent-lexsi/spot-the-hallucination):** a three-round game with real agent moments from our test runs. Is the agent bluffing?
 - **[Experiments, in order](docs/experiments/README.md)** and **[every run](docs/EXPERIMENTS.md)**.
 - **[τ²-bench](https://github.com/sierra-research/tau2-bench)** and the Lexsi Labs stack:
   [AgentTune](https://github.com/Lexsi-Labs/AgentTune), [AuditKIT](https://github.com/Lexsi-Labs/AuditKIT),
