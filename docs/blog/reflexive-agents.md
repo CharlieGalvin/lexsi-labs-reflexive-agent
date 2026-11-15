@@ -32,6 +32,8 @@ gate. We built this loop on [τ²-bench](https://github.com/sierra-research/tau2
 
 ![The self-healing loop, animated. The student agent, Aya Expanse 32B with a LoRA adapter, fails a conversation. 1, Detect: a classifier finds the failing turn and flags an invented argument, email="something@example.com". 2, Fix: the teacher rewrites the turn as "Could you confirm your email?". 3, Retrain: the student trains on 146 verified conversations. 4, Gate: dev success rises from 11% to 60%, so the new adapter is promoted and the student moves from adapter v1 to v2.](img/heal-loop.gif)
 
+*Figure 1. The self-healing loop. When the agent fails a conversation, a classifier finds where it went wrong (1, Detect), a stronger teacher model writes the correct version (2, Fix), the agent trains on those corrections (3, Retrain), and the new version replaces the old one only if it does better on a fixed set of tasks (4, Gate).*
+
 ### The idea, without the jargon
 
 Picture a new trainee on a customer help desk. They're quick and polite, but under pressure they
@@ -50,7 +52,7 @@ stronger model, and the manager is a benchmark with a rulebook fixed in advance.
 
 ### The loop: detect, fix, retrain, gate
 
-The animation at the top shows one turn of the loop:
+Figure 1, at the top of this post, shows one turn of the loop:
 
 1. **Detect.** A classifier finds the first failing turn and its type: Tool, Arg or Loop.
 2. **Fix.** The teacher sees the conversation exactly as the student did, up to that turn, and
@@ -89,9 +91,11 @@ conversation:
 
 ![Three failure types. Tool: the agent calls a tool it doesn't have, such as check_apn_settings(), a phone tool only the customer can run. Arg: it invents an argument, a placeholder, made-up or ill-typed value such as email="something@example.com". Loop: it repeats itself, sending the same failed call, the same call or the same reply, such as one failing call sent 9 times.](img/failure-types.png)
 
+*Figure 2. The three kinds of hallucination our classifier looks for.*
+
 On the test split, the untuned student had a Tool or Arg failure in **95% of conversations**.
 
-Think you'd catch them? Here are three real moments from our test runs:
+Think you'd catch them? Here are three real moments from our test runs, retold in plain words:
 
 <iframe src="https://reagent-lexsi-spot-the-hallucination.static.hf.space" frameborder="0" width="100%" height="820"></iframe>
 
@@ -113,6 +117,8 @@ dev**. We declared this version as **Arm B** and ran it on the 100 test tasks, a
 untuned student (**Arm A**) and the careful prompt (**Arm C**):
 
 ![Test results by domain. Task success for arms A, C and B: all 100 tasks 14.5%, 13% and 51.5%; retail 12.5%, 10% and 60%; airline 17.5%, 20% and 30%; telecom 15%, 12.5% and 53.8%. Conversations with a Tool or Arg hallucination: 95%, 95.5% and 10%. Test split, 100 tasks × 2 samples. Success: Arm A 14.5%, Arm C 13.0%, Arm B 51.5%; Conversations with a Tool or Arg failure: Arm A 95.0%, Arm C 95.5%, Arm B 10.0%; Conversations with a loop: Arm A 49.0%, Arm C 49.5%, Arm B 27.0%.](img/test-results.png)
+
+*Figure 3. Results on the 100 test tasks. Top: tasks solved, overall and by domain. Bottom: conversations with at least one hallucination. A is the untuned agent, C the same agent told to be careful, and B the agent after healing.*
 
 **Arm B beats Arm A by 37 points** (95% range +28 to +46). The gain is largest in retail and
 telecom, and smallest in airline, where the remaining failures are policy decisions rather than
@@ -274,6 +280,8 @@ just reproduce            # or: python scripts/blog/reproduce.py
 ```
 
 ![Terminal output of just reproduce 2. Experiment 2 of 5: Can you just tell it to be careful? Success: Arm A 14.5%, Arm C 13.0%, a difference of −1.5 points (−7.0 to +4.0). Tool or Arg failure: 95.0% and 95.5%. Loop: 49.0% and 49.5%. Result: no clear difference, the 95% range of C − A includes zero. Asking nicely doesn't work.](img/reproduce-output.png)
+
+*Figure 4. One of the five experiments, recomputed by `just reproduce` from the saved results.*
 
 It ends by checking that every number it recomputed appears in this post exactly as written.
 
