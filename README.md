@@ -18,7 +18,7 @@ teacher's verified fix, and keeps the update only if it passes a gate.*
 [![Blog post](https://img.shields.io/badge/🤗_Read-the_blog_post-ff6b35?style=flat-square)](https://huggingface.co/blog/cg3849/reflexive-agents)
 [![Play Spot the hallucination](https://img.shields.io/badge/🔎_Play-Spot_the_hallucination-7c5cd6?style=flat-square)](https://huggingface.co/spaces/reagent-lexsi/spot-the-hallucination)
 
-[Overview](#overview) • [Results](#results) • [How it works](#how-it-works) • [Experiments](#experiments) • [Get started](#get-started) • [Models and data](#models-and-data) • [Resources](#resources)
+[Overview](#overview) • [Results](#results) • [How it works](#how-it-works) • [Experiments](#experiments) • [Get started](#get-started) • [Models and data](#models-and-data) • [Future work](#future-work) • [Resources](#resources)
 
 ![The self-healing loop, animated: detect the failing turn, a teacher rewrites it, retrain on verified fixes, promote only if better](docs/blog/img/heal-loop.gif)
 
@@ -227,6 +227,22 @@ results/*.metrics.json   committed evidence for the demo
 ```
 
 </details>
+
+## Future work
+
+Healing hallucinations took the agent from 14.5% to 51.5%. Most of what's left are decision errors:
+in 37 of the healed agent's 55 failed dev and validation conversations, the classifier finds no
+hallucination. Next, we plan to:
+
+- **Widen what counts as a hallucination** to made-up intent: changes nobody asked for, acting
+  without the customer's confirmation, and breaking a written policy rule. All three can be caught
+  from the conversation and the policy, without the answer key.
+- **Use the new detector as a guard**, blocking a flagged change and having the agent ask the
+  customer first, rather than as a reward the model can game.
+- **Learn from more than one teacher**, to cover tasks GLM-5.3-Flash can't solve and show the
+  student more than one correct path.
+
+The week-by-week plan, and the questions to answer first, are in [`docs/FUTURE_WORK.md`](docs/FUTURE_WORK.md).
 
 ## Feedback for Lexsi Labs
 

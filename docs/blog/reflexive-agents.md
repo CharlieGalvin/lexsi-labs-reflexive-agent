@@ -226,9 +226,9 @@ replies stopped training early. It scored 14.5 of 30, below Arm B's 17.0.
   gone, the remaining failures were about what to change, and when: in 37 of Arm B's 55 failed dev
   and validation conversations, the classifier finds no hallucination at all. A loop that heals
   hallucinations has nothing left to fix there. Some of these are hallucinations in a wider sense,
-  such as acting on a request the customer never made, but they can't be seen in the transcript
-  alone: catching them means knowing what the task required. That's the next frontier for
-  self-healing agents.
+  such as acting on a request the customer never made. Many could be caught by checking each change
+  against what the customer asked for and the policy. That's the next frontier for self-healing
+  agents.
 
 ### Limitations
 
