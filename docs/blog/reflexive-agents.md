@@ -95,7 +95,7 @@ conversation:
 
 On the test split, the untuned student had a Tool or Arg failure in **95% of conversations**.
 
-Think you'd catch them? Here are three real moments from our test runs, retold in plain words:
+Think you'd catch them? Here are three moments based on our test runs, simplified for anyone to play:
 
 <iframe src="https://reagent-lexsi-spot-the-hallucination.static.hf.space" frameborder="0" width="100%" height="820"></iframe>
 
