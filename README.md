@@ -30,9 +30,9 @@ closed loop that turns those failures into training data, built for the Lexsi La
 Alignment Hackathon (Track 3: Agentic Fine-tuning) on the Lexsi Labs stack.
 
 > [!IMPORTANT]
-> **The healed agent solves 51.5% of τ²-bench's test tasks, against 14.5% before healing**, and
-> conversations with a hallucinated tool or argument fall from **95% to 10%**. A "be careful"
-> prompt changed nothing (13.0%).
+> **Hallucinations fall from 95% to 10% of conversations, and the agent solves 3.5× as many tasks**
+> (14.5% → 51.5% of τ²-bench's test split, a hard public benchmark). A "be careful not to
+> hallucinate" prompt changed nothing (13.0%).
 
 ## Overview
 
