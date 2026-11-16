@@ -453,8 +453,8 @@ The week-by-week plan (which would commence only after the hack has finished), a
 ## Declaration of work done outside the hackathon
 
 All the work in this repo was done during the hackathon, from the first commit on 2 Nov 2026 to the
-deadline. It uses third-party code as-is (τ²-bench, AgentTune, AuditKIT, TRL, vLLM) and the public
-Aya Expanse 32B and GLM-5.3-Flash models.
+deadline. It uses third-party code as-is (τ²-bench, AgentTune, AuditKIT, TRL, vLLM), the public Aya
+Expanse 32B model, and GLM-5.3-Flash and GPT-4.1 through their APIs.
 
 ## Feedback for Lexsi Labs
 
