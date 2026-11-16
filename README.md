@@ -446,9 +446,9 @@ time and compute, we would:
   candidate for the detector above.
 - **Evaluate on fresh tasks**, with the rule written down first, since this project's test split is
   used: new held-out τ²-bench tasks or a second tool-use benchmark.
-- **Check general ability before and after training.** Run benchmarks away from the task, such as
-  instruction following (IFEval), general knowledge (MMLU) and maths (GSM8K), on the base model and
-  the healed one with the same settings, through AuditKIT. This shows whether healing cost the model
+- **Check general ability before and after training.** Run a few standard benchmarks away from the
+  task (instruction following, general knowledge, maths) on the base model and the healed one with
+  the same settings, through AuditKIT. This shows whether healing cost the model
   anything elsewhere, and it might show side benefits: an agent that stops inventing values and
   repeating itself may do better on other tool-use and reasoning tasks too.
 

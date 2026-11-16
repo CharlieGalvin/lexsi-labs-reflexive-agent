@@ -81,10 +81,10 @@ Healing trains the student on customer-service conversations only. We didn't che
 changed what it can do elsewhere. Next time, run a few benchmarks away from the task on the base
 model and on the healed adapter, with the same settings, through AuditKIT:
 
-* **Instruction following:** IFEval.
-* **General knowledge:** MMLU (or Global-MMLU for other languages, since Aya is multilingual).
-* **Maths and reasoning:** GSM8K.
-* **Another tool-use benchmark**, such as BFCL, to see whether less hallucination carries over.
+* **Instruction following.**
+* **General knowledge**, in more than one language, since Aya is multilingual.
+* **Maths and reasoning.**
+* **Another tool-use benchmark**, to see whether less hallucination carries over.
 
 Report both scores for each, with intervals. Two outcomes matter: a drop is a cost to state
 alongside the gain (training on one domain often costs some maths), and a rise would be a side
