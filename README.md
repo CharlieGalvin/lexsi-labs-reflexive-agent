@@ -448,7 +448,7 @@ time and compute, we would:
   used: new held-out τ²-bench tasks or a second tool-use benchmark, plus a check that general
   abilities don't drop.
 
-The week-by-week plan, and the questions to answer first, are in [`docs/FUTURE_WORK.md`](docs/FUTURE_WORK.md).
+The week-by-week plan (which would commence only after the hack has finished), and the questions to answer first, are in [`docs/FUTURE_WORK.md`](docs/FUTURE_WORK.md).
 
 ## Declaration of work done outside the hackathon
 
