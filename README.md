@@ -450,13 +450,6 @@ time and compute, we would:
 
 The week-by-week plan, and the questions to answer first, are in [`docs/FUTURE_WORK.md`](docs/FUTURE_WORK.md).
 
-**Expected before → after** (a forecast, not a result). The guard targets the 37 failures with no
-hallucination, about two thirds of what's left. If it prevents a third of them without blocking
-correct changes, we'd expect test success to rise from **51.5% to roughly 57–62%**, with hallucination
-rates unchanged. More teachers would mainly add the train tasks GLM-5.3-Flash can't solve (20 of
-178); we'd expect a smaller gain, of a few points. Either would need fresh test tasks to claim, since
-this project's test split is used.
-
 ## Declaration of work done outside the hackathon
 
 All the work in this repo was done during the hackathon, from the first commit on 2 Nov 2026 to the
