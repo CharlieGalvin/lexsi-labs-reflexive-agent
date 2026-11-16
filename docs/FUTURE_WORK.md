@@ -75,8 +75,26 @@ only verified fixes; train with and without the extra teachers on the same budge
 held-out tasks. Watch for mixed styles (one teacher's tool-call habits contradicting another's) and
 cost: a thinking model writes many more tokens per turn.
 
+## Check general ability before and after
+
+Healing trains the student on customer-service conversations only. We didn't check whether that
+changed what it can do elsewhere. Next time, run a few benchmarks away from the task on the base
+model and on the healed adapter, with the same settings, through AuditKIT:
+
+* **Instruction following:** IFEval.
+* **General knowledge:** MMLU (or Global-MMLU for other languages, since Aya is multilingual).
+* **Maths and reasoning:** GSM8K.
+* **Another tool-use benchmark**, such as BFCL, to see whether less hallucination carries over.
+
+Report both scores for each, with intervals. Two outcomes matter: a drop is a cost to state
+alongside the gain (training on one domain often costs some maths), and a rise would be a side
+benefit worth testing further. An agent that stops inventing values and repeating failed calls
+might do better on other tool-use and reasoning tasks too. Plan for a few GPU hours, and decide the
+benchmarks and the rule before running them.
+
 ## Questions to answer first
 
 * How many of the 37 are each kind of failure? (Day 1 decides the rest of the week.)
 * How often does the detector flag a pass? A guard that blocks correct changes costs tasks.
 * Does a second teacher add tasks, or only more copies of tasks already covered?
+* Did healing change general ability, up or down?

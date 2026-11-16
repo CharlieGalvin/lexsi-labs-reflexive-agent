@@ -445,8 +445,12 @@ time and compute, we would:
   student more than one correct path. Where teachers disagree on a decision, the task is a good
   candidate for the detector above.
 - **Evaluate on fresh tasks**, with the rule written down first, since this project's test split is
-  used: new held-out τ²-bench tasks or a second tool-use benchmark, plus a check that general
-  abilities don't drop.
+  used: new held-out τ²-bench tasks or a second tool-use benchmark.
+- **Check general ability before and after training.** Run benchmarks away from the task, such as
+  instruction following (IFEval), general knowledge (MMLU) and maths (GSM8K), on the base model and
+  the healed one with the same settings, through AuditKIT. This shows whether healing cost the model
+  anything elsewhere, and it might show side benefits: an agent that stops inventing values and
+  repeating itself may do better on other tool-use and reasoning tasks too.
 
 The week-by-week plan (which would commence only after the hack has finished), and the questions to answer first, are in [`docs/FUTURE_WORK.md`](docs/FUTURE_WORK.md).
 
