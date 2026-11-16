@@ -456,6 +456,14 @@ All the work in this repo was done during the hackathon, from the first commit o
 deadline. It uses third-party code as-is (τ²-bench, AgentTune, AuditKIT, TRL, vLLM), the public Aya
 Expanse 32B model, and GLM-5.3-Flash and GPT-4.1 through their APIs.
 
+## Changelog
+
+| Version | Submitted | Changes |
+|---|---|---|
+| 3 | Mon 16 Nov | README covers every required item in the write-up guidance: abstract, title and claim, tracks and problem statements, kits used and how they connect, data, splits and leak check, all metrics with per-request latency, training setup, limitations, discussion, forecast, collections, declaration, appendix |
+| 2 | Sun 15 Nov, about 13:00 | Hallucination-first headline (95% → 10%) in the abstract, README and social preview; article upgraded (before/after example, limitations, citation, captions) with the Spot the hallucination demo; future-work plan |
+| 1 | Sat 14 Nov, 16:40 | First submission: code, healed model, dataset and article; headline on task success (14.5% → 51.5%) |
+
 ## Feedback for Lexsi Labs
 
 - **AgentTune:** `FailureDetector` sees only tool calls, so it misses text-only loops (repeated
