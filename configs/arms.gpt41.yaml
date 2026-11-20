@@ -1,0 +1,32 @@
+# Arm GPT (SEL-86): GPT-4.1 as the agent, a closed-model reference for the ROI comparison. It trains
+# nothing and isn't a candidate. Same harness, tasks, samples and customer (GPT-4.1) as arms A, B, C;
+# only the agent differs. GPT-4.1 plays both agent and customer: say so wherever it's reported.
+#
+#   python scripts/arms/rollout.py GPT retail --split dev --limit 2 --config configs/arms.gpt41.yaml   # pilot
+#   python scripts/arms/rollout.py GPT retail --split test --samples 2 --config configs/arms.gpt41.yaml
+#
+# Native tool calling: how GPT-4.1 is used in practice and on τ²-bench's own leaderboard (Aya uses the
+# "prompted" Action: format of the data contract; forcing that on GPT-4.1 would handicap it).
+# Cost: records keep the token counts; the harness prices them at Aya's rates, so cost per
+# conversation is recomputed from the tokens at OpenAI's list price for this snapshot.
+
+student:
+  name: gpt-4.1
+  model: gpt-4.1-2025-04-14     # pinned snapshot, the same one the customer uses
+  api_base: https://api.openai.com/v1
+  api_key_env: OPENAI_API_KEY
+  mode: native
+  style: cohere                 # unused in native mode
+  temperature: 0.0
+  max_tokens: 1024
+  max_context: 128000           # as Arm A (Cohere's limit), so no arm gets a longer memory
+  reserve: 4096
+  rpm: 0
+
+customer: null                  # GPT-4.1, as for every arm
+
+arms:
+  GPT:
+    name: gpt-4.1-reference
+    description: "GPT-4.1 as the agent (native tool calls): the closed-model reference for ROI, SEL-86"
+    prompt_variant: default
