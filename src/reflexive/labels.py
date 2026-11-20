@@ -162,10 +162,10 @@ def confusion_report(
     }
 
 
-def agreement_report(
-    a: Mapping[Hashable, Hashable],
-    b: Mapping[Hashable, Hashable],
-    clusters: Mapping[Hashable, Hashable] | None = None,
+def agreement_report[K: Hashable, L: Hashable](
+    a: Mapping[K, L],
+    b: Mapping[K, L],
+    clusters: Mapping[K, Hashable] | None = None,
     reps: int = REPS,
     seed: int = 0,
 ) -> dict:
@@ -175,10 +175,10 @@ def agreement_report(
     keys = [clusters[i] for i in shared] if clusters is not None else None
     groups = _groups(pairs, keys)
 
-    def kappa(xs: list[tuple[Hashable, Hashable]]) -> float | None:
+    def kappa(xs: list[tuple[L, L]]) -> float | None:
         return cohen_kappa([x for x, _ in xs], [y for _, y in xs])
 
-    def agree(xs: list[tuple[Hashable, Hashable]]) -> float | None:
+    def agree(xs: list[tuple[L, L]]) -> float | None:
         return sum(x == y for x, y in xs) / len(xs) if xs else None
 
     return {
