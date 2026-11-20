@@ -14,7 +14,7 @@ ms = load_script("labels/make_sheets")
 def rec(task: str, passed: bool, *, arg: bool = False, loop: bool = False, tool: bool = False) -> dict:
     """A tiny retail conversation; optionally with an invented email (ARG), a repeated failed call
     (LOOP) or a call to a tool the agent doesn't have (TOOL)."""
-    view = [
+    view: list[dict] = [
         {"role": "system", "content": "policy"},
         {"role": "user", "content": "Hi, I want to return an order. My name is Ann Lee, zip 12345."},
     ]
