@@ -1,0 +1,94 @@
+diff --git a/methods/agents/literature_review_agent.py b/methods/agents/literature_review_agent.py
+index f449b11..6be70e6 100644
+--- a/methods/agents/literature_review_agent.py
++++ b/methods/agents/literature_review_agent.py
+@@ -462,7 +462,7 @@ class HybridLiteratureAgent:
+             """
+ 
+         response_dict = call_gemini_with_contents(
+-            model_name="gemini-3-flash-preview",
++            model_name="gemini-3.8-flash",
+             contents=[prompt],
+             generation_configs={
+                 "tools": [self.google_search_tool],
+diff --git a/utils/content_parsing_utils.py b/utils/content_parsing_utils.py
+index 5ecb819..11bf823 100644
+--- a/utils/content_parsing_utils.py
++++ b/utils/content_parsing_utils.py
+@@ -37,7 +37,7 @@ def extract_paper_title_from_citation(citation_text: str):
+     instruction = extract_title_prompt_template.format(citation_text=citation_text)
+     response_dict = call_gemini_with_text_prompt(
+         prompt=instruction,
+-        model_name="gemini-3-flash-preview",
++        model_name="gemini-3.8-flash",
+         check_parsed_response_not_none=False,
+     )
+     return response_dict["raw_response"].strip()
+diff --git a/utils/gemini_utils.py b/utils/gemini_utils.py
+index a3ef680..c859cd4 100644
+--- a/utils/gemini_utils.py
++++ b/utils/gemini_utils.py
+@@ -155,6 +155,53 @@ def parse_gemini_json_latex_response(response_text: str) -> Dict[str, Any]:
+     return json.dumps(result)
+ 
+ 
++# --- SEL-90 shim: route Gemini calls to OpenAI when no Gemini credentials are set ---
++OPENAI_WRITER = os.environ.get("PO_OPENAI_MODEL", "gpt-5.5")
++OPENAI_SEARCH = os.environ.get("PO_OPENAI_SEARCH_MODEL", "gpt-5-search-api")
++
++
++def _no_gemini():
++    return not (os.environ.get("GEMINI_API_KEY") or (os.environ.get("VERTEX_AI_PROJECT") and os.environ.get("VERTEX_AI_LOCATION")))
++
++
++def _parts_to_openai(contents):
++    import base64 as _b64, tempfile, pymupdf  # type: ignore
++    out = []
++    for c in contents if isinstance(contents, list) else [contents]:
++        if isinstance(c, str):
++            out.append({"type": "text", "text": c}); continue
++        if getattr(c, "text", None) is not None:
++            out.append({"type": "text", "text": c.text}); continue
++        blob = getattr(c, "inline_data", None)
++        if blob is not None and blob.mime_type == "application/pdf":
++            doc = pymupdf.open(stream=blob.data, filetype="pdf")
++            out.append({"type": "text", "text": "PDF of the current draft (extracted text):\n" + "".join(pg.get_text() for pg in doc)})
++        elif blob is not None and blob.mime_type.startswith("image/"):
++            out.append({"type": "image_url", "image_url": {"url": f"data:{blob.mime_type};base64,{_b64.b64encode(blob.data).decode()}"}})
++        else:
++            raise TypeError(f"shim: unsupported part {type(c)}")
++    return out
++
++
++def _call_openai_instead(contents, model_name, result_parsing_func, generation_configs, check_parsed_response_not_none, max_retries, base_interval_sec):
++    from utils.openai_utils import call_openai_models_with_content
++    cfg = dict(generation_configs or {})
++    system = cfg.pop("system_instruction", None)
++    uses_search = bool(cfg.pop("tools", None))
++    cfg.pop("temperature", None)
++    cfg = {}
++    model = OPENAI_SEARCH if uses_search else (model_name if "gpt" in model_name.lower() else OPENAI_WRITER)
++    if uses_search:
++        cfg = {"web_search_options": {}}
++    print(f"   [shim] {model_name} -> OpenAI {model}{' (web search)' if uses_search else ''}")
++    return call_openai_models_with_content(
++        content=_parts_to_openai(contents), model_name=model, max_retries=max_retries,
++        base_interval_sec=base_interval_sec, result_parsing_func=result_parsing_func,
++        generation_configs=cfg, check_parsed_response_not_none=check_parsed_response_not_none,
++        system_prompt=system,
++    )
++
++
+ def call_gemini_with_contents(
+     contents: types.Content,
+     model_name: str,
+@@ -168,6 +215,9 @@ def call_gemini_with_contents(
+     Calls the Gemini API (text-only) with retry logic and exponential backoff.
+     """
+ 
++    if _no_gemini() or "gpt" in model_name.lower():
++        return _call_openai_instead(contents, model_name, result_parsing_func, generation_configs, check_parsed_response_not_none, max_retries, base_interval_sec)
++
+     raw_response = None
+     parsed_response = None
+ 

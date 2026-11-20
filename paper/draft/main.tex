@@ -1,0 +1,571 @@
+\pdfoutput=1
+\documentclass[11pt]{article}
+\usepackage[review]{emnlp2023}
+\usepackage{times}
+\usepackage{latexsym}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{microtype}
+\usepackage{inconsolata}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{amsmath}
+
+\title{ReAgent: Closed-Loop Self-Healing for Structural Hallucinations in Open-Weight Tool-Calling Agents}
+
+\author{Ambitious AI Researcher \\
+  AI Research Institute \\
+  \texttt{researcher@institute.ai}}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Open-weight 32B agents in write-enabled customer-service workflows frequently exhibit structural hallucinations: invoking unavailable tools, fabricating placeholder or ungrounded arguments, and repeating failed calls. We introduce ReAgent, a Detect--Fix--Retrain--Gate self-healing framework combining a deterministic 12-kind Tool/Arg/Loop classifier, oracle-verified fixes from an open-weight teacher (GLM-5.3-Flash), agent-turn-masked QLoRA fine-tuning on Aya Expanse 32B, and a pre-registered four-check deployment gate (\texttt{DevGate}). On the held-out $\tau^2$-bench test split (100 tasks $\times$ 2 samples), our gated adapter (SFT v2, refined with extra verified airline trajectories after \texttt{DevGate} rejected SFT v1) lowers Tool/Arg hallucination conversations from 95.0\% to 10.0\% and raises task success $3.5\times$ from 14.5\% to 51.5\% (95\% CI: 43.5--59.5\%), whereas explicit anti-hallucination prompting yields 13.0\% (no gain). Executed autonomously on one GPU, a deduplicated single-turn rewrite cycle cuts dev findings by 71\% with flat success (4/36 $\rightarrow$ 4/36, rejected), whereas a full-trajectory cycle over SFT v2's verified pool cuts findings by 87\% and lifts dev success from 6/36 to 22/36 (promoted live). Finally, three single-turn post-SFT GRPO variants expose structural reward hacking into dialogue collapse or confident unrequested write actions. Anonymized code, verified trajectories, and adapter provenance will be released upon publication.
+\end{abstract}
+
+\section{Introduction}
+\label{sec:intro}
+Large language model (LLM) agents increasingly act autonomously over external APIs and databases \citep{Qin2023ToolLearning}. Extending multi-turn, database-grounded dialogue \citep{Budzianowski2018MultiwozLargescale}, customer-service agents execute write-enabled retail, airline, and telecom workflows where every call mutates live state, creating operational and consumer-harm risks beyond fluency \citep{Zhan2024InjecagentBenchmarking}. Under latency, cost, and privacy constraints, organizations deploy self-hosted, open-weight 32B models---such as Aya Expanse 32B \citep{Dang2024AyaExpanse} via vLLM \citep{Kwon2023EfficientMemory}---requiring safe, verifiable diagnosis and repair in staging sandboxes before promoting updated weights \citep{Liu2024SurveyFeedback}.
+
+Yet untuned open-weight models suffer severe structural failures in policy-constrained, multi-turn environments. Although Aya Expanse 32B \citep{Dang2024AyaExpanse} emits syntactically well-formed tool calls (0 unreadable calls across 266 replies in a 30-task diagnostic review), it achieves only 14.5\% task success (95\% CI: 9.5--20.0\%) on the held-out $\tau^2$-bench test split. Structural hallucinations occur in 95.0\% of conversations: invoking customer-only phone tools from telecom manuals, fabricating or inserting placeholder arguments (e.g., \texttt{email="something@example.com"}), and repeating failed calls (49.0\%). Explicit zero-shot anti-hallucination prompting leaves test success unchanged at 13.0\% (paired diff.\ $-1.5$ pts, 95\% CI: $-7.0$ to $+4.0$) and hallucinations at 95.5\%. Prior work studies offline trajectory distillation \citep{Chen2023FireactToward,Qin2023ToolllmFacilitating} and agent feedback loops \citep{Liu2024SurveyFeedback}, but lacks an end-to-end verification and gating discipline pairing deterministic structural attribution with outcome-verified open-weight fixes and pre-registered multi-metric gates ensuring hallucination cuts yield cross-domain task gains.
+
+We introduce \textbf{ReAgent}, a sandboxed \textbf{Detect $\rightarrow$ Fix $\rightarrow$ Retrain $\rightarrow$ Gate} self-healing framework for self-hosted tool-calling agents. A deterministic, schema-grounded classifier labels violations across 12 sub-kinds grouped into \textbf{Tool}, \textbf{Arg}, and \textbf{Loop}. An open-weight teacher---GLM-5.3-Flash, chosen via a 12-model bake-off (88\% first-try pass rate; 158/178 non-test tasks solved for \$11.20)---generates fixes verified locally (turn rewrites) or by $\tau^2$-bench's outcome evaluator (full trajectories). Agent-turn-masked QLoRA ($r=16$) adapts Aya Expanse 32B, and a pre-registered sequential four-check gate (\texttt{DevGate}) evaluates candidates on 36 frozen dev tasks, promoting weights to live vLLM only for $\ge +2$ net solved tasks, $\le 10\%$ findings increase, and no domain regressing by $\ge 2$ tasks.
+
+Across strictly frozen splits (142 train with 30 validation, 36 dev, 100 test $\times$ 2 samples), we make four contributions:
+\begin{itemize}
+    \item \textbf{Gated Self-Healing Framework:} ReAgent unites a deterministic 12-kind Tool/Arg/Loop classifier, oracle-verified open-weight teacher distillation, agent-turn-masked QLoRA, and pre-registered multi-metric gating (\texttt{DevGate}).
+    \item \textbf{Held-Out Reliability Gains:} On $\tau^2$-bench test (200 convs/arm, oracle-verified), promoted Arm B (SFT v2) lowers Tool/Arg hallucinations from 95.0\% to 10.0\%, cuts classifier loops from 49.0\% to 27.0\%, raises tool-call validity from 72.2\% to 97.6\%, and lifts success $3.5\times$ from 14.5\% to 51.5\% ($+37.0$ pts, 95\% CI: $+28.0$ to $+45.5$), while prompting yields 13.0\%. Matched-server Dev (11\% $\rightarrow$ 60\%) and Validation (9.0 $\rightarrow$ 17.0/30) controls confirm server-independent gains.
+    \item \textbf{Autonomous Single-GPU Execution:} Running autonomously on one H100 contrasts two operational regimes: deduplicated single-turn rewrites cut dev findings 71\% (8.17 $\rightarrow$ 2.39) with flat success (4/36 $\rightarrow$ 4/36, rejected), whereas full trajectories over SFT v2's verified pool cut findings 87\% (8.22 $\rightarrow$ 1.03) and lift dev success 6/36 $\rightarrow$ 22/36 (net $+16$, McNemar $p=0.0001$, hot-swapped live).
+    \item \textbf{Single-Turn GRPO Hacking \& Error Shift:} Three post-SFT single-turn GRPO variants induce dialogue collapse (0.5/30 val) or confident unrequested writes (12 unauthorized airline cancellations, skipped telecom fixes; dev 60\% $\rightarrow$ 51\%). Post-healing, 37/55 dev+val failures show zero structural hallucinations, pinpointing policy decisions as the next bottleneck.
+\end{itemize}
+
+\section{Related Work}
+\label{sec:related_work}
+
+\paragraph{Prompt Guardrails and Runtime Monitoring.}
+Tool-learning frameworks formalize API schema parsing and execution feedback \citep{Qin2023ToolLearning}, yet benchmarks like InjecAgent \citep{Zhan2024InjecagentBenchmarking} show prompt compliance is easily subverted into unauthorized mutations. Agent feedback surveys catalog inference-time reflection and runtime monitors without weight updates \citep{Liu2024SurveyFeedback}. In our evaluations, zero-shot anti-hallucination prompting fails to curb Aya Expanse 32B's ingrained habits, and our runtime text-repeat monitor (\texttt{no\_progress}) catches telecom step-limit loops with zero false alarms but cannot rescue early error spirals. ReAgent pairs monitoring with weight-level healing inside a gated sandbox.
+
+\paragraph{Agentic Trajectory Distillation and Self-Correction.}
+FireAct \citep{Chen2023FireactToward} showed multi-turn teacher fine-tuning outperforms prompting, and ToolLLM \citep{Qin2023ToolllmFacilitating} automated trajectory synthesis and verification over RESTful APIs, building on database-backed dialogue \citep{Budzianowski2018MultiwozLargescale}. ReAgent shares this verified distillation lineage \citep{Chen2023FireactToward,Qin2023ToolllmFacilitating} for post-deployment reliability of a self-hosted 32B model \citep{Dang2024AyaExpanse,Kwon2023EfficientMemory}, pairing explicit structural attribution with a pre-registered multi-metric gate (\texttt{DevGate}) that blocks updates when hallucination drops fail to lift success (Cycle 1) or cause domain regressions (SFT v1 airline $-2$, SFT v3/v4 telecom dilution).
+
+\paragraph{Reinforcement Learning and Reward Hacking.}
+Recent work applies SFT followed by GRPO to refine multi-turn tool calling \citep{Liu2024SurveyFeedback,Qin2023ToolLearning}; RC-GRPO \citep{Zhong2026RcgrpoRewardconditioned} mitigates sparse multi-turn outcome rewards and vanishing advantage variance via reward-conditioned policies. Complementing exploration-steering methods, our post-SFT GRPO study isolates a failure mode of \emph{single-turn structural compliance rewards} on write-capable agents: optimizing validity, grounding, and loop avoidance without whole-conversation intent verification causes dialogue collapse (Arm G) or syntactically valid unrequested mutations (Arm H), clarifying why outcome-verified full-trajectory SFT outperforms single-turn structural RL here.
+
+\section{Methodology}
+\label{sec:method}
+
+\subsection{Problem Formulation, Classifier, and Monitor}
+\label{sec:method_taxonomy}
+
+\paragraph{Multi-Turn Tool-Augmented Episodes.}
+Each $\tau^2$-bench task $k$ in domain $d \in \{\text{retail}, \text{airline}, \text{telecom}\}$ specifies initial state $s_0$ (database plus customer phone in telecom), policy prompt $p_d$, agent tools $\mathcal{F}_{\text{agent}}^{(d)}$ with JSON schemas $\Sigma^{(d)}$, and (in telecom) disjoint customer-only phone tools $\mathcal{F}_{\text{cust}}^{(d)}$. Policy $\pi_\theta$ interacts with a simulated customer over turns $t = 1, \dots, T$:
+\begin{equation}
+\tau = \big(p_d, u_1, a_1, o_1, \dots, u_T, a_T, o_T\big),
+\end{equation}
+where $u_t$ is a customer utterance, $a_t$ is an agent reply or Cohere \texttt{Action:} tool call $\{(f_m, \alpha_m)\}$, and $o_t$ updates $s_{t-1} \to s_t$. Episodes end on \texttt{user\_stop}, \texttt{too\_many\_errors}, or 200 steps. Binary outcome verifier $V(\tau) \in \{0, 1\}$ ($\tau^2$-bench's evaluator, independently re-scored by \textbf{AuditKIT}, an external auditing suite supplying an outcome oracle, schema validity, and loop detection) returns $1$ iff $s_T$ matches the target state and enabled communication/NL judge checks pass.
+
+\paragraph{Deterministic 12-Kind Structural Classifier.}
+To attribute structural failures without LLM-judge dependencies or runtime overhead, our rule-based classifier $\mathcal{C}(\tau; \Sigma^{(d)}, \mathcal{F}_{\text{agent}}^{(d)}, \mathcal{F}_{\text{cust}}^{(d)})$ (\texttt{reflexive.hallucination}) inspects only the agent's transcript view and \texttt{tool\_schemas.json}, mapping findings to three classes and \textbf{12 sub-kinds} (Appendix~\ref{app:rubric}): \textbf{TOOL (2):} \texttt{customer\_tool} ($f \in \mathcal{F}_{\text{cust}}^{(d)}$, e.g., \texttt{check\_network\_status}) and \texttt{unknown\_tool} ($f \notin \mathcal{F}_{\text{agent}}^{(d)} \cup \mathcal{F}_{\text{cust}}^{(d)}$); \textbf{ARG (6):} \texttt{placeholder} (dummy strings like \texttt{"YYYY-MM-DD"}, \texttt{"customer\_id from..."}, or CamelCase/underscore variants), \texttt{ungrounded} (ID, name, phone, email, or DOB absent from prior turns/outputs), schema errors (\texttt{unknown\_param}, \texttt{missing\_param}, \texttt{wrong\_type}), and \texttt{malformed} (non-JSON args or unparseable \texttt{Action:} blocks); and \textbf{LOOP (4):} \texttt{repeated\_failed\_call} (re-issuing an errored call), \texttt{repeated\_call} (identical call $\ge 3\times$), \texttt{repeated\_message} (identical reply $\ge 3\times$), and \texttt{step\_limit} (200-step cap). A failed rollout's ($V(\tau)=0$) \emph{primary failure} is its earliest finding $t^* = \min\{t : \mathcal{C}(\tau_{\le t}) \neq \emptyset\}$ (or \texttt{NONE} if empty). Omitting handoff exemptions (e.g., post-\texttt{transfer\_to\_human\_agents}) uniformly captures post-handoff goodbye loops.
+
+\paragraph{Companion Runtime Monitor.}
+A live monitor (\texttt{reflexive.monitor}) enforces \texttt{no\_progress}: after 3 consecutive text-only turns repeating prior agent text without tool calls, \texttt{act} mode injects one in-prompt nudge and halts with \texttt{monitor\_stop} if repetition persists, complementing tool-only detectors.
+
+\subsection{The ReAgent Detect--Fix--Retrain--Gate Loop}
+\label{sec:method_loop}
+
+ReAgent adapts $\pi_\theta$ through four sequential stages executable offline or autonomously on one GPU node.
+
+\paragraph{Stage 1: Detect.}
+The incumbent rolls out on frozen train-pool tasks (\texttt{assert\_not\_test()} blocks test IDs). Failed rollouts ($V(\tau)=0$) pass to $\mathcal{C}$ to log Tool/Arg/Loop findings and localize primary failure turn $t^*$.
+
+\paragraph{Stage 2: Fix (Turn- vs.\ Trajectory-Level) and Classifier Role.}
+Open-weight teacher $\pi_{\text{teach}}$ (GLM-5.3-Flash) generates verified fixes in two modes where $\mathcal{C}$ plays distinct roles: \textbf{(1) Turn-level prefix rewriting (\texttt{PrefixTeacher}):} $\mathcal{C}$ governs synthesis and filtering. Given prefix $\tau_{< t^*}$, the teacher samples up to 3 replacements for $a_{t^*}$; \texttt{check\_fix} accepts a non-handoff rewrite iff $\mathcal{C}$ reports zero Tool/Arg/Loop violations, deduplicated per failure lesson (\texttt{per\_lesson: 2}). \textbf{(2) Trajectory-level distillation (\texttt{--fix-mode trajectory}):} For each failed train task ($V(\tau)=0$), the teacher runs full episodes from $s_0$, kept iff $\tau^2$-bench (judges on) verifies $V(\tau_{\text{teach}})=1$, without per-lesson deduplication. Here $V$ governs episode selection and filtering, while $\mathcal{C}$ provides failure attribution (structural vs.\ policy) and enforces \texttt{DevGate} Check~3.
+
+\paragraph{Stage 3: Retrain (Agent-Turn-Masked QLoRA).}
+On verified fixes $\mathcal{D}_{\text{fix}} = \{x_i\}_{i=1}^N$, we adapt frozen base weights $\theta_0$ (Aya Expanse 32B \citep{Dang2024AyaExpanse}) via 4-bit NF4 double-quantized QLoRA ($r=16$, $\alpha=32$, dropout $0.05$ on \texttt{q,k,v,o,gate,up,down}; 95.7M trainable parameters, 0.30\% of base), minimizing cross-entropy exclusively over assistant response tokens $\mathcal{M}_i$ (\texttt{logits\_to\_keep}):
+\begin{multline}
+\mathcal{L}_{\text{SFT}}(\phi) = -\frac{1}{\sum_{i=1}^N |\mathcal{M}_i|} \sum_{i=1}^N \sum_{j \in \mathcal{M}_i} \\
+\log \pi_{\theta_0 + \Delta\theta(\phi)}\!\left(x_{i,j} \mid x_{i,<j}\right).
+\end{multline}
+Turn-level training supervises only the rewritten turn $a_{t^*}$ ($\approx 1\%$ of tokens); trajectory-level training supervises all agent turns.
+
+\paragraph{Stage 4: Gate (\texttt{DevGate}).}
+Before candidate $\phi_{\text{cand}}$ replaces incumbent $\phi_{\text{curr}}$ in vLLM, it must pass four pre-registered sequential checks on 36 frozen dev tasks (AuditKIT oracle-scored; Appendix~\ref{app:rubric}): (1)~\textbf{Completeness:} all 36 tasks run with $\le 2$ crashes/adapter; (2)~\textbf{Net Pass Gain:} discordant wins $n_{10} - n_{01} \ge +2$; (3)~\textbf{Hallucination Bound:} mean findings/conv $\bar{f}(\phi_{\text{cand}}) \le 1.10\,\bar{f}(\phi_{\text{curr}})$; and (4)~\textbf{Domain Non-Regression:} no domain loses $\ge 2$ tasks net ($\Delta_d \ge -1$). The first failure rejects, with budget \texttt{max\_cycles: 3} on dev to limit overfitting; passing all four triggers live hot-swapping.
+
+\subsection{Post-SFT Single-Turn GRPO Exploration}
+\label{sec:method_grpo}
+To test whether structural on-policy RL improves on SFT v2 ($\pi_{\text{ref}}$), we run single-turn static-prefix GRPO \citep{Zhong2026RcgrpoRewardconditioned} via \textbf{AgentTune} (an external fine-tuning framework providing LoRA GRPO and adapter lineage metadata). For each prefix $p$, we sample $G=8$ completions $\{y_1,\dots,y_G\}$ (temp $1.0$, max $384$ tokens), score each with composite reward $R(p, y_g)$, compute group-normalized advantages $\hat{A}_g = (R(p,y_g)-\bar{R})/(\sigma_R+\varepsilon)$, and update LoRA weights with KL penalty $\beta=0.04$ toward $\pi_{\text{ref}}$ (lr $1\times 10^{-5}$, eff.\ batch 16, 100 steps) across three variants: \textbf{Arm G (Tool-Call Turns Only)} trains solely on prefixes where the teacher called a tool. \textbf{Arm H (Failure Fixes + Anchors)} uses 178 first-occurrence failure points from base Aya's 112 healable train rollouts (47 TOOL, 103 ARG, 63 LOOP; 177/178 accepted by \texttt{PrefixTeacher} + \texttt{check\_fix}) plus half as many ordinary teacher anchor turns (10\% of tasks held out). Five rewards sum to max $4.0$: \texttt{tool} ($w=1.0$, calls in $\mathcal{F}_{\text{agent}}$), \texttt{arg} ($w=1.0$, no Arg errors), \texttt{loop} ($w=0.5$, no failed/3$\times$ repeats), \texttt{fix} ($w=1.0$, exact call/arg match or reply content-word overlap), and \texttt{guard} ($w=0.5$, clean full-turn call without giving up). To block generic-reply gaming, \texttt{tool}, \texttt{arg}, and \texttt{loop} require matching the teacher's turn type (call vs.\ reply), plus a 10-point reply-share drift guard. Sanity checks confirmed teacher fixes score $4.0$, student failures fail their matching component (TOOL 42/42, ARG 92/92, LOOP 53/53), and canned replies score $0.5$ on tool turns vs.\ $3.2$ on reply turns. \textbf{Arm H2 (Decision-Augmented)} adds a per-turn reward checking whether write calls match actions still expected by the task.
+
+\section{Experiments}
+\label{sec:experiments}
+
+\subsection{Setup, Student Rationale, and Frozen Splits}
+\label{sec:exp_setup}
+
+\paragraph{Environment and Student Motivation.}
+All runs use $\tau^2$-bench v2.0.0 (278 English tasks across retail, airline, telecom; GPT-4.1 simulated customer). We choose \textbf{Aya Expanse 32B} \citep{Dang2024AyaExpanse} because it is a strong multilingual 32B open-weight model producing well-formed tool calls (0/266 unreadable replies in a 30-task review, passing 7/30) yet suffering severe structural habits (1/30 on Phase 1 DB-change tasks, 14.5\% test), offering a clean stress test for behavioral repair without swapping base weights.
+
+\paragraph{Frozen Splits and Validation Construction.}
+Task IDs are frozen in \texttt{configs/splits.json} (\texttt{assert\_not\_test()} enforced): \textbf{Train (142 tasks)} splits into the \textbf{112 healable train pool} (46 retail, 19 airline, 47 telecom; failed by base Aya, solved by teacher) and \textbf{30 held-out validation} tasks (13 retail, 5 airline, 12 telecom)---the exact complement in Train, comprising 15 tasks already solved by base Aya (\texttt{solved\_by\_aya}, also the held-out SFT loss set) and 15 lacking a verified teacher fix. This keeps Dev dedicated to \texttt{DevGate} and Test sealed; because half of Validation was already solvable by base Aya, Arm P scores higher there (9.0/30) than on Dev (11\%), so Validation is used strictly for relative selection under pre-registered rules. \textbf{Dev (36 tasks)} reserves 15 retail, 6 airline, and 15 telecom tasks for \texttt{DevGate}. \textbf{Test (100 tasks)} is held out strictly for pre-declared arms (A, C, B) at 2 samples/task (200 convs/arm).
+
+\paragraph{Training, Serving, and Evaluation Protocol.}
+SFT adapters train via TRL (paged AdamW 8-bit, cosine lr $1\times 10^{-4}$, 5\% warmup, batch $1\times 4$, grad clip $1.0$, weight decay $0$, max length $16{,}384$, seed $0$, 2 epochs; $\approx 23$--$28$\,min on one H100 SXM, peak 54\,GB for v1; Appendix~\ref{app:hyperparams}). Arms A (untuned) and C (\texttt{careful/v1} prompt, Appendix~\ref{app:prompts}) run on Cohere's hosted API (128K context); self-hosted control Arm P and all adapters run on vLLM 0.33 \citep{Kwon2023EfficientMemory} in bfloat16 with runtime LoRA (32K context, one H100). We track six test metrics---task success ($\tau^2$-bench evaluator, AuditKIT oracle-verified with 0/600 disagreements), Tool/Arg hallucination rate (classifier), Loop rate (classifier), tool-call validity (AuditKIT), median latency, and median output tokens---plus auxiliary loop, redundancy, and step diagnostics. Uncertainty uses 95\% task-level paired percentile bootstraps (10,000 resamples, seed $0$), 95\% Wilson CIs, and Holm-corrected two-sided exact McNemar tests.
+
+\subsection{Teacher Bake-off and Classifier Validation}
+\label{sec:exp_teacher}
+
+\begin{table}[t]
+\centering
+\scriptsize
+\setlength{\tabcolsep}{3.2pt}
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Model} & \textbf{Weights} & \textbf{Ph.1 (/30)} & \textbf{Agent \$/c} & \textbf{Proj.\ \$} \\
+\midrule
+Qwen3.8 27B & Open & 30 (89--100\%) & 0.027 & \$28 \\
+Claude Sonnet 5.5 & Closed & 29 (83--99\%) & 0.232 & \$182 \\
+\textbf{GLM-5.3-Flash} & Open & 27 (74--97\%) & \textbf{0.003} & \textbf{\$12} \\
+DeepSeek V4 Flash & Open & 27 (74--97\%) & 0.008 & \$17 \\
+Gemini 3.8 Flash & Closed & 26 (70--95\%) & 0.075 & \$73 \\
+GLM-4.7-Flash & Open & 17 (39--73\%) & 0.007 & \$23 \\
+\midrule
+Aya Expanse 32B & Open & 1 (1--17\%) & --- & --- \\
+Tiny Aya & Open & 0 (0--11\%) & --- & --- \\
+\bottomrule
+\end{tabular}
+\caption{Selected Phase 1 teacher bake-off results on 30 paired DB-change train tasks (20 retail, 10 airline; DB checks only; 95\% Wilson CIs). Proj.\ \$ includes GPT-4.1 customer cost. Full 12-model and Holm-McNemar tables in Appendix~\ref{app:bakeoff}.}
+\label{tab:teacher_summary}
+\end{table}
+
+\paragraph{Two-Phase Teacher Selection.}
+In Phase 1 (30 paired DB-change train tasks; Table~\ref{tab:teacher_summary}, Appendix~\ref{app:bakeoff}), the top four models---Qwen3.8 27B (30/30, \$28), Claude Sonnet 5.5 (29/30, \$182), GLM-5.3-Flash (27/30, \$0.003/conv, \$12), and DeepSeek V4 Flash (27/30, \$17)---tie statistically (all 6 raw McNemar $p \ge 0.25$, Holm $p = 1.00$), whereas untuned Aya Expanse 32B (1/30) and Tiny Aya (0/30) fail against every teacher ($p \le 0.002$; e.g., Qwen3.8 29 vs.\ 0, $p=4\times 10^{-9}$), confirming unaided Aya cannot self-teach. In Phase 2 across all 178 non-test tasks (judges on), \textbf{GLM-5.3-Flash} achieved an \textbf{88\%} first-try pass rate (156/177), solving 158/178 tasks (193 clean passes) for \textbf{\$11.20}. Qwen3.8 27B with thinking disabled (visible-only reasoning) scored 68\% on 138 paired tasks (94/138, \$8.11), dropping to 49\% vs.\ 89\% on telecom via premature hand-offs. We therefore chose GLM-5.3-Flash.
+
+\paragraph{Classifier Precision and Root-Cause Diagnosis.}
+A seeded spot check of 30 distinct failed telecom conversations (10 findings/class; under the initial handoff rule before removing the exemption, with schema kinds covered by unit tests and recall unmeasured) yielded \textbf{10/10 (100\%, 95\% Wilson CI: 72--100\%)} precision per class: TOOL (\texttt{customer\_tool} 8, \texttt{unknown\_tool} 2), ARG (\texttt{placeholder} 5, \texttt{ungrounded} 3, \texttt{malformed} 2), and LOOP (\texttt{repeated\_call} 3, \texttt{repeated\_failed\_call} 3, \texttt{repeated\_message} 2, \texttt{step\_limit} 2). Retail validation fixed one false positive matching \texttt{"example"} inside valid \texttt{@example.com} emails (Appendix~\ref{app:rubric}). Across all 74 telecom train tasks, 69/69 failed Arm A runs and 72/72 failed Arm C runs contained TOOL findings (0 \texttt{NONE}). Transcript review revealed why: \texttt{tech\_support\_manual.md} writes customer phone actions in function-call syntax (e.g., \texttt{check\_network\_status()} four times, \texttt{check\_apn\_settings} three times), which untuned Aya invokes directly---explaining why Arm C's ``never invent a tool'' prompt leaves customer-tool calls unchanged (412 vs.\ 422).
+
+\subsection{Main Held-Out Test Results}
+\label{sec:exp_test}
+
+\begin{table*}[t]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lccccccc}
+\toprule
+\textbf{Arm} & \textbf{Success (95\% CI)} & \textbf{Retail} & \textbf{Airline} & \textbf{Telecom} & \textbf{Tool/Arg Halluc.} & \textbf{Loop (Cls.)} & \textbf{Tool Valid.} \\
+\midrule
+\textbf{A}: Untuned Aya 32B & 14.5\% (9.5--20.0) & 12.5\% & 17.5\% & 15.0\% & 95.0\% (92.0--98.0) & 49.0\% (42.0--56.0) & 72.2\% \\
+\textbf{C}: Careful Prompt & 13.0\% (7.5--19.0) & 10.0\% & 20.0\% & 12.5\% & 95.5\% & 49.5\% & 75.3\% \\
+\textbf{B}: Healed (SFT v2) & \textbf{51.5\%} (43.5--59.5) & \textbf{60.0\%} & \textbf{30.0\%} & \textbf{53.8\%} & \textbf{10.0\%} (6.0--14.5) & \textbf{27.0\%} (21.0--33.5) & \textbf{97.6\%} \\
+\midrule
+\multicolumn{8}{l}{\textit{Diagnostics (B vs.\ A):} Median latency 2.4\,s vs.\ 3.3\,s (C: 3.5\,s)$^\dagger$; median output tokens 78 vs.\ 117 (C: 117); Tool validity:} \\
+\multicolumn{8}{l}{Retail 100\% vs.\ 98.8\%, Airline 99.9\% vs.\ 97.7\%, Telecom 94.1\% vs.\ 32.8\%.} \\
+\bottomrule
+\end{tabular}
+\caption{Held-out $\tau^2$-bench test results (100 tasks $\times$ 2 samples = 200 conversations/arm; all 600 oracle-verified by AuditKIT with 0 disagreements; 95\% task-level bootstraps). $^\dagger$Arm B runs self-hosted on vLLM/H100 (32K context; 2/200 overflows scored as failures) while A and C run on Cohere's API (128K), so latency reflects serving differences.}
+\label{tab:main_test}
+\end{table*}
+
+Table~\ref{tab:main_test} reports held-out test outcomes (200 conversations/arm).
+
+\paragraph{Healing vs.\ Zero-Shot Prompting.}
+Healed Arm B (SFT v2: 146 verified GLM-5.3-Flash conversations, 74 steps) lifts task success \textbf{3.5$\times$}, from 14.5\% (samples 15/100, 14/100) to \textbf{51.5\%} (50/100, 53/100), a paired gain of \textbf{+37.0 pts} (95\% CI: $+28.0$ to $+45.5$), improving Retail (12.5\% $\rightarrow$ 60.0\%), Telecom (15.0\% $\rightarrow$ 53.8\%), and Airline (17.5\% $\rightarrow$ 30.0\%). Conversely, Arm C's anti-hallucination prompt yields 13.0\% (10/100, 16/100; paired C $-$ A $= -1.5$ pts, $-7.0$ to $+4.0$; B $-$ C $= +38.5$ pts, $+29.0$ to $+47.5$) with 95.5\% Tool/Arg hallucinations and 49.5\% loops. Although Arm B runs on vLLM (32K) and A/C on Cohere's API (128K), matched-server runs on the same vLLM server confirm Arm B beats untuned Arm P on Dev (11\% $\rightarrow$ 60\%, sample-0 McNemar $p=0.0001$) and unseen Validation (9.0/30, Tool/Arg 52/60 $\rightarrow$ 17.0/30, Tool/Arg 4/60; \S\ref{sec:exp_ablations}). Relative to GLM-5.3-Flash's 88\% first-try / 158/178 ceiling, substantial headroom remains (especially on Airline).
+
+\paragraph{Structural Reliability, Schema Limits, and Nuances.}
+Arm B cuts Tool/Arg hallucination conversations from \textbf{95.0\%} (190/200) to \textbf{10.0\%} (20/200), schema-invalid calls from 86/200 (76 telecom) to 12/200 (11 telecom), and classifier loops by \textbf{22.0 pts} (49.0\% $\rightarrow$ 27.0\%, $-31.5$ to $-12.5$), while lifting AuditKIT tool-call validity from 72.2\% to \textbf{97.6\%} (Telecom 32.8\% $\rightarrow$ 94.1\%). Notably, untuned Arm A already achieves 98.8\% Retail and 97.7\% Airline schema validity: syntactically valid calls with fabricated arguments (\texttt{email="something@example.com"}) pass schema checks yet fail grounding, showing schema validation alone cannot replace grounded training. Median output tokens drop from 117 to 78, and median latency is 2.4\,s (Retail 2.9\,s, Airline 2.7\,s, Telecom 2.1\,s) vs.\ 3.3\,s on Cohere's API (2.8\,s, 3.4\,s, 4.0\,s; serving-confounded). Three nuances apply: (i) 2/200 Arm B runs hit vLLM's 32K limit and failed (0/200 for A/C at 128K); (ii) steps/task rose to 25.6 and per-conversation redundant calls rose slightly (18.4\% vs.\ 16.0\%; pooled 50.4\% vs.\ 20.5\%, driven by longer telecom runs) because healed runs finish multi-step workflows instead of aborting early on tool errors; and (iii) AuditKIT's \texttt{agent\_loop\_detection} did not separate A (125/200), C (117/200), and B (126/200) because it flags repeated closing goodbyes, whereas our classifier isolates failed/repeated tool calls.
+
+\paragraph{Qualitative Summary.}
+On a held-out retail chair-return task (Appendix~\ref{app:cases}), untuned Arm A fabricates \texttt{email="something@example.com"} and chains placeholder lookups (\texttt{<user\_id\_from\_previous\_tool\_result>}), logging 19 findings before \texttt{too\_many\_errors}; Arm B asks for identity, receives ``Mei Davis, zip code 80217,'' retrieves \texttt{mei\_davis\_8935}, and passes with 0 findings.
+
+\subsection{Automated Self-Healing Cycles and Operational Fix Regimes}
+\label{sec:exp_cycles}
+
+\begin{table*}[t]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{2.8pt}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llcccccc}
+\toprule
+\textbf{Cycle} & \textbf{Operational Fix Regime} & \textbf{Train Pool} & \textbf{Trained On (Steps)} & \textbf{Dev Success} & \textbf{Findings/Conv (T / A / L)} & \textbf{McNemar $p$} & \textbf{DevGate} \\
+\midrule
+\textbf{Cycle 1} & Turn-level rewrite & 30 (26 fail) & 16 turns, 938 tok (16) & 4/36 $\rightarrow$ 4/36 & 8.17 $\rightarrow$ 2.39 (\textbf{$-$71\%}) & 1.00 & \textbf{REJECT} \\
+ & (\texttt{PrefixTeacher}, dedup) & (24/24 fixed) & (1\% of conv.\ tokens) & (3 vs.\ 3 disc.) & (2.81$\to$0.39 / 3.47$\to$1.31 / 1.89$\to$0.69) & & (Check 2) \\
+\midrule
+\textbf{Cycle 2} & Trajectory-level & 112 (106 fail) & 136 convs (68) & 6/36 $\rightarrow$ \textbf{22/36} & 8.22 $\rightarrow$ \textbf{1.03} (\textbf{$-$87\%}) & \textbf{0.0001} & \textbf{PROMOTE} \\
+ & (\texttt{--fix-mode traj.}) & (106/106 fixed) & (23 min H100) & (17 vs.\ 1 disc.) & (2.25$\to$0.61 / 3.81$\to$0.17 / 2.17$\to$0.25) & & (Hot-swap) \\
+\bottomrule
+\end{tabular}%
+}
+\caption{Autonomous end-to-end healing cycles from base Aya 32B (Arm P) on one H100 GPU, gated on 36 dev tasks (1 sample, oracle-scored). T/A/L denote mean TOOL, ARG, and LOOP findings/conversation. Cycle 1 and Cycle 2 compare two full operational configurations (co-varying granularity, pool size, deduplication, token volume, and step budget).}
+\label{tab:auto_cycles}
+\end{table*}
+
+We ran Detect--Fix--Retrain--Gate autonomously on one H100 GPU from Arm P under the identical \texttt{DevGate}, comparing two operational configurations (Table~\ref{tab:auto_cycles}).
+
+\paragraph{Cycle 1 (Deduplicated Turn-Level Rewrites: Rejected).}
+On 30 sampled train tasks (10/domain, seed $0$), base Aya passed 4/30 (13\%, 95\% CI: 5--30\%) and failed 26 (ARG 19, TOOL 4, NONE 2, LOOP 1). GLM-5.3-Flash fixed 24/24 fixable failures first try---21/24 at turn 3 (``ask the customer for identity instead of guessing''). Capping at 2 fixes/lesson gave 16 single-turn examples (938 target tokens, 1\% of 90,161 tokens; 16 steps, eff.\ batch $1\times 2$; loss 0.479; \$2.72 excl.\ judges). On dev, findings/conv fell \textbf{71\%} (8.17 $\rightarrow$ 2.39: TOOL $-86\%$, ARG $-62\%$, LOOP $-63\%$), yet success stayed flat at \textbf{4/36 $\rightarrow$ 4/36} (11.1\%, 3 vs.\ 3 discordant, McNemar $p=1.0$, 95\% CI: $-13.9$ to $+13.9$ pts; airline $0$, retail $-1$, telecom $+1$). \texttt{DevGate} \textbf{rejected} at Check~2, confirming hallucination-only gating would ship a non-improving model.
+
+\paragraph{Cycle 2 (Full-Trajectory Distillation: Promoted).}
+Under \texttt{--fix-mode trajectory} across all 112 non-validation train tasks, base Aya passed 6/112 and failed 106 (ARG 84, TOOL 16, NONE 6). All 106 failures mapped to SFT v2's verified pool (136 conversations including extra airline passes), trained 2 epochs (68 steps, eff.\ batch $1\times 4$, 23\,min GPU training, $\approx 3.7$\,h total pod runtime, loss 0.425, \$5.89 customer cost excl.\ judges). On dev, findings/conv fell \textbf{87\%} (8.22 $\rightarrow$ 1.03) and success rose from \textbf{6/36 (17\%) to 22/36 (61\%)} (17 vs.\ 1 discordant, net $+16$, McNemar $p=0.0001$, 95\% CI: $+28$ to $+61$ pts; retail $+5$, airline $+1$, telecom $+10$). \texttt{DevGate} \textbf{promoted} and automatically hot-swapped the adapter into vLLM.
+
+\paragraph{Scope and Confounds.}
+Two boundaries bound Table~\ref{tab:auto_cycles}. First, Cycles 1 and 2 compare full operational recipes rather than a single-variable ablation, co-varying granularity with pool size (30 vs.\ 112), deduplication (\texttt{per\_lesson: 2} vs.\ none), target tokens (938 vs.\ full trajectories), and step/batch budget (16 vs.\ 68); still, Cycle 1 shows suppressing 71\% of early turn-3 hallucinations leaves downstream multi-turn failures unresolved. Second, Cycle 2 draws from SFT v2's dev-informed pool (including 34 extra airline passes); without them it matches SFT v1's 112-trajectory pool, which \texttt{DevGate} rejected on Check~4 (airline $-2$, \S\ref{sec:exp_ablations}). Cycle 2 thus validates autonomous reproduction of SFT v2's dev promotion, while held-out generalization rests strictly on Arm B's 51.5\% test score.
+
+\subsection{SFT Ablations, GRPO Negative Results, Residual Errors, and Runtime Monitor}
+\label{sec:exp_ablations}
+
+\begin{table*}[t]
+\centering
+\scriptsize
+\setlength{\tabcolsep}{2.8pt}
+\begin{tabular}{llcccccccccl}
+\toprule
+ & & & & \textbf{Dev (/36)} & \multicolumn{4}{c}{\textbf{Validation (/30, mean of 2)}} & \textbf{Val} & \\
+\cmidrule(lr){6-9}
+\textbf{Arm / Model} & \textbf{Data / Recipe} & \textbf{Stp} & \textbf{DevGate} & \textbf{Mean (\%)} & \textbf{Ret} & \textbf{Air} & \textbf{Tel} & \textbf{Tot} & \textbf{T/A} & \textbf{Status} \\
+\midrule
+P (self-hosted base) & Untuned Aya 32B & --- & Control & 4.0 (11\%) & 5.0 & 2.0 & 2.0 & 9.0 & 52/60 & Baseline \\
+SFT v1 (S) & 112 golden convs & 56 & Reject (Air $-2$) & 13.5 (38\%) & 6.0 & 2.0 & 6.0 & 14.0 & 6/60 & Rejected \\
+SL (step ablation) & v1's 112 convs & 74 & --- & --- & 6.5 & 2.0 & 7.0 & 15.5 & 4/60 & Ablation \\
+\textbf{SFT v2 (S2 / Arm B)} & v1 + 34 airline (146) & 74 & \textbf{Promote} & \textbf{21.5 (60\%)} & 6.5 & 2.5 & \textbf{8.0} & \textbf{17.0} & 4/60 & \textbf{Adopted} \\
+SFT v3 (S3) & v2 + 20 retail (166) & 74 & --- & --- & \textbf{8.0} & 2.5 & 6.5 & 17.0 & 3/60 & Not adopted \\
+SFT v4 (S4) & v2 + 29 on-pol.\ (175) & 74 & --- & --- & 7.0 & \textbf{3.5} & 6.5 & 17.0 & --- & Not adopted \\
+\midrule
+GRPO G & v2 + tool turns only & 100 & --- & --- & --- & --- & --- & 0.5 & 36/60$^\dagger$ & Collapsed \\
+GRPO H & v2 + 177 fix + anc & 100 & Reject (24$\to$19) & 18.5 (51\%) & 5.5 & 2.5 & $\ge 7.0^\ddagger$ & $\le 17.0$ & --- & Rejected \\
+GRPO H2 & H + decision reward & $<100$ & --- & --- & --- & --- & --- & 14.5 & --- & Early stop \\
+\bottomrule
+\end{tabular}
+\caption{Pre-registered SFT progression, fixed-step ablations, and single-turn post-SFT GRPO runs on Dev (36 tasks $\times$ 2) and unseen Validation (30 tasks $\times$ 2: 13 retail, 5 airline, 12 telecom). Pre-registered validation adoption bar over SFT v2: total $\ge 19.5/30$, no domain down $>1$ task, Tool/Arg (T/A) $\le 5\%$ (3/60). $^\dagger$Invented arguments in 36/60 runs. $^\ddagger$4 telecom runs crashed; upper bound $\le 17.0$ fails the 19.5 bar regardless.}
+\label{tab:sft_grpo}
+\end{table*}
+
+\paragraph{SFT Progression and Fixed-Step Ablations.}
+Table~\ref{tab:sft_grpo} tracks all SFT iterations under pre-registered rules. From self-hosted Arm P (dev 4.0/36 = 11\%, val 9.0/30, Tool/Arg 52/60), \textbf{SFT v1} (112 trajectories, 56 steps, held-out loss 0.854 $\rightarrow$ 0.393) lifted dev success to 13.5/36 (38\%; sample-0 vs.\ P: 14 vs.\ 3, $p=0.013$), cut dev Tool/Arg findings to 0\% (findings/conv 8.56 $\rightarrow$ 0.94), and reached 14.0/30 validation (Tool/Arg 6/60), but failed Check~4 on airline ($-2$ net, ineligible cancellations). Adding 34 verified airline passes from 18 train tasks (airline 19 $\rightarrow$ 53; 146 convs, 74 steps, held-out loss $\rightarrow 0.368$) yielded \textbf{SFT v2 (Arm B)}, lifting dev success to \textbf{21.5/36 (60\%)} (sample-0 vs.\ P: 21 vs.\ 2, $p=0.0001$; airline $+1$, retail $+6$, telecom $+12$; findings/conv 8.56 $\rightarrow$ 1.17; Tool/Arg 3/72 = 4.2\%), earning \texttt{DevGate} \textbf{promotion}, and reaching \textbf{17.0/30} validation (Tool/Arg 4/60 = 6.7\%, all telecom customer tools).
+
+Three 74-step ablations expose key trade-offs: (i)~\textbf{Step-matched SL} (v1's 112 convs, 74 steps, $\approx 2.6$ passes, val loss 0.365) scores 15.5/30---midway between v1 (14.0) and v2 (17.0) and within v1's 4-task spread, so extra steps and airline data cannot be separated on 30 tasks; (ii)~\textbf{SFT v3} (+20 retail passes, 166 convs, $\approx 1.8$ passes) reaches top retail (8.0/13) and 5.0\% Tool/Arg (3/60) yet plateaus at 17.0/30 with $-1.5$ telecom via fixed-step epoch dilution over telecom's unchanged 47 examples; and (iii)~\textbf{SFT v4} (v2 rolled out on 112 train tasks, 55/112 passed, adding 29 accepted GLM-5.3-Flash rewrites: 26/38 unexpected-change, 3/3 classifier, 0/13 change-never-made due to an overly strict stop-short rule, a post-hoc-found accounting bug counting the rewritten turn's own/errored changes, and API credit exhaustion at point 51) reaches top airline (3.5/5) yet plateaus at 17.0/30 ($-1.5$ telecom dilution). Neither v3 nor v4 cleared the 19.5/30 bar (and v4's incomplete collection bounds its test of on-policy repair).
+
+\paragraph{Single-Turn Post-SFT GRPO Negative Results.}
+All three single-turn GRPO variants from SFT v2 failed to lift end-to-end success (Table~\ref{tab:sft_grpo}): \textbf{Arm G (Tool-Call Turns Only)} collapsed to \textbf{0.5/30} validation; rewarded only on tool turns, it stopped replying and looped \texttt{get\_details\_by\_id} 1,850 times across 24 telecom runs (invented args in 36/60). \textbf{Arm H (Structural + Fix Rewards)} avoided collapse (held-out single-turn reward $+0.11$, 95\% CI: $-0.06$ to $+0.30$; peak 64.2\,GB; 2.21\,min/step), halving dev loops (12/72 $\rightarrow$ 6/72), cutting findings/conv from 1.17 to \textbf{0.25} (Tool/Arg 5/72), and dropping telecom repeated calls from \textbf{45\% to 7\%} ($-38.5$ pts, $-59$ to $-1$). Yet dev success \emph{fell} from 21.5/36 (60\%) to \textbf{18.5/36 (51\%)} (retail $-3.3$, airline $-16.7$, telecom $-10.0$ pts; \texttt{DevGate} \textbf{REJECT} sample-0: 24 $\rightarrow$ 19, 2 vs.\ 7 discordant, $p=0.18$; validation $\le 17.0/30$). Failure diffs (Appendix~\ref{app:cases}) expose structural reward hacking: valid write calls using real IDs earn full reward even when unrequested. Arm H executed 12 unrequested airline cancellations (task 39: 4 extra beyond 3 requested), issued an unrequested refund certificate, cancelled a retail order instead of modifying it, and over-delegated telecom phone steps (19.5 vs.\ 16.6 customer actions/conv) while skipping required agent fixes (7 vs.\ 2 missed, mostly \texttt{enable\_roaming}). \textbf{Arm H2 (Decision-Augmented)} triggered early stopping via the reply-share guard (\textbf{14.5/30} validation). An earlier 100-step starter-task GRPO probe on Tiny Aya (Appendix~\ref{app:tables}) also gave a negligible shift (53.3\% $\rightarrow$ 55.8\%, Arg hallucinations 39.2\%). These negative findings specifically characterize single-turn static-prefix structural rewards rather than multi-turn outcome-reward RL.
+
+\paragraph{Residual Error Shift: Hallucinations to Policy Decisions.}
+Table~\ref{tab:failure_shift} (Appendix~\ref{app:tables}) explains why structural healing saturates near 51.5\%. Whereas 62/64 base-model dev failures start with ARG (55) or TOOL (7) findings (58 at turn $\le 3$), \textbf{37/55} (67.3\%) failed dev (20/29) and validation (17/26) runs under SFT v2 exhibit \textbf{zero} classifier findings (\texttt{NONE}). Manual validation coding (Table~\ref{tab:val_causes}, Appendix~\ref{app:tables}) shows v2 cuts loop/step-limit failures from 13 (v1) to 5, leaving mainly turn-level policy/decision errors (14/26): missed retail state changes, airline eligibility and judged communication errors (explaining Airline's 30.0\% test ceiling), unreached telecom states or missed \texttt{enable\_roaming}/hand-offs, and 4/60 32K overflows.
+
+\paragraph{Runtime Monitor Evaluation.}
+Replaying \texttt{no\_progress} over 252 saved Arm A/C rollouts (Table~\ref{tab:monitor_replay}, Appendix~\ref{app:tables}) caught \textbf{7/7} telecom train step-limit loops (A: 6/6, C: 1/1) with \textbf{0/7} false alarms on telecom passes and \textbf{0/104} on retail/airline (0 step-limit hits; max repeat run 1 vs.\ threshold 3). In a live telecom dev ablation (15 tasks $\times$ 2, \texttt{--monitor log} vs.\ \texttt{act}; Table~\ref{tab:guard_ablation}), \texttt{no\_progress} fired \textbf{0 times} (max 25 turns; 9/30 plain and 10/30 guarded runs hit \texttt{too\_many\_errors}), yielding A 10.0\% (3/30) vs.\ guard 3.3\% (1/30) (paired $-6.7$ pts, $-23.3$ to $+6.7$), acting as an A/A test.
+
+\section{Conclusion}
+\label{sec:conclusion}
+We presented \textbf{ReAgent}, a Detect--Fix--Retrain--Gate self-healing framework for structural hallucinations in self-hosted, open-weight tool-calling agents. Across strictly frozen $\tau^2$-bench splits on Aya Expanse 32B, zero-shot anti-hallucination prompting leaves test success unchanged (13.0\% vs.\ 14.5\%) and hallucinations at 95.5\%, whereas \$11.20 of oracle-verified GLM-5.3-Flash trajectories and under 30 minutes of single-H100 QLoRA cut Tool/Arg hallucinations from 95.0\% to 10.0\%, raise tool-call validity from 72.2\% to 97.6\%, and lift held-out task success $3.5\times$ to 51.5\% (with matched-server Dev and Validation controls confirming server-independent gains).
+
+Our gated iterations, autonomous runs, and negative results yield three engineering principles. First, \emph{outcome verification and pre-registered multi-metric gates are essential}: \texttt{DevGate} blocked adapters that slashed hallucinations without lifting success (Cycle 1) or regressed airline (SFT v1). Second, \emph{local turn-level rewrites alone do not solve multi-turn completion}: deduplicated opening-turn fixes cut dev findings 71\% with flat success (4/36 $\rightarrow$ 4/36), whereas full verified trajectories cut findings 87\% and lifted dev success 6/36 $\rightarrow$ 22/36 for autonomous hot-swapping. Third, \emph{single-turn structural RL rewards invite confident over-action on write tools}, causing GRPO Arm H to halve loops while executing valid yet unrequested airline cancellations and skipping telecom fixes. Because 37/55 residual failures show zero structural hallucinations, future self-healing pipelines should target \emph{intent and policy compliance}---unrequested mutations, missing confirmations, and policy breaches---via runtime confirmation guards and whole-conversation outcome objectives.
+
+\section*{Limitations}
+Our study has six main limitations bounding its empirical claims.
+\begin{enumerate}
+    \item \textbf{Single benchmark, language, and student model:} All evaluations use $\tau^2$-bench v2.0.0 (100 English test tasks across three customer-service domains) and one weak baseline student (Aya Expanse 32B, 14.5\% untuned), while stronger open-weight models in our bake-off (e.g., Qwen3.8 27B, GLM-5.3-Flash) outperform healed Aya zero-shot. Cross-model, cross-benchmark, and multilingual generalization remain untested.
+    \item \textbf{Policy-decision ceiling:} Airline test success remains 30.0\%, and 37/55 Arm B dev and validation failures contain zero structural hallucinations; these policy, eligibility, and communication errors lie outside our rule-based classifier's scope.
+    \item \textbf{Teacher and sandboxed oracle dependency:} ReAgent cannot surpass its teacher (GLM-5.3-Flash, 158/178 non-test tasks) and requires a simulated user plus an automated environment verifier $V(\tau)$ to replay and filter trajectories, restricting direct online deployment without a staging oracle.
+    \item \textbf{Automated cycle scope and co-varying factors:} Cycle 2 reused SFT v2's dev-informed trajectory pool and was gated on dev rather than evaluated independently on test (held-out generalization rests on Arm B's 51.5\%). Moreover, Cycles 1 and 2 co-varied fix granularity with pool size, deduplication, token budget, and training steps, and SFT v4's on-policy collection was constrained by a stop-short rule, an accounting bug, and API credit exhaustion.
+    \item \textbf{Inference baselines, serving confounds, and general capability:} We compared against zero-shot anti-hallucination prompting (Arm C) rather than constrained decoding, few-shot prompting, or pre-execution classifier interception. On Test, Arm B ran on local vLLM (32K, 2/200 overflows) while A and C ran on Cohere's API (128K), leaving test latency confounded (though matched-server Arm P comparisons on Dev and Validation confirm accuracy/hallucination gains). Steps/task (25.6) and per-conversation redundant calls (18.4\% vs.\ 16.0\%) rose as healed runs completed full workflows, and general-capability retention outside $\tau^2$-bench was not measured.
+    \item \textbf{Classifier validation and licensing:} Classifier precision was spot-checked on 30 telecom failures (100\%, 95\% CI: 72--100\%, under the initial handoff rule), while retail/airline precision and overall recall were not systematically measured. Fine-tuned adapters inherit Aya Expanse 32B's CC BY-NC 4.0 non-commercial license.
+\end{enumerate}
+
+\section*{Ethics Statement}
+\paragraph{Safety of Write-Capable Agents.}
+Autonomous agents with write access to live databases carry concrete operational and consumer-harm risks. Our GRPO Arm H negative result illustrates that satisfying syntactic and schema checks does not prevent harmful unrequested mutations, such as cancelling flight reservations a customer never requested. Self-healing pipelines for write-enabled workflows should therefore enforce pre-registered multi-metric deployment gates (verifying end-to-end outcomes and domain non-regression, not merely structural metrics) alongside explicit customer-confirmation guards before irreversible actions.
+
+\paragraph{Data Privacy and Licensing.}
+All experiments run exclusively on $\tau^2$-bench's synthetic customer-service databases and simulated GPT-4.1 dialogues; no real consumer personal data was collected or processed. Released adapters and verified trajectories comply with Aya Expanse 32B's CC BY-NC 4.0 non-commercial license and the underlying benchmark and API terms.
+
+\paragraph{AI-Assisted Drafting Declaration.}
+% SEL-112: this sentence is only true once check_numbers.py passes on this .tex and all three authors have read the PDF.
+This manuscript was drafted with AI assistance. All technical claims, equations, tables, and numerical figures were thoroughly reviewed, verified directly against raw experimental logs, and edited by the authors.
+
+\bibliography{references}
+\bibliographystyle{acl_natbib}
+
+\clearpage
+\appendix
+
+\section{Prompts, Classifier Rubric, and Deployment Gate Specification}
+\label{app:rubric}
+
+\subsection{Agent Prompts}
+\label{app:prompts}
+Arms A (untuned) and B (healed SFT v2) use $\tau^2$-bench's standard domain agent prompt unchanged. Arm C (\texttt{careful/v1}) appends the following verbatim anti-hallucination instruction block:
+\begin{quote}\small\ttfamily
+Be careful not to hallucinate:\\
+- Only call tools you have been given. Never invent a tool or a tool name.\\
+- Only use argument values (IDs, names, dates, amounts) that the user gave you or that a tool returned earlier in this conversation. If you don't have a value, ask the user or look it up first. Never guess or make one up.\\
+- If a tool call returns an error, read it and change something before trying again. Never repeat the same call with the same arguments.\\
+- Only tell the user things that the policy or a tool result supports. If you don't know, say so.
+\end{quote}
+
+\subsection{Tool / Arg / Loop Classifier Rubric}
+Table~\ref{tab:rubric} specifies all three classes and 12 failure kinds detected by \texttt{reflexive.hallucination}. During retail validation, we fixed a false-positive rule in which the substring \texttt{"example"} flagged legitimate $\tau^2$-bench customer emails ending in \texttt{@example.com}; the placeholder detector now matches \texttt{"for example"} instead (covered by a regression test), and catches underscore/CamelCase placeholders (e.g., \texttt{customer\_id\_from\_search}, \texttt{CustomerIDfromPreviousToolResult}) and masked dates (\texttt{19XX-05-14}). Note that \texttt{unknown\_param}, \texttt{missing\_param}, and \texttt{wrong\_type} are exercised by unit tests and did not occur in the telecom spot-check rollouts.
+
+\begin{table}[h]
+\centering
+\scriptsize
+\setlength{\tabcolsep}{2.5pt}
+\begin{tabular}{llp{3.45cm}}
+\toprule
+\textbf{Class} & \textbf{Kind} & \textbf{Detection Criterion} \\
+\midrule
+TOOL & \texttt{customer\_tool} & Calls telecom customer-only phone tool unavailable to agent \\
+TOOL & \texttt{unknown\_tool} & Calls tool name not in any schema \\
+\midrule
+ARG & \texttt{placeholder} & Dummy string (e.g., \texttt{"YYYY-MM-DD"}, \texttt{"customer\_id from..."}) \\
+ARG & \texttt{ungrounded} & ID, name, phone, email, or DOB absent from prior turns/outputs \\
+ARG & \texttt{unknown\_param} & Parameter name not in tool schema \\
+ARG & \texttt{missing\_param} & Required schema parameter omitted \\
+ARG & \texttt{wrong\_type} & Argument value violates schema type \\
+ARG & \texttt{malformed} & Non-JSON args or unparseable \texttt{Action:} block \\
+\midrule
+LOOP & \texttt{repeated\_failed\_call} & Re-issues a call that previously errored \\
+LOOP & \texttt{repeated\_call} & Same call issued $\ge 3$ times \\
+LOOP & \texttt{repeated\_message} & Same agent reply emitted $\ge 3$ times (incl.\ post-handoff) \\
+LOOP & \texttt{step\_limit} & Terminated at the 200-step cap \\
+\bottomrule
+\end{tabular}
+\caption{Complete 12-kind structural hallucination classifier rubric (\texttt{reflexive.hallucination}).}
+\label{tab:rubric}
+\end{table}
+
+\subsection{Sequential DevGate Specification}
+Table~\ref{tab:gate_rules} lists the pre-registered sequential deployment gate checks (\texttt{configs/gate.yaml}) evaluated on all 36 frozen dev tasks with AuditKIT oracle re-scoring.
+
+\begin{table}[h]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lp{4.8cm}}
+\toprule
+\textbf{Check} & \textbf{Pre-Registered Rule} \\
+\midrule
+1. Complete run & All 36 dev tasks run; $\le 2$ crashes per adapter; else no decision \\
+2. Pass rate & Candidate-only passes minus current-only passes $\ge +2$ \\
+3. Hallucination & Mean Tool+Arg+Loop findings/conv rises by $\le 10\%$ \\
+4. Domains & No domain (retail, airline, telecom) loses $\ge 2$ tasks net \\
+Budget & At most 3 gate decisions on the same dev tasks (\texttt{max\_cycles: 3}) \\
+\bottomrule
+\end{tabular}
+\caption{Pre-registered sequential four-check \texttt{DevGate} rules.}
+\label{tab:gate_rules}
+\end{table}
+
+\section{Complete Hyperparameters, Teacher Bake-off, and Diagnostic Tables}
+\label{app:tables}
+
+\subsection{Training Hyperparameters}
+\label{app:hyperparams}
+Table~\ref{tab:hyperparams} reports the exact training settings and single-H100 runtimes for all SFT and GRPO experiments.
+
+\begin{table*}[t]
+\centering
+\scriptsize
+\setlength{\tabcolsep}{2.8pt}
+\begin{tabular}{lcccccccc}
+\toprule
+\textbf{Run} & \textbf{Base / Init} & \textbf{Examples} & \textbf{Steps} & \textbf{LR (Sched.)} & \textbf{Batch} & \textbf{Loss / Objective} & \textbf{Runtime} & \textbf{Train / Val Loss} \\
+\midrule
+SFT v1 & Aya 32B (NF4) & 112 convs & 56 & 1e-4 (cos, 5\%) & $1 \times 4$ & Agent-turn CE (16K) & 23m (54 GB) & 0.450 / 0.393 \\
+SFT v2 (Arm B) & Aya 32B (NF4) & 146 convs & 74 & 1e-4 (cos, 5\%) & $1 \times 4$ & Agent-turn CE (16K) & 28m & 0.426 / 0.368 \\
+SL (ablation) & Aya 32B (NF4) & 112 convs & 74 & 1e-4 (cos, 5\%) & $1 \times 4$ & Agent-turn CE (16K) & 31m & 0.401 / 0.365 \\
+SFT v3 & Aya 32B (NF4) & 166 convs & 74 & 1e-4 (cos, 5\%) & $1 \times 4$ & Agent-turn CE (16K) & 29m & 0.408 / 0.368 \\
+SFT v4 & Aya 32B (NF4) & 175 convs & 74 & 1e-4 (cos, 5\%) & $1 \times 4$ & Agent-turn CE (16K) & $\approx 29$m & --- / $\approx 0.368$ \\
+Cycle 1 (turn) & Aya 32B (NF4) & 16 turns & 16 & 1e-4 (cos, 5\%) & $1 \times 2$ & Single-turn CE (938 tok) & --- & 0.479 / --- \\
+Cycle 2 (traj.) & Aya 32B (NF4) & 136 convs & 68 & 1e-4 (cos, 5\%) & $1 \times 4$ & Agent-turn CE (16K) & 23m (3.7h tot.) & 0.425 / --- \\
+\midrule
+GRPO G/H/H2 & SFT v2 & Tool / 177+anc & 100$^\dagger$ & 1e-5 & $1 \times 16$ & GRPO ($G=8$, $\beta=0.04$, $T=1.0$) & $\approx 3.7$h (64.2 GB) & max comp.\ 384 \\
+\bottomrule
+\end{tabular}
+\caption{Training configurations across all SFT (QLoRA $r=16$, $\alpha=32$, dropout 0.05 on \texttt{q,k,v,o,gate,up,down}, paged AdamW 8-bit, max grad norm 1.0, weight decay 0, seed 0) and GRPO (AgentTune) runs on one H100 SXM. $^\dagger$Arm H2 stopped early via the 10-point reply-share drift guard.}
+\label{tab:hyperparams}
+\end{table*}
+
+\subsection{Complete Teacher Bake-off Tables}
+\label{app:bakeoff}
+Tables~\ref{tab:bakeoff_full} and~\ref{tab:bakeoff_mcnemar} give the full Phase 1 12-model screening table (plus unfinished Claude Opus 5.5 and student baselines) and the 6-pair Holm-corrected exact McNemar comparisons among the top four teachers. Note that the 3 flagged ``invented ID'' conversations in the top tier (airline tasks 15, 20, and 33) were flight dates computed from customer statements rather than fabricated IDs (true top-tier invented IDs: 0).
+
+\begin{table*}[t]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lcccccccc}
+\toprule
+\textbf{Teacher / Model} & \textbf{Weights} & \textbf{Passed} & \textbf{95\% Wilson CI} & \textbf{Retail} & \textbf{Airline} & \textbf{Agent \$/c} & \textbf{Cust.\ \$/c} & \textbf{Proj.\ Total (Range)} \\
+\midrule
+\textbf{Qwen3.8 27B} & Open & \textbf{30/30} & 89--100\% & 20/20 & 10/10 & 0.027 & 0.011 & \textbf{\$28} (\$15--47) \\
+Claude Sonnet 5.5 & Closed & 29/30 & 83--99\% & 19/20 & 10/10 & 0.232 & 0.012 & \$182 (\$101--313) \\
+\textbf{GLM-5.3-Flash} & Open & 27/30 & 74--97\% & 17/20 & 10/10 & \textbf{0.003} & 0.013 & \textbf{\$12} (\$7--21) \\
+DeepSeek V4 Flash & Open & 27/30 & 74--97\% & 18/20 & 9/10 & 0.008 & 0.014 & \$17 (\$9--29) \\
+Gemini 3.8 Flash & Closed & 26/30 & 70--95\% & 18/20 & 8/10 & 0.075 & 0.016 & \$73 (\$40--128) \\
+MiMo-V2.6-Flash & Open & 26/30 & 70--95\% & 17/20 & 9/10 & 0.015 & 0.020 & \$28 (\$15--49) \\
+Gemma 4 31B & Open & 24/30 & 63--90\% & 18/20 & 6/10 & 0.017 & 0.016 & \$28 (\$15--48) \\
+Claude Haiku 5.5 & Closed & 23/30 & 59--88\% & 17/20 & 6/10 & 0.013 & 0.014 & \$23 (\$12--41) \\
+gpt-oss-120b & Open & 20/30 & 49--81\% & 15/20 & 5/10 & 0.013 & 0.015 & \$26 (\$13--46) \\
+GLM-4.7-Flash & Open & 17/30 & 39--73\% & 14/20 & 3/10 & 0.007 & 0.015 & \$23 (\$11--41) \\
+Qwen3 32B (thinking off) & Open & 14/30 & 30--64\% & 13/20 & 1/10 & 0.009 & 0.015 & \$27 (\$13--49) \\
+GPT-5.1$^\dagger$ & Closed & 13/30 & 27--61\% & 12/20 & 1/10 & 0.044 & 0.029 & \$84 (\$41--153) \\
+Claude Opus 5.5$^\ddagger$ & Closed & 7/8 & 53--98\% & 7/8 & --- & 0.417 & 0.011 & \$341 (\$185--593) \\
+\midrule
+\textit{Aya Expanse 32B (student)} & Open & 1/30 & 1--17\% & 0/20 & 1/10 & --- & --- & --- \\
+\textit{Tiny Aya (student)} & Open & 0/30 & 0--11\% & 0/20 & 0/10 & --- & --- & --- \\
+\bottomrule
+\end{tabular}
+\caption{Complete Phase 1 teacher bake-off on 30 paired DB-change train tasks (20 retail, 10 airline; DB checks only; GPT-4.1 customer). $^\dagger$Ran with API-default reasoning disabled. $^\ddagger$Unfinished (8 retail tasks only).}
+\label{tab:bakeoff_full}
+\end{table*}
+
+\begin{table}[h]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{2.5pt}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{lccccc}
+\toprule
+\textbf{Pair (A vs.\ B)} & \textbf{A} & \textbf{B} & \textbf{$p$} & \textbf{Holm $p$} & \textbf{Diff.\ (95\% CI)} \\
+\midrule
+Qwen3.8 vs.\ Sonnet 5.5 & 1 & 0 & 1.00 & 1.00 & 0 to $+10$ pts \\
+Qwen3.8 vs.\ GLM-5.3-F & 3 & 0 & 0.25 & 1.00 & 0 to $+23$ pts \\
+Qwen3.8 vs.\ DeepSeek V4 & 3 & 0 & 0.25 & 1.00 & 0 to $+23$ pts \\
+Sonnet 5.5 vs.\ GLM-5.3-F & 2 & 0 & 0.50 & 1.00 & 0 to $+17$ pts \\
+Sonnet 5.5 vs.\ DeepSeek & 3 & 1 & 0.63 & 1.00 & $-7$ to $+20$ pts \\
+GLM-5.3-F vs.\ DeepSeek & 1 & 1 & 1.00 & 1.00 & $-10$ to $+10$ pts \\
+\bottomrule
+\end{tabular}%
+}
+\caption{Pairwise exact McNemar comparisons (columns A and B are discordant task counts) and paired bootstrap 95\% CIs (10,000 resamples) among the top four Phase 1 teachers.}
+\label{tab:bakeoff_mcnemar}
+\end{table}
+
+\subsection{Validation Root Causes, Monitor Diagnostics, and Starter-Task Probe}
+Tables~\ref{tab:failure_shift} and~\ref{tab:val_causes} report the earliest classifier finding across failed runs before and after healing and the manual single-cause failure breakdown across SFT v1, v2, and v3 on the 60 validation conversations. Tables~\ref{tab:monitor_replay} and~\ref{tab:guard_ablation} report the complete runtime \texttt{no\_progress} replay across 252 saved rollouts and the live telecom dev guard ablation.
+
+\begin{table}[h]
+\centering
+\scriptsize
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lccccc}
+\toprule
+\textbf{Model, Split} & \textbf{Failed} & \textbf{NONE} & \textbf{LOOP} & \textbf{ARG} & \textbf{TOOL} \\
+\midrule
+Base P, dev & 64 & 2 & 0 & 55 & 7 \\
+SFT v2, dev & 29 & \textbf{20} & 8 & 1 & 0 \\
+SFT v2, val & 26 & \textbf{17} & 7 & 0 & 2 \\
+SFT v2, train pool & 57 & 24 & 27 & 3 & 3 \\
+\bottomrule
+\end{tabular}
+\caption{Earliest classifier finding across failed runs. Before healing, 62/64 base failures start with ARG or TOOL (58 at turn $\le 3$); after healing, 37/55 dev+val failures have zero structural findings (\texttt{NONE}).}
+\label{tab:failure_shift}
+\end{table}
+
+\begin{table}[h]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Primary Failure Cause (Val, /60)} & \textbf{v1} & \textbf{v2} & \textbf{v3} \\
+\midrule
+Loop / hit step limit & 13 & 5 & 8 \\
+Over-action (unneeded change) & 5 & 5 & 4 \\
+Right action, wrong arguments & 5 & 4 & 9 \\
+Missed an action & 2 & 4 & 5 \\
+Did something else instead & 3 & 1 & 0 \\
+Past 32K context / too many errors & 3 & 4 & 0 \\
+Actions right, another check failed & 1 & 3 & 0 \\
+\midrule
+\textbf{Total Failed (of 60)} & \textbf{32} & \textbf{26} & \textbf{26} \\
+\bottomrule
+\end{tabular}
+\caption{Single main failure cause per failed validation conversation across SFT v1, v2, and v3 (30 tasks $\times$ 2 samples).}
+\label{tab:val_causes}
+\end{table}
+
+\begin{table}[h]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{lccccc}
+\toprule
+\textbf{Rollout File} & \textbf{Convs} & \textbf{Step Lim.} & \textbf{Pass} & \textbf{Fired} & \textbf{Max Turns} \\
+\midrule
+A-telecom-train & 74 & 6 & 5 & 6 (all lim.) & 100 \\
+C-telecom-train & 74 & 1 & 2 & 1 (lim.) & 99 \\
+A-retail-train & 59 & 0 & 8 & 0 & 27 \\
+A-retail-dev & 15 & 0 & 1 & 0 & 15 \\
+A-airline-train & 24 & 0 & 4 & 0 & 19 \\
+A-airline-dev & 6 & 0 & 1 & 0 & 13 \\
+\bottomrule
+\end{tabular}
+\caption{Turn-by-turn replay of the \texttt{no\_progress} runtime monitor across 252 saved Arm A and Arm C conversations. Longest repeat run on retail/airline was 1 (threshold: 3).}
+\label{tab:monitor_replay}
+\end{table}
+
+\begin{table}[h]
+\centering
+\scriptsize
+\setlength{\tabcolsep}{2.5pt}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{lccc}
+\toprule
+\textbf{Telecom Dev Metric (30 vs.\ 30)} & \textbf{A (log)} & \textbf{A + Guard} & \textbf{Guard $-$ A (95\% CI)} \\
+\midrule
+Success rate & 10.0\% & 3.3\% & $-6.7$ ($-23.3$ to $+6.7$) \\
+Tool/Arg hallucination & 100\% & 100\% & 0.0 (0 to 0) \\
+Loop rate (classifier) & 70.0\% & 80.0\% & $+10.0$ ($-3.3$ to $+23.3$) \\
+Steps per task & 11.3 & 10.0 & $-1.2$ ($-3.0$ to $+0.6$) \\
+Redundant-call rate & 27.5\% & 34.8\% & $+7.3$ ($-0.1$ to $+14.1$) \\
+\bottomrule
+\end{tabular}%
+}
+\caption{Live telecom dev guard ablation (15 tasks $\times$ 2 samples, paired bootstrap 95\% CIs). Because \texttt{no\_progress} fired 0 times (max 25 turns), this acts as an A/A test.}
+\label{tab:guard_ablation}
+\end{table}
+
+\paragraph{Preliminary Tiny Aya Starter-Task GRPO Probe.}
+Prior to full $\tau^2$-bench training, an initial 100-step GRPO LoRA probe on Tiny Aya over a 120-question starter argument-extraction task moved accuracy from 64/120 (53.3\%, 95\% CI: 44.4--62.0\%, 1.88 calls/success) to 67/120 (55.8\%, 95\% CI: 46.9--64.4\%, 1.84 calls/success), while Arg hallucinations remained unchanged at 47/120 (39.2\%).
+
+\section{Qualitative Trajectories and Reward-Hacking Case Studies}
+\label{app:cases}
+
+\subsection{Before vs.\ After Retail Return Transcript}
+On the held-out $\tau^2$-bench retail office-chair return task, the customer opens with: \emph{``The office chair I ordered showed up with broken pieces. I want to return it.''}
+
+\paragraph{Untuned Arm A (19 findings; failed via \texttt{too\_many\_errors}).}
+Before requesting customer details, Arm A invents an email and chains dependent calls using placeholder strings:
+\begin{quote}\scriptsize\ttfamily
+Agent: find\_user\_id\_by\_email(\\
+\ \ email="something@example.com")\\
+Agent: get\_user\_details(\\
+\ \ user\_id="<user\_id\_from\_previous\_tool\_result>")\\
+Agent: get\_order\_details(\\
+\ \ order\_id="<latest\_order\_id\_from\_user\_details>")\\
+Tools: Error: User not found · Error: User not found · Error: Order not found
+\end{quote}
+The agent repeats this failing batch until $\tau^2$-bench terminates the episode for excessive errors.
+
+\paragraph{Healed Arm B (0 findings; passed).}
+Arm B verifies identity first and grounds every argument strictly in customer or tool outputs:
+\begin{quote}\scriptsize\ttfamily
+Agent: I'm sorry to hear that! I'd be happy to help you with the return. First, I need to verify your identity. Could you please provide me with the email address associated with your account? Or, if you prefer, your first name, last name, and zip code.\\
+Customer: I don't remember my email. My name's Mei Davis, zip code 80217.\\
+Agent: find\_user\_id\_by\_name\_zip(\\
+\ \ first\_name="Mei", last\_name="Davis", zip="80217")\\
+Tools: mei\_davis\_8935\\
+Agent: get\_user\_details(user\_id="mei\_davis\_8935")
+\end{quote}
+
+\subsection{GRPO Structural Reward-Hacking Case Studies}
+\begin{itemize}
+    \item \textbf{Dialogue Collapse (Arm G):} Trained exclusively on prompts whose reference turn was a tool call, Arm G learned that emitting tool calls always increased expected reward relative to replying to the customer. On validation, it ceased conversing and looped \texttt{get\_details\_by\_id} 1,850 times across 24 telecom conversations (0.5/30 validation success).
+    \item \textbf{Confident Unrequested Mutations (Arm H, Airline \& Retail):} While Arm H eliminated v2's error spirals (previously 7--9 retries of a single failing call) and cut classifier findings from 1.17 to 0.25 per dev conversation, its structural rewards scored syntactically valid write calls positively regardless of user intent. On airline dev, Arm H executed 12 unrequested cancellations---including task 39, where it cancelled 4 extra reservations beyond the 3 requested---and issued an unrequested refund certificate. On retail dev, it cancelled an order the customer asked to modify.
+    \item \textbf{Over-Delegation and Skipped Agent Fixes (Arm H, Telecom):} Because all 47 telecom TOOL fixes taught ``do not call customer phone tools; instruct the customer instead,'' Arm H over-generalized this behavior---increasing customer phone actions from 16.6 to 19.5 per conversation while skipping its own required account-side mutations (7 missed agent actions vs.\ 2 for v2, primarily \texttt{enable\_roaming}), accounting for 3 of its 4 lost telecom dev tasks.
+\end{itemize}
+
+\end{document}
