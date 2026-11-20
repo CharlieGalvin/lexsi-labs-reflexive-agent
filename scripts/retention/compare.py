@@ -31,14 +31,63 @@ def rel(path: Path) -> str:
     return str(path.relative_to(ROOT)) if path.is_relative_to(ROOT) else str(path)
 
 
-def load_items(path: Path) -> dict[tuple[str, str], bool]:
-    """{(task, sample id): correct} from an AuditKIT RunResult JSON (unscored items left out)."""
+class ScoreMismatch(SystemExit):
+    """No copy of a task's items reproduces the run's own headline score: don't guess."""
+
+
+def score_of(task: str, cfg: dict) -> str | None:
+    """The configured lm-eval metric for a task (``score`` on its benchmark)."""
+    for b in cfg["benchmarks"]:
+        if matches(task, b["tasks"]):
+            return b.get("score")
+    return None
+
+
+def load_items(path: Path, cfg: dict, checks: list[str] | None = None) -> dict[tuple[str, str], bool]:
+    """{(task, sample id): correct} from an AuditKIT RunResult JSON, one copy per item.
+
+    AuditKIT saves one prediction per lm-eval filter, under the same item ID and in the same order
+    (GSM8K: strict-match, then flexible-extract). For each task, the copy kept is the one whose
+    accuracy equals the run's headline for the configured ``score``; if none does, it stops.
+    ``checks`` collects a line per task saying what was checked."""
     run = json.loads(path.read_text())
-    return {
-        (p["task"], str(p["sample_id"])): bool(p["correct"])
-        for p in run["predictions"]
-        if p.get("correct") is not None
-    }
+    headline = run.get("headline") or {}
+    copies: dict[str, dict[str, list[bool]]] = defaultdict(lambda: defaultdict(list))
+    for p in run["predictions"]:
+        if p.get("correct") is not None:
+            copies[p["task"]][str(p["sample_id"])].append(bool(p["correct"]))
+    out: dict[tuple[str, str], bool] = {}
+    for task, by_id in sorted(copies.items()):
+        n_copies = max(len(v) for v in by_id.values())
+        score = score_of(task, cfg)
+        target = headline.get(f"{task}:{score}") if score else None
+        accs = []
+        for k in range(n_copies):
+            vals = [v[k] for v in by_id.values() if len(v) > k]
+            accs.append(sum(vals) / len(vals))
+        if target is None:
+            if n_copies > 1:
+                raise ScoreMismatch(
+                    f"{path.name}: {task} has {n_copies} copies per item and no headline "
+                    f"'{task}:{score}' to choose by"
+                )
+            pick = 0
+        else:
+            hits = [k for k, acc in enumerate(accs) if abs(acc - target) < 5e-4]
+            if not hits:
+                raise ScoreMismatch(
+                    f"{path.name}: no copy of {task} reproduces its headline {score} = "
+                    f"{target:.4f} (copies: {', '.join(f'{x:.4f}' for x in accs)})"
+                )
+            pick = hits[0]
+        if checks is not None and (n_copies > 1 or target is not None):
+            note = f"copy {pick + 1} of {n_copies}" if n_copies > 1 else "one copy"
+            check = f"= headline {score} {target:.4f} ✓" if target is not None else "(no headline to check)"
+            checks.append(f"{path.stem}: {task}: {note}, accuracy {accs[pick]:.4f} {check}")
+        for item, vals in by_id.items():
+            if len(vals) > pick:
+                out[task, item] = vals[pick]
+    return out
 
 
 def groups(cfg: dict) -> list[tuple[str, list[str]]]:
@@ -88,7 +137,8 @@ def main(argv: list[str] | None = None) -> int:
     a = p.parse_args(argv)
     cfg = yaml.safe_load(a.config.read_text())
     sfx = "-pilot" if a.pilot else ""
-    first, second = (load_items(a.dir / f"{m}{sfx}.json") for m in (a.first, a.second))
+    checks: list[str] = []
+    first, second = (load_items(a.dir / f"{m}{sfx}.json", cfg, checks) for m in (a.first, a.second))
 
     rows = {}
     print(
@@ -106,6 +156,13 @@ def main(argv: list[str] | None = None) -> int:
         print(
             f"{label:<40} {r['items']:>5}  {r['first']:>8.1%}  {r['second']:>8.1%}  {rng:>28}  {r['verdict']}"
         )
+    multi = [c for c in checks if "copy " in c and "of 1" not in c]
+    print(
+        f"\nScore checks: {len(checks)} tasks reproduce their run's headline"
+        + (f"; {len(multi)} had several copies per item:" if multi else ".")
+    )
+    for c in multi:
+        print(f"  {c}")
     leftover = {
         k[0] for k in first.keys() | second.keys() if not any(matches(k[0], t) for _, t in groups(cfg))
     }
@@ -126,6 +183,7 @@ def main(argv: list[str] | None = None) -> int:
                 "method": "accuracy: Wilson; difference: paired percentile bootstrap over shared items,"
                 " seed 0",
                 "benchmarks": rows,
+                "score_checks": checks,
                 "shared_items_by_task": dict(sorted(by_task.items())),
             },
             indent=2,

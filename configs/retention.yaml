@@ -13,15 +13,20 @@ models:                       # label: the name vLLM serves it under
   base: CohereLabs/aya-expanse-32b
   sft2: sft2
 
-# Each benchmark: lm-eval tasks, and the per-item score used for "correct"
+# Each benchmark: lm-eval tasks, and `score`, the lm-eval metric an item's "correct" must reproduce.
+# AuditKIT saves one copy of an item per lm-eval filter (GSM8K: strict and flexible, same item ID);
+# compare.py keeps the copy whose accuracy equals the run's own headline for this score, or stops.
 benchmarks:
   - name: Instruction following (IFEval)
     tasks: [ifeval]                       # 541 prompts; correct = every instruction followed (strict)
+    score: prompt_level_strict_acc
   - name: Maths (GSM8K)
     tasks: [gsm8k]                        # 1,319 test questions, 5-shot; correct = exact final answer
+    score: exact_match,strict-match
   - name: General knowledge (Global-MMLU-Lite)
     # Cohere's multilingual MMLU, 400 questions per language. Five of Aya's languages, five scripts
     tasks: [global_mmlu_en, global_mmlu_fr, global_mmlu_ar, global_mmlu_hi, global_mmlu_ja]
+    score: acc
 
 decoding:
   temperature: 0.0

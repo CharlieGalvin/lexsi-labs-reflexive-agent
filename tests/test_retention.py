@@ -14,17 +14,47 @@ run = load_script("retention/run")
 CONFIG = """
 models: {base: CohereLabs/aya-expanse-32b, sft2: sft2}
 benchmarks:
-  - {name: Instruction following (IFEval), tasks: [ifeval]}
-  - {name: Maths (GSM8K), tasks: [gsm8k]}
-  - {name: General knowledge (Global-MMLU-Lite), tasks: [global_mmlu_en, global_mmlu_fr]}
+  - {name: Instruction following (IFEval), tasks: [ifeval], score: prompt_level_strict_acc}
+  - {name: Maths (GSM8K), tasks: [gsm8k], score: "exact_match,strict-match"}
+  - {name: General knowledge (Global-MMLU-Lite), tasks: [global_mmlu_en, global_mmlu_fr], score: acc}
 reps: 500
 """
 
 
-def save_run(path: Path, rows: list[tuple[str, str, bool | None]]) -> None:
-    """A minimal AuditKIT RunResult JSON: just the predictions the comparison reads."""
+def save_run(path: Path, rows: list[tuple[str, str, bool | None]], headline: dict | None = None) -> None:
+    """A minimal AuditKIT RunResult JSON: the predictions and headline the comparison reads."""
     preds = [{"task": t, "sample_id": i, "correct": c} for t, i, c in rows]
-    path.write_text(json.dumps({"run_id": path.stem, "predictions": preds}))
+    path.write_text(json.dumps({"run_id": path.stem, "predictions": preds, "headline": headline or {}}))
+
+
+def gsm8k_two_copies(strict: list[bool], flexible: list[bool]) -> list[tuple[str, str, bool | None]]:
+    """As AuditKIT saves GSM8K: every item once per filter, same IDs, strict-match first."""
+    return [("gsm8k", str(i), c) for i, c in enumerate(strict)] + [
+        ("gsm8k", str(i), c) for i, c in enumerate(flexible)
+    ]
+
+
+def test_the_copy_matching_the_headline_is_kept(tmp_path: Path) -> None:
+    import yaml
+
+    cfg = yaml.safe_load(CONFIG)
+    strict = [True] * 6 + [False] * 4  # 60%
+    flexible = [True] * 8 + [False] * 2  # 80%
+    f = tmp_path / "base.json"
+    save_run(f, gsm8k_two_copies(strict, flexible), {"gsm8k:exact_match,strict-match": 0.6})
+    checks: list[str] = []
+    items = compare.load_items(f, cfg, checks)
+    assert len(items) == 10 and sum(items.values()) == 6  # strict kept, one copy per item
+    assert "copy 1 of 2" in checks[0] and "✓" in checks[0]
+
+    # If the strict copies came second, the second copy is the one kept
+    save_run(f, gsm8k_two_copies(flexible, strict), {"gsm8k:exact_match,strict-match": 0.6})
+    assert sum(compare.load_items(f, cfg).values()) == 6
+
+    # Neither copy reproduces the headline: stop rather than guess
+    save_run(f, gsm8k_two_copies(strict, flexible), {"gsm8k:exact_match,strict-match": 0.7})
+    with pytest.raises(SystemExit):
+        compare.load_items(f, cfg)
 
 
 def test_groups_split_global_mmlu_by_language() -> None:
