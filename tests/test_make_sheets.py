@@ -15,7 +15,7 @@ def rec(task: str, passed: bool, *, arg: bool = False, loop: bool = False, tool:
     """A tiny retail conversation; optionally with an invented email (ARG), a repeated failed call
     (LOOP) or a call to a tool the agent doesn't have (TOOL)."""
     view: list[dict] = [
-        {"role": "system", "content": "policy"},
+        {"role": "system", "content": "policy: the current time is 2024-05-15 15:00:00 EST"},
         {"role": "user", "content": "Hi, I want to return an order. My name is Ann Lee, zip 12345."},
     ]
     if arg:
@@ -102,7 +102,9 @@ def test_sheets(tmp_path: Path) -> None:
     key = {r["id"]: r for r in csv.DictReader((out / "decisions-key.csv").open())}
     assert {k["task_id"] for k in key.values()} == {"s-none-1", "s-none-2", "s-none-3"}
     assert all(k["model"] == "sft2" and k["classifier"] == "no" for k in key.values())
-    assert "FAILED" in (out / "decisions" / "items" / "D01.md").read_text()
+    d01 = (out / "decisions" / "items" / "D01.md").read_text()
+    assert d01.startswith("# D01\n") and "## Turn 0 · SYSTEM\npolicy: the current time" in d01
+    assert "FAILED" not in d01 and "sft2" not in d01  # no verdict, no model
 
     # Precision: the claim is visible, the model isn't
     prec = list(csv.DictReader((out / "audit-precision-charlie.csv").open()))
@@ -110,7 +112,11 @@ def test_sheets(tmp_path: Path) -> None:
     assert types.count("ARG") == 3 and types.count("LOOP") == 1 and types.count("TOOL") == 1
     assert "model" not in prec[0]
     item = (out / "audit-precision" / "items" / f"{prec[0]['id']}.md").read_text()
-    assert "FLAGGED TURN" in item and "sft2" not in item and "S2-" not in item
+    assert "sft2" not in item and "S2-" not in item and "classifier" not in item.lower()
+    # the flagged turn number is the transcript's turn number, and it's the agent's call
+    turn = int(prec[0]["flagged_turn"])
+    block = item.split(f"## Turn {turn} · ")[1].split("## Turn")[0]
+    assert block.startswith("AGENT") and "CALL: `" in block
 
     # Recall: no hint of the classifier's verdict on the labeller's sheet
     rows = list(csv.DictReader((out / "audit-recall-katie.csv").open()))

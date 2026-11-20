@@ -14,8 +14,10 @@ writes three sheets, each in one copy per labeller so you label separately:
 3. **decisions**: SFT v2's failed dev and validation conversations with no classifier finding
    (the 37). You choose a category from the labelling guide (SEL-81).
 
-Every item is shuffled, gets an anonymous ID (P01…, R01…, D01…) and a readable transcript in
-``<sheet>/items/<ID>.md``. Which model and task an ID is, and the classifier's verdict, are in
+Every item is shuffled, gets an anonymous ID (P01…, R01…, D01…) and a full transcript in
+``<sheet>/items/<ID>.md``: every turn the classifier saw, the policy included (Turn 0), nothing cut.
+Turn numbers match the precision sheet's ``flagged_turn``; the claim itself is only in that sheet.
+Which model and task an ID is, and the classifier's verdict, are in
 ``<sheet>-key.csv``: don't open it until both of you have finished. Scoring afterwards:
 `just label-metrics` (see that script's docstring). Re-running with the same seed gives the same
 sheets; it won't overwrite a labeller's sheet that's already been filled in.
@@ -40,7 +42,6 @@ DOMAINS = ("retail", "airline", "telecom")
 MODELS = {"P": "base", "S2": "sft2"}
 SPLITS = ("dev", "val")
 TYPES = (FailureType.TOOL, FailureType.ARG, FailureType.LOOP)
-TRUNC = 700  # characters of a tool result or long message shown in a transcript
 
 
 def load(episodes: Path) -> list[dict]:
@@ -63,35 +64,35 @@ def load(episodes: Path) -> list[dict]:
     return recs
 
 
-def short(text: object, n: int = TRUNC) -> str:
-    s = text if isinstance(text, str) else json.dumps(text, ensure_ascii=False)
-    s = (s or "").strip()
-    return s if len(s) <= n else s[:n] + f" … [{len(s) - n} more characters]"
+def text_of(content: object) -> str:
+    if content is None:
+        return ""
+    return (content if isinstance(content, str) else json.dumps(content, ensure_ascii=False)).strip()
 
 
-def transcript(rec: dict, mark: int | None = None, note: str = "") -> str:
-    """The conversation as the agent saw it, turn by turn; ``mark`` highlights one message index."""
-    lines = [f"Domain: {rec['domain']}\n"]
-    if note:
-        lines.append(note + "\n")
+def transcript(rec: dict, item_id: str) -> str:
+    """The conversation exactly as the agent and the classifier saw it, nothing cut.
+
+    ``Turn N`` is the message's index in ``agent_view_of(rec)``, so it matches the precision sheet's
+    ``flagged_turn``. Turn 0 is the system prompt with the policy: the classifier counts anything in
+    it as already seen, so labellers get it too. No model, split, verdict or claim appears.
+    """
+    lines = [f"# {item_id}", "", f"Domain: {rec['domain']}", ""]
     for i, m in enumerate(agent_view_of(rec)):
         role = m.get("role")
-        flag = "  ◀◀◀ FLAGGED TURN" if i == mark else ""
-        if role == "system":
-            lines.append(
-                f"[{i}] SYSTEM (the policy and instructions;"
-                f" {len(m.get('content') or '')} characters, not shown)"
-            )
-            continue
-        who = {"user": "CUSTOMER", "assistant": "AGENT", "tool": "TOOL RESULT"}.get(role, str(role).upper())
-        body = short(m.get("content")) if m.get("content") else ""
-        lines.append(f"[{i}] {who}{flag}" + (f": {body}" if body else ""))
+        who = {"system": "SYSTEM", "user": "CUSTOMER", "assistant": "AGENT", "tool": "TOOL RESULT"}.get(
+            role, str(role).upper()
+        )
+        lines.append(f"## Turn {i} · {who}")
+        if body := text_of(m.get("content")):
+            lines.append(body)
         for tc in m.get("tool_calls") or []:
             fn = tc.get("function") or {}
-            lines.append(f"      → calls {fn.get('name')}({short(fn.get('arguments'), 400)})")
-    if rec.get("termination"):
-        lines.append(f"\n(Conversation ended: {rec['termination']})")
-    return "\n".join(lines) + "\n"
+            args = fn.get("arguments")
+            args = args if isinstance(args, str) else json.dumps(args, ensure_ascii=False)
+            lines.append(f"CALL: `{fn.get('name')}({args})`")
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
 
 
 def write_sheet(out: Path, name: str, columns: list[str], rows: list[dict], labellers: list[str]) -> None:
@@ -203,8 +204,6 @@ def main(argv: list[str] | None = None) -> int:
         rows, keys = [], []
         for item_id, r, d, f in items:
             if f is not None:
-                claim = f"The classifier says this turn is **{f.type.value}** ({f.kind}): {f.detail or '—'}"
-                text = transcript(r, mark=f.turn, note=claim)
                 rows.append(
                     {
                         "id": item_id,
@@ -214,14 +213,9 @@ def main(argv: list[str] | None = None) -> int:
                         "classifier_flagged": "yes",
                     }
                 )
-            elif name == "decisions":
-                checks = json.dumps(r["outcome"].get("checks"), ensure_ascii=False)
-                text = transcript(r, note=f"τ²-bench: FAILED. Checks: {short(checks, 1500)}")
-                rows.append({"id": item_id})
             else:
-                text = transcript(r)
                 rows.append({"id": item_id})
-            (folder / f"{item_id}.md").write_text(f"# {item_id}\n\n" + text)
+            (folder / f"{item_id}.md").write_text(transcript(r, item_id))
             keys.append(key_row(item_id, r, d))
         write_sheet(a.out, name, cols, rows, a.labellers)
         write_key(a.out, name, keys)
