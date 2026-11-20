@@ -2,7 +2,8 @@
 # Same harness, prompt, decoding and customer as configs/arms.yaml; only the student differs:
 # it's served by vLLM on the pod (scripts/pod/serve.sh), on localhost:8000, no API key.
 # Run on the pod:  just rollout P <domain> --split dev --config configs/sft/arms.base.yaml
-# Never on test: these are indicative dev runs (SEL-65).
+# Dev runs were indicative (SEL-65). Stage 2 runs P and PC on test as the GPU-hosted arms A and C, the
+# same server, 32K context and 8 workers as Arm B, so latency and cost compare fairly (declared in STAGE2.md).
 
 student:
   name: aya32-selfhosted
@@ -24,3 +25,7 @@ arms:
     name: baseline-selfhosted
     description: "Arm A's student, served by vLLM instead of Cohere's API: should behave like Arm A on a few dev tasks"
     prompt_variant: default
+  PC:
+    name: prompt-only-selfhosted
+    description: "Arm C (the 'be careful not to hallucinate' instruction) on the self-hosted base model: with P, the GPU-hosted versions of arms A and C, so all three Aya arms run on the same server, context and concurrency as Arm B (Stage 2)"
+    prompt_variant: careful
