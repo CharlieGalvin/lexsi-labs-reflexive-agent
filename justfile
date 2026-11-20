@@ -325,3 +325,7 @@ blog-figures:
 # Walk through the blog's experiments and reproduce each result from results/ (no GPU or keys): `just reproduce 3`, `--list`
 reproduce *args:
     python scripts/blog/reproduce.py {{args}}
+
+# Score a detector against the truth (precision, recall, F1, FP rate) or two labellers (Cohen's kappa), SEL-85/98
+label-metrics +args:
+    python scripts/labels/label_metrics.py {{args}}
