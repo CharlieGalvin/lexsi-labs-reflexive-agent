@@ -2,8 +2,13 @@
 # nothing and isn't a candidate. Same harness, tasks, samples and customer (GPT-4.1) as arms A, B, C;
 # only the agent differs. GPT-4.1 plays both agent and customer: say so wherever it's reported.
 #
-#   python scripts/arms/rollout.py GPT retail --split dev --limit 2 --config configs/arms.gpt41.yaml   # pilot
-#   python scripts/arms/rollout.py GPT retail --split test --samples 2 --config configs/arms.gpt41.yaml
+#   python scripts/arms/rollout.py GPT retail --split dev --limit 2 --judges off --config configs/arms.gpt41.yaml  # pilot
+#   python scripts/arms/rollout.py GPT retail --split test --samples 2 --judges off --config configs/arms.gpt41.yaml
+#
+# Through OpenRouter (OPENROUTER_API_KEY; no OpenAI rate-limit tiers). With no OPENAI_API_KEY set, the
+# customer goes through OpenRouter too (reflexive.llm.default_model). τ²-bench's judges are pinned to
+# OpenAI, so roll out with --judges off and re-score every conversation with judges on afterwards
+# (`just arm-eval`, an OpenAI key, a few dollars), as arms A, B and C were.
 #
 # Native tool calling: how GPT-4.1 is used in practice and on τ²-bench's own leaderboard (Aya uses the
 # "prompted" Action: format of the data contract; forcing that on GPT-4.1 would handicap it).
@@ -12,9 +17,9 @@
 
 student:
   name: gpt-4.1
-  model: gpt-4.1-2025-04-14     # pinned snapshot, the same one the customer uses
-  api_base: https://api.openai.com/v1
-  api_key_env: OPENAI_API_KEY
+  model: openai/gpt-4.1         # OpenRouter's GPT-4.1 (not pinned to a snapshot; note it in the write-up)
+  api_base: https://openrouter.ai/api/v1
+  api_key_env: OPENROUTER_API_KEY
   mode: native
   style: cohere                 # unused in native mode
   temperature: 0.0
