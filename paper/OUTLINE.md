@@ -1,6 +1,6 @@
 # Paper outline: Reflexive Agents (Stage 2)
 
-EMNLP 2023 template (`paper/template/`), long paper: **8 pages** of main text. The Limitations
+EMNLP 2023 template (`paper/template/`). **Format: 6 pages of main text and at most 6 pages of appendix** (corrected 21 Nov; earlier drafts aimed at 8). The Limitations
 section is mandatory; Limitations, Ethics, references and appendices don't count toward the 8 pages.
 Final (non-review) mode with the authors named (Katie Kitchen, Charlie Galvin, Chiara Picardi; Lloyds
 Banking Group), since the hackathon write-up isn't blind. Submission due **Tue 24 Nov** (SEL-80).
