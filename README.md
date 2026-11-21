@@ -566,8 +566,8 @@ Expanse 32B model, and GLM-5.3-Flash and GPT-4.1 through their APIs.
 
 ## Acknowledgements
 
-Thanks to Lexsi Labs for running the AI Safety & Alignment Hackathon and for AgentTune and AuditKIT,
-and to the authors of τ²-bench, TRL and vLLM.
+Thanks to Lloyds Banking Group for the GPU credits, to Lexsi Labs for running the AI Safety &
+Alignment Hackathon and for AgentTune and AuditKIT, and to the authors of τ²-bench, TRL and vLLM.
 
 ## Changelog
 
