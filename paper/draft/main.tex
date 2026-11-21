@@ -13,9 +13,9 @@
 
 \title{ReAgent: Closed-Loop Self-Healing for Structural Hallucinations in Open-Weight Tool-Calling Agents}
 
-\author{Ambitious AI Researcher \\
-  AI Research Institute \\
-  \texttt{researcher@institute.ai}}
+\author{Katie Kitchen \quad Charlie Galvin \quad Chiara Picardi \\
+  Lloyds Banking Group \\
+  \texttt{\{katie.kitchen,charlie.galvin,chiara.picardi\}@lloydsbanking.com}}
 
 \begin{document}
 \maketitle
@@ -151,6 +151,7 @@ A seeded spot check of 30 distinct failed telecom conversations (10 findings/cla
 \centering
 \footnotesize
 \setlength{\tabcolsep}{4pt}
+\resizebox{\textwidth}{!}{%
 \begin{tabular}{lccccccc}
 \toprule
 \textbf{Arm} & \textbf{Success (95\% CI)} & \textbf{Retail} & \textbf{Airline} & \textbf{Telecom} & \textbf{Tool/Arg Halluc.} & \textbf{Loop (Cls.)} & \textbf{Tool Valid.} \\
@@ -162,7 +163,8 @@ A seeded spot check of 30 distinct failed telecom conversations (10 findings/cla
 \multicolumn{8}{l}{\textit{Diagnostics (B vs.\ A):} Median latency 2.4\,s vs.\ 3.3\,s (C: 3.5\,s)$^\dagger$; median output tokens 78 vs.\ 117 (C: 117); Tool validity:} \\
 \multicolumn{8}{l}{Retail 100\% vs.\ 98.8\%, Airline 99.9\% vs.\ 97.7\%, Telecom 94.1\% vs.\ 32.8\%.} \\
 \bottomrule
-\end{tabular}
+\end{tabular}%
+}
 \caption{Held-out $\tau^2$-bench test results (100 tasks $\times$ 2 samples = 200 conversations/arm; all 600 oracle-verified by AuditKIT with 0 disagreements; 95\% task-level bootstraps). $^\dagger$Arm B runs self-hosted on vLLM/H100 (32K context; 2/200 overflows scored as failures) while A and C run on Cohere's API (128K), so latency reflects serving differences.}
 \label{tab:main_test}
 \end{table*}
@@ -368,6 +370,7 @@ Table~\ref{tab:hyperparams} reports the exact training settings and single-H100 
 \centering
 \scriptsize
 \setlength{\tabcolsep}{2.8pt}
+\resizebox{\textwidth}{!}{%
 \begin{tabular}{lcccccccc}
 \toprule
 \textbf{Run} & \textbf{Base / Init} & \textbf{Examples} & \textbf{Steps} & \textbf{LR (Sched.)} & \textbf{Batch} & \textbf{Loss / Objective} & \textbf{Runtime} & \textbf{Train / Val Loss} \\
@@ -382,7 +385,8 @@ Cycle 2 (traj.) & Aya 32B (NF4) & 136 convs & 68 & 1e-4 (cos, 5\%) & $1 \times 4
 \midrule
 GRPO G/H/H2 & SFT v2 & Tool / 177+anc & 100$^\dagger$ & 1e-5 & $1 \times 16$ & GRPO ($G=8$, $\beta=0.04$, $T=1.0$) & $\approx 3.7$h (64.2 GB) & max comp.\ 384 \\
 \bottomrule
-\end{tabular}
+\end{tabular}%
+}
 \caption{Training configurations across all SFT (QLoRA $r=16$, $\alpha=32$, dropout 0.05 on \texttt{q,k,v,o,gate,up,down}, paged AdamW 8-bit, max grad norm 1.0, weight decay 0, seed 0) and GRPO (AgentTune) runs on one H100 SXM. $^\dagger$Arm H2 stopped early via the 10-point reply-share drift guard.}
 \label{tab:hyperparams}
 \end{table*}
@@ -395,6 +399,7 @@ Tables~\ref{tab:bakeoff_full} and~\ref{tab:bakeoff_mcnemar} give the full Phase 
 \centering
 \footnotesize
 \setlength{\tabcolsep}{4pt}
+\resizebox{\textwidth}{!}{%
 \begin{tabular}{lcccccccc}
 \toprule
 \textbf{Teacher / Model} & \textbf{Weights} & \textbf{Passed} & \textbf{95\% Wilson CI} & \textbf{Retail} & \textbf{Airline} & \textbf{Agent \$/c} & \textbf{Cust.\ \$/c} & \textbf{Proj.\ Total (Range)} \\
@@ -416,7 +421,8 @@ Claude Opus 5.5$^\ddagger$ & Closed & 7/8 & 53--98\% & 7/8 & --- & 0.417 & 0.011
 \textit{Aya Expanse 32B (student)} & Open & 1/30 & 1--17\% & 0/20 & 1/10 & --- & --- & --- \\
 \textit{Tiny Aya (student)} & Open & 0/30 & 0--11\% & 0/20 & 0/10 & --- & --- & --- \\
 \bottomrule
-\end{tabular}
+\end{tabular}%
+}
 \caption{Complete Phase 1 teacher bake-off on 30 paired DB-change train tasks (20 retail, 10 airline; DB checks only; GPT-4.1 customer). $^\dagger$Ran with API-default reasoning disabled. $^\ddagger$Unfinished (8 retail tasks only).}
 \label{tab:bakeoff_full}
 \end{table*}
@@ -491,6 +497,7 @@ Actions right, another check failed & 1 & 3 & 0 \\
 \centering
 \footnotesize
 \setlength{\tabcolsep}{3pt}
+\resizebox{\columnwidth}{!}{%
 \begin{tabular}{lccccc}
 \toprule
 \textbf{Rollout File} & \textbf{Convs} & \textbf{Step Lim.} & \textbf{Pass} & \textbf{Fired} & \textbf{Max Turns} \\
@@ -502,7 +509,8 @@ A-retail-dev & 15 & 0 & 1 & 0 & 15 \\
 A-airline-train & 24 & 0 & 4 & 0 & 19 \\
 A-airline-dev & 6 & 0 & 1 & 0 & 13 \\
 \bottomrule
-\end{tabular}
+\end{tabular}%
+}
 \caption{Turn-by-turn replay of the \texttt{no\_progress} runtime monitor across 252 saved Arm A and Arm C conversations. Longest repeat run on retail/airline was 1 (threshold: 3).}
 \label{tab:monitor_replay}
 \end{table}
