@@ -99,6 +99,20 @@ def test_only_state_changing_calls_are_checked():
     assert no_yes([SYS], call("get_order_details", order_id="#W2378156"), "") is None
 
 
+def test_in_telecom_only_refuel_data_is_checked():
+    """Telecom's policy asks the agent to confirm the price of a data top-up, and nothing else."""
+    from reflexive.intent import CHECKED_TOOLS
+
+    assert CHECKED_TOOLS & WRITE_TOOLS["telecom"] == {"refuel_data"}
+    assert WRITE_TOOLS["retail"] | WRITE_TOOLS["airline"] <= CHECKED_TOOLS
+    for tool in ("enable_roaming", "disable_roaming", "resume_line", "suspend_line", "send_payment_request"):
+        assert no_yes([SYS], call(tool, customer_id="C1001", line_id="L1002"), "") is None, tool
+    assert (
+        no_yes([SYS], call("refuel_data", customer_id="C1001", line_id="L1002", gb_amount=2.0), "")
+        is not None
+    )
+
+
 def test_intent_findings_checks_each_call_against_the_conversation_before_it():
     rec = {
         "domain": "retail",

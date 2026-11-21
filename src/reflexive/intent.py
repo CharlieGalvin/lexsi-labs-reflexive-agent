@@ -10,6 +10,10 @@ invent a tool or a value; it invented the customer's agreement. The rule is the 
     One yes to a list of changes the agent set out together covers every change on that list; a
     yes to an earlier proposal doesn't cover a different change made later.
 
+It checks the changes in `CHECKED_TOOLS`: every retail and airline write tool, and in telecom
+only ``refuel_data``, because telecom's policy asks for confirmation of the price there and
+nowhere else.
+
 `no_yes` is a `reflexive.actions.Rule`: it reads only the conversation before the call, the call
 and the policy, never τ²-bench's expected actions, so the guard can run it live
 (``live=True``). `intent_findings` runs every rule over a saved conversation, for offline replay
@@ -84,6 +88,12 @@ WRITE_TOOLS: dict[str, frozenset[str]] = {
     ),
 }
 ALL_WRITE_TOOLS = frozenset().union(*WRITE_TOOLS.values())
+
+# The changes the rule checks: every retail and airline write tool, whose policies say "obtain
+# explicit user confirmation (yes)" before any change, but in telecom only `refuel_data`, the one
+# change its policy asks the agent to confirm (the price). Telecom's roaming, suspend, resume and
+# payment-request changes need no yes under its policy (STAGE2.md, amended 21 Nov).
+CHECKED_TOOLS = WRITE_TOOLS["retail"] | WRITE_TOOLS["airline"] | frozenset({"refuel_data"})
 
 # Word stems that name each action. Generous on purpose: a missed description means a wrong block.
 ACTION_WORDS: dict[str, tuple[str, ...]] = {
@@ -215,7 +225,7 @@ def no_yes_words(conversation: Sequence[Message], call: dict, policy: str) -> Ac
     from reflexive.actions import ActionFinding
 
     tool = _name(call)
-    if tool not in ALL_WRITE_TOOLS:
+    if tool not in CHECKED_TOOLS:
         return None
     args = _args(call)
     target = _target(args)
