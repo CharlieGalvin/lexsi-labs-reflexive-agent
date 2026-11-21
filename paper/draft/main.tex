@@ -275,14 +275,7 @@ Replaying \texttt{no\_progress} over 252 saved Arm A/C rollouts (Table~\ref{tab:
 On $\tau^2$-bench, a prompt did not heal Aya Expanse 32B (13.0\% vs.\ 14.5\% success), but \$11.20 of verified teacher trajectories and under 30 minutes of QLoRA on one H100 cut Tool/Arg hallucinations from 95.0\% to 10.0\% and lifted test success $3.5\times$, to 51.5\%. Three lessons follow. \emph{Gate on outcomes:} \texttt{DevGate} rejected a cycle that cut findings 71\% without solving more tasks. \emph{Fix whole trajectories:} turn-level fixes left dev success flat (4/36), whole verified conversations lifted it to 22/36. \emph{Structural rewards get gamed:} GRPO learned confident, unrequested write actions. With 37 of 55 remaining failures free of structural hallucinations, the next target is intent: changes nobody asked for and missing confirmations.
 
 \section*{Limitations}
-\begin{enumerate}
-    \item \textbf{Scope:} one benchmark ($\tau^2$-bench, 100 English test tasks), one student model, and no check of general capability outside $\tau^2$-bench.
-    \item \textbf{Decisions, not hallucinations, now limit success:} airline test success is 30.0\%, and 37 of Arm B's 55 dev and validation failures have no structural hallucination.
-    \item \textbf{Dependencies:} the loop cannot exceed its teacher (GLM-5.3-Flash solved 158 of 178 non-test tasks) and needs a simulated user and an outcome verifier to filter fixes.
-    \item \textbf{Confounds:} Cycles 1 and 2 differ in more than fix granularity; SL was not run on dev, so steps and data are not separated; every adapter was trained once, with seed 0; and on test, B ran on vLLM (32K) while A and C ran on Cohere's API (128K), which confounds latency.
-    \item \textbf{Baselines and classifier:} we compared only against a zero-shot prompt, not constrained decoding or a runtime guard; classifier precision was spot-checked on 30 telecom findings (100\%, 95\% CI 72--100\%), and recall was not measured.
-    \item \textbf{Licence:} adapters inherit Aya Expanse 32B's CC BY-NC 4.0 non-commercial licence.
-\end{enumerate}
+Our evidence comes from one benchmark ($\tau^2$-bench, 100 English test tasks) and one student model, and we did not check general capability outside $\tau^2$-bench. Decisions, not hallucinations, now limit success: airline test success is 30.0\%, and 37 of Arm B's 55 dev and validation failures have no structural hallucination. The loop cannot exceed its teacher (GLM-5.3-Flash solved 158 of 178 non-test tasks) and needs a simulated user and an outcome verifier to filter fixes. Several comparisons are confounded: Cycles 1 and 2 differ in more than fix granularity; SL was not run on dev, so steps and data are not separated; every adapter was trained once, with seed 0; and on test, B ran on vLLM (32K) while A and C ran on Cohere's API (128K), which confounds latency. We compared only against a zero-shot prompt, not constrained decoding or a runtime guard. Finally, classifier precision was spot-checked on 30 telecom findings (100\%, 95\% CI 72--100\%), and recall was not measured.
 
 \section*{Ethics Statement}
 \paragraph{Safety of Write-Capable Agents.}
