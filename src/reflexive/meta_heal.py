@@ -48,6 +48,9 @@ MIN_FLAGGED, MIN_SHARE, MAX_PASSES = 2, 0.20, 1  # STAGE2.md's acceptance bar, o
 HOLDOUT_SHARE = 1 / 3
 MAX_CHARS = 1200  # per message or tool result in a transcript
 MAX_POLICY_CHARS = 30_000
+MAX_ANSWER_TOKENS = (
+    4000  # a rule's answer is a few lines and the proposer's ten rules fit; a runaway stops here
+)
 ROOT = Path(__file__).resolve().parents[2]
 RULES_PATH = ROOT / "configs" / "meta_rules.json"
 
@@ -199,6 +202,7 @@ class LLM:
             response_format={"type": "json_object"},
             num_retries=2,
             timeout=180,
+            max_tokens=MAX_ANSWER_TOKENS,
         )
         self.calls += 1
         answer = json.loads(resp.choices[0].message.content or "{}")

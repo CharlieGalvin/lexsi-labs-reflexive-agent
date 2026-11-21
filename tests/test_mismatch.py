@@ -92,3 +92,46 @@ def test_corruptions_change_the_call_in_one_known_way():
     assert (
         s.corrupt(call("cancel_pending_order", order_id="#W1234567"), "#W1234567", rng) is None
     )  # no other order
+
+
+def test_rule_rates_counts_a_checker_error_as_not_flagged_and_shows_the_worst_case(
+    tmp_path, monkeypatch, capsys
+):
+    import reflexive.intent as intent
+    from reflexive.splits import task_ids
+
+    s = load_script("labels/rule_rates")
+    t = task_ids("retail", "train")[0]
+    rec = {
+        "domain": "retail",
+        "task_id": t,
+        "outcome": {"passed": True},
+        "messages": [],
+        "agent_view": [{"role": "system", "content": "P"}],
+    }
+    (tmp_path / "S2-retail-trainpool.jsonl").write_text(json.dumps(rec) + "\n")
+
+    def findings(r, rules=None):
+        if rules[0].__name__ == "mismatch":
+            return [
+                {
+                    "turn": 1,
+                    "tool": "x",
+                    "live": False,
+                    "rule": "mismatch_error",
+                    "reason": "JSONDecodeError: runaway",
+                }
+            ]
+        return []
+
+    monkeypatch.setattr(intent, "intent_findings", findings)
+    out = tmp_path / "o.json"
+    assert s.main(["--episodes", str(tmp_path), "--json", str(out)]) == 0
+    m = json.loads(out.read_text())
+    assert m["rules"]["S2/mismatch"]["all"]["passes"] == {"flagged": 0, "n": 1, "errored_unflagged": 1}
+    assert "at worst 1" in capsys.readouterr().out
+
+    monkeypatch.setattr(
+        intent, "intent_findings", lambda r, rules=None: [{"live": False, "reason": "Missing credentials"}]
+    )
+    assert s.main(["--episodes", str(tmp_path)]) == 1  # a setup error still stops the run

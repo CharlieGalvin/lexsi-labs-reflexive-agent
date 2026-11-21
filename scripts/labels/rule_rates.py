@@ -43,6 +43,9 @@ ROOT = Path(__file__).resolve().parents[2]
 EPISODES = ROOT / "results" / "episodes" / "arms"
 CACHE = ROOT / "results" / "cache"
 DOMAINS = ("retail", "airline", "telecom")
+SETUP_ERROR = re.compile(
+    r"Missing credentials|AuthenticationError|api_key|ModuleNotFoundError|No module named"
+)
 
 
 def val_tasks(episodes: Path) -> set[tuple[str, str]] | None:
@@ -168,7 +171,7 @@ def injected(recs: list[dict], n: int, rule: Callable[..., Any], seed: int = 0) 
                 if (c.get("function") or {}).get("name") in TOOLS:
                     points.append((r, view, i, c))
     rng.shuffle(points)
-    out = {"tried": 0, "caught": 0, "clean_flagged": 0, "kinds": {}}
+    out = {"tried": 0, "caught": 0, "clean_flagged": 0, "errors": 0, "kinds": {}}
     for _r, view, i, c in points:
         if out["tried"] >= n:
             break
@@ -181,9 +184,9 @@ def injected(recs: list[dict], n: int, rule: Callable[..., Any], seed: int = 0) 
         out["tried"] += 1
         hit = rule(view[:i], call, policy)
         clean = rule(view[:i], c, policy)
-        for f in (hit, clean):
-            if f is not None and not f.live:
-                raise RuntimeError(f"checker error: {f.reason}")
+        out["errors"] += sum(f is not None and not f.live for f in (hit, clean))
+        hit = hit if hit is not None and hit.live else None  # an error never flags
+        clean = clean if clean is not None and clean.live else None
         k = out["kinds"].setdefault(kind, [0, 0])
         k[0] += hit is not None
         k[1] += 1
@@ -229,7 +232,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901 - one report, read
 
     out: dict = {"arms": a.arms, "rules": {}}
     rows: dict = {}
-    errors, shown = [], 0
+    errors, shown, flagged_passes = [], 0, []
     for r in recs:
         found = {
             "no_yes": intent_findings(r, rules=[no_yes]),
@@ -237,17 +240,25 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901 - one report, read
         }
         for fs in found.values():
             errors += [f["reason"] for f in fs if not f["live"]]
+        if setup := next((e for e in errors if SETUP_ERROR.search(e)), None):
+            print(f"\n⛔ the checker can't run: {setup}\n  Fix it (OPENAI_API_KEY, litellm) and run again.")
+            return 1
         live = {k: [f for f in fs if f["live"]] for k, fs in found.items()}
         live["either"] = live["no_yes"] + live["mismatch"]
+        erred = {k: any(not f["live"] for f in fs) for k, fs in found.items()}
+        erred["either"] = erred["no_yes"] or erred["mismatch"]
         passed = r["outcome"]["passed"]
         unexplained = not passed and classify_record(r).failure == FailureType.NONE
         for rule, fs in live.items():
             for key in ("failures", "unexplained failures", "passes"):
                 if (key == "passes") != passed or (key == "unexplained failures" and not unexplained):
                     continue
-                row = rows.setdefault((r["_arm"], r["domain"], rule, key), [0, 0])
+                row = rows.setdefault((r["_arm"], r["domain"], rule, key), [0, 0, 0])
                 row[0] += bool(fs)
                 row[1] += 1
+                row[2] += bool(erred[rule] and not fs)  # an error, nothing flagged: flagged at worst
+        if passed and live["mismatch"]:
+            flagged_passes.append(f"{r['_arm']} {r['domain']} {r['task_id']}#{r.get('sample', 0)}")
         if passed and live["mismatch"] and shown < a.show:
             shown += 1
             print(
@@ -256,32 +267,44 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901 - one report, read
             )
             for f in live["mismatch"]:
                 print(f"    turn {f['turn']} {f['tool']}: {f['reason'][:400]}")
+    out["checker_errors"] = errors
     if errors:
-        print(f"\n⚠ {len(errors)} checker errors: those changes weren't flagged, so the rates are too low.")
-        print(f"  first: {errors[0]}\n  Fix it (usually OPENAI_API_KEY) and run again; nothing is written.")
-        return 1
+        print(f"\n⚠ {len(errors)} checker errors. As in the guard, an error never flags: counted as not")
+        print("  flagged, with the worst case (every error flagged) shown as 'at worst'.")
+        for e in errors:
+            print(f"  - {e[:200]}")
 
+    keys = ("failures", "unexplained failures", "passes")
     for arm, _ in pairs:
         print(f"\n== {arm}")
         for rule in ("no_yes", "mismatch", "either"):
             print(f"  {rule}")
-            for d in DOMAINS:
+            for d in (*DOMAINS, "all"):
+                ds = DOMAINS if d == "all" else (d,)
+                got = {
+                    k: [sum(rows.get((arm, x, rule, k), [0, 0, 0])[j] for x in ds) for j in range(3)]
+                    for k in keys
+                }
+                if not any(got[k][1] for k in ("failures", "passes")):
+                    continue
                 cells = [
-                    share(*rows.get((arm, d, rule, k), [0, 0]))
-                    for k in ("failures", "unexplained failures", "passes")
+                    share(got[k][0], got[k][1])
+                    + (f" (at worst {got[k][0] + got[k][2]})" if got[k][2] else "")
+                    for k in keys
                 ]
-                if any(rows.get((arm, d, rule, k)) for k in ("failures", "passes")):
-                    print(f"    {d:8s} failures {cells[0]}  unexplained {cells[1]}  passes {cells[2]}")
-                    out["rules"].setdefault(f"{arm}/{rule}", {})[d] = {
-                        k: rows.get((arm, d, rule, k), [0, 0])
-                        for k in ("failures", "unexplained failures", "passes")
-                    }
+                print(f"    {d:8s} failures {cells[0]}  unexplained {cells[1]}  passes {cells[2]}")
+                out["rules"].setdefault(f"{arm}/{rule}", {})[d] = {
+                    k: {"flagged": got[k][0], "n": got[k][1], "errored_unflagged": got[k][2]} for k in keys
+                }
+    out["mismatch_flagged_passes"] = flagged_passes
+    print(f"\nmismatch-flagged passes ({len(flagged_passes)}): {', '.join(flagged_passes) or 'none'}")
     if a.inject:
         inj = injected(recs, a.inject, mismatch)
         out["injected"] = inj
         print(
             f"\ninjected errors: caught {share(inj['caught'], inj['tried'])}; "
             f"the same changes uncorrupted flagged {share(inj['clean_flagged'], inj['tried'])}"
+            + (f"; {inj['errors']} checker errors, counted as not flagged" if inj["errors"] else "")
         )
         for kind, (k, n) in sorted(inj["kinds"].items()):
             print(f"    {kind:45s} {k}/{n}")
