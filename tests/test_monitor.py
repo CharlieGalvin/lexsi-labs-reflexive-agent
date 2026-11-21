@@ -500,4 +500,4 @@ def test_a_checker_error_is_kept_and_the_call_runs():
 
     w = Watcher("act", TOOLS, write_tools=WRITES, policy="policy", checker=broken)
     assert w.before_step(OPENER, reply_with(write_call()), 2) is False
-    assert "boom" in w.error and w.to_dict()["actions"]["mode"] == "off"
+    assert w.error is not None and "boom" in w.error and w.to_dict()["actions"]["mode"] == "off"

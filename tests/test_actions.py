@@ -27,7 +27,9 @@ def test_a_rule_gets_the_conversation_the_call_and_the_policy_and_live_findings_
     def live(conversation, call, policy):
         return ActionFinding("INTENT", "no_yes", "no yes from the customer", live=True)
 
-    assert check_action(VIEW, CALL, "policy", rules=[later, live]).rule == "no_yes"
-    assert check_action(VIEW, CALL, "policy", rules=[later]).live is False
+    first = check_action(VIEW, CALL, "policy", rules=[later, live])
+    assert first is not None and first.rule == "no_yes"
+    only_later = check_action(VIEW, CALL, "policy", rules=[later])
+    assert only_later is not None and only_later.live is False
     assert seen[0] == (2, "cancel_pending_order", "policy")
     assert check_action(VIEW, CALL, "policy", rules=[lambda *a: None]) is None
