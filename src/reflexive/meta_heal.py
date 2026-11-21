@@ -92,6 +92,19 @@ Write at most {MAX_CANDIDATES} rules, the most useful first. Answer with JSON on
 and never did); always live=false. "live": true only if, at the moment of the call, the checker
 can be confident enough to stop the change and send block_message to the agent."""
 
+ROUND_GUIDANCE = """
+
+THIS IS ROUND {round}. Earlier rounds already proposed the rules under ALREADY TRIED: don't repeat
+them or write close variants. The failures you'll see, by domain: {by_domain}. Spread your rules
+across the domains in proportion to those failures, so every domain with failures gets at least
+one rule. Two kinds of error to look for in each domain:
+- a change that doesn't match what the customer asked for or agreed to, or what the agent's own
+  lookups showed (wrong item, wrong order or reservation, wrong amount, more or less than asked):
+  a "call" rule;
+- something the policy required that the agent never did, or a wrong or missing statement to the
+  customer: a "conversation" rule, never a "call" rule, since there may be no call to check.
+Write at most {limit} rules (this overrides the number above)."""
+
 RULE_SYSTEM = """You check one rule for a customer-service AI agent, using only the conversation and
 the domain policy below. The rule describes an ERROR. Decide whether the error is present.
 
@@ -434,7 +447,14 @@ def failed_checks(rec: dict) -> list[str]:
     return sorted(k for k, v in checks.items() if isinstance(v, (int, float)) and v < 1)
 
 
-def proposer_request(failures: Sequence[dict], passes: Sequence[dict]) -> list[Message]:
+def proposer_request(
+    failures: Sequence[dict],
+    passes: Sequence[dict],
+    round: int = 1,
+    tried: Sequence[Candidate] = (),
+    limit: int = MAX_CANDIDATES,
+) -> list[Message]:
+    """Round 1's request is unchanged, so its cached answer still replays; later rounds add guidance."""
     from reflexive.hallucination import agent_view_of
 
     policies: dict[str, str] = {}
@@ -449,32 +469,51 @@ def proposer_request(failures: Sequence[dict], passes: Sequence[dict]) -> list[M
             blocks.append(f"=== {example_id(r)}: {label}{checks}\n{transcript(view, 600)}")
     pol = "\n\n".join(f"=== {d.upper()} POLICY\n{p}" for d, p in sorted(policies.items()))
     user = pol + "\n\n" + "\n\n".join(blocks)
-    return [{"role": "system", "content": PROPOSER_SYSTEM}, {"role": "user", "content": user}]
+    system = PROPOSER_SYSTEM
+    if round > 1:
+        by_domain = {}
+        for r in failures:
+            by_domain[r["domain"]] = by_domain.get(r["domain"], 0) + 1
+        counts = ", ".join(f"{d} {n}" for d, n in sorted(by_domain.items())) or "none"
+        system += ROUND_GUIDANCE.format(round=round, by_domain=counts, limit=limit)
+        tried_text = "\n".join(f"- {c.name} ({c.applies_to}): {c.what}" for c in tried) or "- none"
+        user = f"ALREADY TRIED:\n{tried_text}\n\n{user}"
+    return [{"role": "system", "content": system}, {"role": "user", "content": user}]
 
 
 def propose(
-    recs: Sequence[dict], llm: Callable[[list], dict], n_passes: int = 12, seed: int = 0
+    recs: Sequence[dict],
+    llm: Callable[[list], dict],
+    n_passes: int = 12,
+    seed: int = 0,
+    round: int = 1,
+    tried: Sequence[Candidate] = (),
+    limit: int = MAX_CANDIDATES,
 ) -> tuple[list[Candidate], dict]:
-    """Candidates from the propose set's unexplained failures (and ``n_passes`` passes)."""
+    """Candidates from the propose set's unexplained failures (and ``n_passes`` passes).
+
+    ``round`` > 1 adds `ROUND_GUIDANCE` and the ``tried`` rules; ``limit`` is what is left of the
+    `MAX_CANDIDATES` scored across all rounds."""
     failures = [r for r in recs if not passed(r) and not explained(r)]
     pool = [r for r in recs if passed(r)]
     rng = random.Random(seed)
     passes = rng.sample(pool, min(n_passes, len(pool)))
-    answer = llm(proposer_request(failures, passes))
+    answer = llm(proposer_request(failures, passes, round, tried, limit))
     out: list[Candidate] = []
     for d in answer.get("rules") or []:
         try:
             c = Candidate.from_dict(d)
         except (ValueError, TypeError, KeyError):
             continue
-        if c.name not in {x.name for x in out}:
+        if c.name not in {x.name for x in out} | {x.name for x in tried}:
             out.append(c)
     meta = {
         "unexplained_failures": [example_id(r) for r in failures],
         "passes_shown": [example_id(r) for r in passes],
         "proposed": len(answer.get("rules") or []),
+        "round": round,
     }
-    return out[:MAX_CANDIDATES], meta
+    return out[:limit], meta
 
 
 # --- Scoring and the bar ----------------------------------------------------------------------

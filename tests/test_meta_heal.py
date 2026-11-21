@@ -286,3 +286,51 @@ def test_the_llm_caches_by_request(tmp_path):
     assert llm(m) == llm(m) == {"violated": False} and len(n) == 1
     again = mh.LLM(mh.RULE_MODEL, completion, tmp_path / "c.jsonl")
     assert again(m) == {"violated": False} and len(n) == 1 and again.calls == 0
+
+
+# --- Rounds -----------------------------------------------------------------------------------
+
+
+def test_round_one_is_unchanged_and_later_rounds_add_guidance_and_what_was_tried():
+    fails = [rec("retail", "1"), rec("retail", "2"), rec("airline", "3")]
+    one = mh.proposer_request(fails, [])
+    assert one[0]["content"] == mh.PROPOSER_SYSTEM and "ALREADY TRIED" not in one[1]["content"]
+    two = mh.proposer_request(fails, [], round=2, tried=[SAID], limit=5)
+    assert "ROUND 2" in two[0]["content"] and "airline 1, retail 2" in two[0]["content"]
+    assert "at most 5 rules" in two[0]["content"]
+    assert two[1]["content"].startswith("ALREADY TRIED:\n- wrong_closing_statement (conversation)")
+
+
+def test_a_later_round_keeps_within_the_ten_and_drops_repeats(monkeypatch):
+    monkeypatch.setattr(mh, "explained", lambda r: False)
+    answer = {"rules": [SAID.to_dict(), *[{"name": f"r{i}", "question": "q"} for i in range(8)]]}
+    cands, meta = mh.propose([rec()], Fake(lambda m: answer), round=2, tried=[SAID], limit=5)
+    assert [c.name for c in cands] == ["r0", "r1", "r2", "r3", "r4"] and meta["round"] == 2
+
+
+def test_the_script_shares_the_ten_across_rounds_and_shortlists_across_them(tmp_path, monkeypatch):
+    from _scripts import load_script
+
+    s = load_script("heal/meta_heal")
+    monkeypatch.setattr(s, "OUT", tmp_path)
+    monkeypatch.setattr(s, "METRICS", tmp_path / "m.json")
+    base = {
+        "seed": 0,
+        "proposer_model": "p",
+        "propose_ids": [],
+        "holdout_ids": [],
+        "unexplained_failures": [],
+        "proposed": 5,
+    }
+    one = [{**SAID.to_dict(), "name": f"a{i}"} for i in range(5)]
+    s.write(s.paths(1)[0], {**base, "candidates": one})
+    good = mh.Score("a1", unexplained_failures=[2, 5]).to_dict()
+    s.write(s.paths(1)[1], {"scores": [mh.Score("a0").to_dict(), good]})
+    assert s.rounds() == [1] and s.shortlist() == ["a1"]
+    s.write(s.paths(2)[0], {**base, "candidates": [{**SAID.to_dict(), "name": f"b{i}"} for i in range(5)]})
+    a = SimpleNamespace(round=3, seed=0, passes=12)
+    with pytest.raises(SystemExit, match="allows 10"):
+        s.cmd_propose([rec()], a)
+    s.write_metrics(None)
+    m = json.loads((tmp_path / "m.json").read_text())
+    assert [r["round"] for r in m["rounds"]] == [1, 2] and m["meets_bar"] == ["a1"]
