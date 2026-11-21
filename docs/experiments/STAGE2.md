@@ -173,7 +173,7 @@ passes (`just rule-rates`), and of base Aya's (Arm A) train-task passes when tho
 test (corrupted changes from passing conversations: caught, and originals flagged) are reported
 whatever they show. Measured once; the wording is not tuned on the result.
 
-**Amended Sat 21 Nov, 22:05 UK, before any v2 code, data or result: meta-healing v2, and the
+**Amended Sat 21 Nov, 22:01 UK, before any v2 code, data or result: meta-healing v2, and the
 freeze moves to Sun 22 Nov 16:00 UK.** v1's result above stands. v1 had three diagnosed gaps: the
 proposer never saw what the right actions were, tool results were cut to 600 / 1,200 characters,
 and there was no feedback before the held-out test. Its held-out third (5 unexplained failures)
