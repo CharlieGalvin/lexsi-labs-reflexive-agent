@@ -126,6 +126,18 @@ telecom), so the bar is in effect 2 of 5.
 - A live meta-healing rule re-asks the agent with its own fixed one-sentence message instead of
   the "no yes" message; whole-conversation rules are after the fact only.
 
+**Result, Sat 21 Nov 11:25 UK: no rule accepted.** Round 2's
+`retail_modify_pending_order_without_collecting_all_items` met the numeric bar (3/5 held-out
+unexplained failures, 1/19 passes; 5/14 already-explained failures) and failed human review
+(Charlie): 2 of its 5 flagged conversations show the error it names (retail 103 turn 35, retail 8),
+1 is wrong for another reason (retail 107: an item change on an order that isn't pending), and 2
+are not errors of this kind (airline 33: an airline booking, where the policy has no such step,
+though turn 27 drops a flight the customer kept; retail 29: the customer chose a partial change).
+The rule's "or similar" let the checker apply it to exchanges, address changes and airline
+bookings. Review used 4 of 5 as the bar; that number was not written here before the review, and
+2–3 of 5 fails any majority bar too. The other 9 candidates failed the numbers. All 10, with their
+scores, are in `results/meta-heal.metrics.json`. The checker freezes with "no yes" only.
+
 **Freeze: Sat 21 Nov, 23:59 UK (SEL-95).** The checker is tagged `stage2-checker-frozen`; the rule
 list and each rule's live / after-the-fact mark are added below this line in the same commit.
 Nothing changes the checker after the tag. If meta-healing isn't ready, the freeze goes ahead with
