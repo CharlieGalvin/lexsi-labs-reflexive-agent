@@ -149,7 +149,13 @@ machinery as meta-healing's rules (evidence must be in the conversation, errors 
 results shown in full; live, with its own block message. "No yes" keeps gpt-4.1-mini. (Times corrected 11:50 to the commits' own;
 earlier text gave 11:50 and 11:55 by mistake.) A run with gpt-4.1-mini, started from the 11:38
 version, finished at 11:43, just after the switch was committed: it is reported beside the GPT-4.1
-run and does not decide anything. The GPT-4.1 run is the measurement. It joins the frozen checker only if it flags at most 1 in 10 of SFT v2's train-task
+run and does not decide anything. The GPT-4.1 run is the measurement.
+
+Amended Sat 21 Nov, before the GPT-4.1 run's numbers were seen: its first attempt stopped on one
+checker error (a runaway answer, invalid JSON), after printing 5 flagged passes but no rates. As in
+the guard, a checker error counts as not flagged; the count is reported and each rate is also given
+at worst (every error flagged). The bar is read overall: at most 5 of the 55 passes, using the
+at-worst count. Answers are capped at 4,000 tokens. The rule's wording is unchanged. It joins the frozen checker only if it flags at most 1 in 10 of SFT v2's train-task
 passes (`just rule-rates`), and of base Aya's (Arm A) train-task passes when those are run too
 (validation tasks dropped). Failures flagged, unexplained failures flagged and an injected-error
 test (corrupted changes from passing conversations: caught, and originals flagged) are reported
