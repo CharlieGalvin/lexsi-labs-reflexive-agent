@@ -244,7 +244,7 @@ SFT v2 with the guard in act mode, validation 30 tasks × 2, with the frozen che
 
 Also reported: blocks per conversation, overrides, extra turns, conversations where a checker
 error switched the guard off, and how often the customer refused or went off-script.
-**No-go:** skip retraining; v2 + guard goes to Decision 2. (Amended Sat 21 Nov 23:30, see
+**No-go:** skip retraining; v2 + guard goes to Decision 2. (Amended Sat 21 Nov 23:28, see
 Retraining: with an accepted meta-healing rule, a no-go retrains on meta-healing's fixes only.)
 
 ## Retraining (SEL-100, SEL-102, SEL-103)
@@ -258,7 +258,7 @@ Retraining: with an accepted meta-healing rule, a no-go retrains on meta-healing
   One change from v2: the added fixes. Adapter published with its `lexsi_provenance.json`.
 - First score: validation 30 × 2 **without** the guard, reported whatever it shows.
 
-**Amended Sat 21 Nov, 23:30 UK, before meta-healing v2 is scored and before Decision 1 runs:
+**Amended Sat 21 Nov, 23:28 UK, before meta-healing v2 is scored and before Decision 1 runs:
 meta-healing's fixes join retraining, and retraining no longer depends on Decision 1.**
 
 - **Meta-healing fixes.** For each meta-healing v2 rule accepted by the freeze, every place it
