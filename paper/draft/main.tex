@@ -42,6 +42,13 @@
 Open-weight 32B agents in write-enabled customer-service workflows frequently exhibit structural hallucinations: invoking unavailable tools, fabricating placeholder or ungrounded arguments, and repeating failed calls. We introduce ReAgent, a Detect--Fix--Retrain--Gate self-healing framework combining a deterministic 12-kind Tool/Arg/Loop classifier, oracle-verified fixes from an open-weight teacher (GLM-5.3-Flash), agent-turn-masked QLoRA fine-tuning on Aya Expanse 32B, and a pre-registered four-check deployment gate (\texttt{DevGate}). On the held-out $\tau^2$-bench test split (100 tasks $\times$ 2 samples), our gated adapter (SFT v2, refined with extra verified airline trajectories after \texttt{DevGate} rejected SFT v1) lowers Tool/Arg hallucination conversations from 95.0\% to 10.0\% and raises task success $3.5\times$ from 14.5\% to 51.5\% (95\% CI: 43.5--59.5\%), whereas explicit anti-hallucination prompting yields 13.0\% (no gain). Executed autonomously on one GPU, a deduplicated single-turn rewrite cycle cuts dev findings by 71\% with flat success (4/36 $\rightarrow$ 4/36, rejected), whereas a full-trajectory cycle over SFT v2's verified pool cuts findings by 87\% and lifts dev success from 6/36 to 22/36 (promoted live). Finally, three single-turn post-SFT GRPO variants expose structural reward hacking into dialogue collapse or confident unrequested write actions. Code is available at \url{https://github.com/CharlieGalvin/lexsi-labs-reflexive-agent}, and the verified trajectories and adapter on Hugging Face (\texttt{reagent-lexsi}).
 \end{abstract}
 
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.78\textwidth]{figures/heal-loop.png}
+\caption{The Detect--Fix--Retrain--Gate loop. The gate's example is SFT v2's dev result (11\% $\rightarrow$ 60\%), trained on 146 verified conversations.}
+\label{fig:loop}
+\end{figure*}
+
 \section{Problem and Approach}
 \label{sec:intro}
 \label{sec:related_work}
@@ -78,12 +85,6 @@ A live monitor (\texttt{reflexive.monitor}) enforces \texttt{no\_progress}: afte
 \subsection{The ReAgent Detect--Fix--Retrain--Gate Loop}
 \label{sec:method_loop}
 
-\begin{figure}[t]
-\centering
-\includegraphics[width=\columnwidth]{figures/heal-loop.png}
-\caption{The Detect--Fix--Retrain--Gate loop. The gate's example is SFT v2's dev result (11\% $\rightarrow$ 60\%), trained on 146 verified conversations.}
-\label{fig:loop}
-\end{figure}
 
 ReAgent adapts $\pi_\theta$ through four sequential stages executable offline or autonomously on one GPU node (Figure~\ref{fig:loop}).
 
