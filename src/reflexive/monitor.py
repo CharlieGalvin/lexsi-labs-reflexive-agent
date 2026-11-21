@@ -36,6 +36,13 @@ the conversation is stopped, with its own termination ``monitor_stop`` (SEL-69):
 grades it as an agent stop, but metrics report those runs on their own. Other findings are only
 logged.
 
+**Before a change runs** (`ActionGuard`, SEL-89): the checks above come after a turn, which is
+too late for a write. So each state-changing call the agent proposes (τ²-bench's ``WRITE``
+tools) first goes through `reflexive.actions.check_action`, in the same mode. In ``act`` mode a
+live finding blocks the reply before τ²-bench sees it, and the agent is asked again with
+`BLOCK_MESSAGE` ("you haven't got the customer's yes"); the conversation carries on. Every
+decision is recorded (``rec["monitor"]["actions"]``).
+
 **Checked against AgentTune itself** (7 Nov, the 148 Arm A and C telecom conversations written
 as audit logs after every message): its own ``FailureDetector`` reads our lines with no schema
 errors, and our text and observation lines never trigger its ``loop_collapse``. It flags
@@ -55,7 +62,7 @@ from __future__ import annotations
 import json
 import re
 import threading
-from collections.abc import Iterator, Sequence
+from collections.abc import Collection, Iterator, Sequence
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
@@ -220,6 +227,133 @@ class Guard:
         }
 
 
+# --- Before a change runs (SEL-89) -----------------------------------------------------------
+
+BLOCK_MESSAGE = (
+    "Note from the system, not the customer: you haven't got the customer's yes. "
+    "Describe the change and ask them to confirm."
+)
+MAX_BLOCKS_PER_CHANGE = 2  # the same change proposed a third time runs, recorded as "overridden"
+MAX_BLOCKS = 10  # blocks per conversation: a re-ask takes no τ²-bench step, so it needs its own limit
+
+
+def _change_key(call: dict) -> str:
+    """The same tool with the same arguments is the same change, however the JSON was spelled."""
+    bare = _bare(call)
+    return f"{bare['name']} {json.dumps(bare['arguments'], sort_keys=True, default=str)}"
+
+
+@dataclass
+class ActionGuard:
+    """Checks each state-changing call the agent proposes, **before** τ²-bench runs it (SEL-89).
+
+    `check` runs `reflexive.actions.check_action` on every call in a reply whose tool is in
+    ``write_tools`` (τ²-bench's ``ToolType.WRITE`` tools, read from the live environment). What
+    it does with a finding depends on ``mode``, as for `Guard`:
+
+    * ``off``: nothing is checked.
+    * ``log``: every finding is recorded (``action="logged"``) and the call runs.
+    * ``act``: a **live** finding blocks the whole reply. It isn't sent to τ²-bench, and the agent
+      is asked again with `BLOCK_MESSAGE` added to that one prompt, as the nudge is. The
+      conversation carries on. The same change is blocked at most `MAX_BLOCKS_PER_CHANGE` times;
+      the next time, it runs and is recorded as ``overridden``. After `MAX_BLOCKS` blocks in one
+      conversation nothing more is blocked (``logged``), so a conversation always ends.
+      After-the-fact findings (``live=False``) are only logged.
+
+    Every decision is kept in ``blocks``, one entry per flagged call, so a run can count blocks,
+    good changes blocked wrongly (in a conversation that then passed) and the extra agent turns
+    blocks cost (``reasks``).
+    """
+
+    mode: str = "log"
+    write_tools: frozenset[str] = frozenset()
+    policy: str = ""
+    checker: Any = None  # (conversation, call, policy) -> ActionFinding | None; default check_action
+    blocks: list[dict[str, Any]] = field(default_factory=list)
+    reasks: list[dict[str, Any]] = field(default_factory=list)  # each block message, as the agent saw it
+    error: str | None = None  # a checker error, which switched the check off (`Watcher.before_step`)
+    _counts: dict[str, int] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if self.mode not in MODES:
+            raise ValueError(f"monitor mode must be one of {MODES}, not {self.mode!r}")
+        self.write_tools = frozenset(self.write_tools)
+        if self.checker is None:
+            from reflexive.actions import check_action
+
+            self.checker = check_action
+
+    def check(self, view: Sequence[Message], reply: Message, agent_turn: int) -> bool:
+        """True if ``reply`` must not be sent (act mode and a live finding). Records every finding.
+
+        ``view``: the agent's view before this reply. ``agent_turn``: this reply's number (1 = first).
+        """
+        if self.mode == "off":
+            return False
+        entries: list[tuple[str, dict[str, Any]]] = []  # (the change, its log entry)
+        for k, call in enumerate(reply.get("tool_calls") or []):
+            bare = _bare(call)
+            if bare["name"] not in self.write_tools:
+                continue
+            finding = self.checker(view, call, self.policy)
+            if finding is None:
+                continue
+            entry = {
+                "agent_turn": agent_turn,
+                "call": k,
+                "tool": bare["name"],
+                "arguments": bare["arguments"],
+            }
+            entry.update(finding.to_dict(), action="logged")
+            key = _change_key(call)
+            if self.mode == "act" and finding.live and self.n_blocked < MAX_BLOCKS:
+                seen = self._counts.get(key, 0)
+                entry["action"] = "blocked" if seen < MAX_BLOCKS_PER_CHANGE else "overridden"
+            entries.append((key, entry))
+        block = any(e["action"] == "blocked" for _, e in entries)
+        for key, e in entries:
+            if e["action"] == "blocked":
+                self._counts[key] = self._counts.get(key, 0) + 1
+            elif block and e["action"] == "overridden":
+                e["action"] = "held"  # its reply was blocked for another call, so it didn't run either
+        self.blocks += [e for _, e in entries]
+        return block
+
+    @property
+    def n_blocked(self) -> int:
+        return sum(e["action"] == "blocked" for e in self.blocks)
+
+    def reasked(self, prompt: list[Message], agent_turn: int) -> list[Message]:
+        """The prompt with `BLOCK_MESSAGE` as a last user turn, recorded as `Guard.nudged` records
+        the nudge. The blocked reply isn't in it: τ²-bench never saw it, and an OpenAI tool call
+        without its result isn't a valid message."""
+        last = prompt[-1] if prompt else {}
+        self.reasks.append(
+            {
+                "text": BLOCK_MESSAGE,
+                "role": "user",
+                "after_view_index": len(prompt) - 1,
+                "after_role": last.get("role"),
+                "before_agent_turn": agent_turn,
+            }
+        )
+        return [*prompt, {"role": "user", "content": BLOCK_MESSAGE}]
+
+    def to_dict(self) -> dict[str, Any]:
+        counts = {
+            a: sum(e["action"] == a for e in self.blocks) for a in ("blocked", "overridden", "held", "logged")
+        }
+        return {
+            "mode": self.mode,
+            "counts": counts,
+            "blocks": self.blocks,
+            "reasks": self.reasks,
+            # its own copy: `Watcher.error` is shared with the monitor and the audit log
+            "error": self.error,
+            "switched_off_by_error": self.error is not None,
+        }
+
+
 # --- The audit log (what FullClosedLoop reads) ----------------------------------------------
 
 
@@ -376,6 +510,10 @@ class Watcher:
 
     ``after_turn(view)`` returns ``"nudge"``, ``"stop"`` or None. A monitor error is kept in
     ``error`` and switches it off: it must never break the conversation it watches.
+
+    ``mode`` is the loop monitor's (`Guard`); ``actions`` is the action guard's (`ActionGuard`,
+    SEL-89), set apart so that one can act while the other only logs (Stage 2 keeps the loop
+    monitor at ``log`` for every arm).
     """
 
     def __init__(
@@ -385,11 +523,30 @@ class Watcher:
         audit_log: Path | str | None = None,
         trajectory_id: str = "",
         customer_tools: Sequence[str] = (),
+        write_tools: Collection[str] = (),
+        policy: str = "",
+        checker: Any = None,
+        actions: str = "log",
     ) -> None:
         self.guard = Guard(mode)
+        self.actions = ActionGuard(actions, frozenset(write_tools), policy, checker)
         self.monitor = RuntimeMonitor(tools, customer_tools) if mode != "off" else None
         self.writer = AuditWriter(audit_log, trajectory_id) if audit_log else None
         self.error: str | None = None
+
+    def before_step(self, view: Sequence[Message], reply: Message, agent_turn: int) -> bool:
+        """True if ``reply`` is blocked (SEL-89): don't send it, re-ask with `ActionGuard.reasked`.
+
+        A checker error is kept in ``error`` and switches the check off, as a monitor error does:
+        the call then runs."""
+        if self.actions.mode == "off":
+            return False
+        try:
+            return self.actions.check(view, reply, agent_turn)
+        except Exception as e:  # noqa: BLE001 - the guard must never break a conversation
+            self.error = self.actions.error = f"{type(e).__name__}: {str(e)[:200]}"
+            self.actions.mode = "off"
+            return False
 
     def after_turn(self, view: Sequence[Message]) -> str | None:
         if self.monitor is None and self.writer is None:
@@ -423,6 +580,7 @@ class Watcher:
         return {
             **self.guard.to_dict(),
             "alarms": [a.to_dict() for a in self.monitor.alarms] if self.monitor is not None else [],
+            "actions": self.actions.to_dict(),
             "error": self.error,
         }
 

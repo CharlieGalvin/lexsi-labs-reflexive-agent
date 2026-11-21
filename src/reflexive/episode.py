@@ -141,6 +141,15 @@ def _split(domain: str, name: str) -> set[str]:
     return set(official_split(domain, name))
 
 
+def write_tool_names(toolkit: Any, names: list[str]) -> frozenset[str]:
+    """The agent tools that change the environment's state: τ²-bench's ``ToolType.WRITE`` ones
+    (e.g. ``cancel_pending_order``, ``book_reservation``, ``suspend_line``). The runtime guard
+    checks these before they run (SEL-89)."""
+    from tau2.environment.toolkit import ToolType
+
+    return frozenset(n for n in names if toolkit.has_tool(n) and toolkit.tool_type(n) == ToolType.WRITE)
+
+
 class Tau2Episode:
     """One τ²-bench conversation: our code plays the agent, τ²-bench plays everything else."""
 
@@ -181,6 +190,7 @@ class Tau2Episode:
             # never for anything that is evaluated (test split, the four arms).
             raise ValueError(f"hints are only allowed on train-split tasks ({domain} {task_id!r})")
         self._env: Any = None  # τ²-bench's Gym environment, made by reset() (a class built at run time)
+        self.write_tools: frozenset[str] = frozenset()  # set by reset(): the state-changing tools
         self._view: list[Any] = []  # what the agent has seen so far (τ²-bench messages)
         self.flags: dict[str, Any] = {
             "context_overflow": False,
@@ -223,6 +233,7 @@ class Tau2Episode:
         tools = [t for t in env._get_tools() if t.name != "done"]
         self._tools = tools
         self.policy = env._agent.domain_policy  # includes τ²-bench's language guidance
+        self.write_tools = write_tool_names(env._orchestrator.environment.tools, [t.name for t in tools])
         return self._sync()
 
     def step(self, reply: dict) -> list[dict]:

@@ -142,9 +142,12 @@ def header(
     samples = max(r.get("sample", 0) for r in recs) + 1
     # the guard ablation (SEL-69): a run with the runtime monitor acting is its own run
     guard = any((r.get("monitor") or {}).get("mode") == "act" for r in recs)
+    # the action guard acting (SEL-89) is its own run too, under its own suffix
+    acting = any(((r.get("monitor") or {}).get("actions") or {}).get("mode") == "act" for r in recs)
     return {
-        "run": f"arm-{arm}-{domain}-{split}" + ("-guard" if guard else ""),
+        "run": f"arm-{arm}-{domain}-{split}" + ("-guard" if guard else "") + ("-actions" if acting else ""),
         "monitor": "act (guard: nudge, then stop, a no_progress loop)" if guard else "log or off",
+        "actions": "act (block an unconfirmed change, ask again)" if acting else "log or off",
         "date": dt.date.today().isoformat(),
         "owner": owner,
         "commit": _git("rev-parse", "--short", "HEAD"),
@@ -188,7 +191,7 @@ def main() -> int:
     p.add_argument(
         "--name",
         help="the run's name, when another run has the default one "
-        "(default: arm-<arm>-<domain>-<split>[-guard])",
+        "(default: arm-<arm>-<domain>-<split>[-guard][-actions])",
     )
     p.add_argument("--out", type=Path, help="default: results/<name>.metrics.json")
     p.add_argument("--force", action="store_true", help="replace an existing summary")
