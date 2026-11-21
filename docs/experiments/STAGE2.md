@@ -244,7 +244,8 @@ SFT v2 with the guard in act mode, validation 30 tasks × 2, with the frozen che
 
 Also reported: blocks per conversation, overrides, extra turns, conversations where a checker
 error switched the guard off, and how often the customer refused or went off-script.
-**No-go:** skip retraining; v2 + guard goes to Decision 2.
+**No-go:** skip retraining; v2 + guard goes to Decision 2. (Amended Sat 21 Nov 23:30, see
+Retraining: with an accepted meta-healing rule, a no-go retrains on meta-healing's fixes only.)
 
 ## Retraining (SEL-100, SEL-102, SEL-103)
 
@@ -256,6 +257,28 @@ error switched the guard off, and how often the customer refused or went off-scr
   epochs, learning rate 1e-4, same QLoRA settings), on v2's data plus the fixes as their own group.
   One change from v2: the added fixes. Adapter published with its `lexsi_provenance.json`.
 - First score: validation 30 × 2 **without** the guard, reported whatever it shows.
+
+**Amended Sat 21 Nov, 23:30 UK, before meta-healing v2 is scored and before Decision 1 runs:
+meta-healing's fixes join retraining, and retraining no longer depends on Decision 1.**
+
+- **Meta-healing fixes.** For each meta-healing v2 rule accepted by the freeze, every place it
+  fires in the train conversations (v2's 112 train-pool conversations and the fresh ones) is a fix
+  point: a call rule's flagged call; for a whole-conversation rule, the agent turn holding the
+  rule's quoted evidence, else the agent's last turn. GLM-5.3-Flash rewrites that turn, told the
+  rule's description, up to 3 attempts, through Stage 1's checks (`heal.fix_point`, `check_fix`,
+  `to_sft_example`). On these train tasks a fix is kept only if every change in it is one the task
+  still expects (`onpolicy_fixes`' rule). They are added as their own group, next to the guard's.
+- **Retraining runs either way.** Decision 1 go: v2's data + guard fixes + meta-healing fixes.
+  Decision 1 no-go: v2's data + meta-healing fixes. Too few: if the fixes that would be used number
+  fewer than 30, report the count and skip retraining (v2 + guard to Decision 2, as above). If no
+  meta-healing rule is accepted, everything is as before this amendment.
+- **Same recipe** as above (from base, v2's recipe, the fixes as their own groups). Validation
+  without the guard is still the retrained model's first score; Decision 2 is unchanged.
+- **The targeted measure (reported, not a gate).** Each accepted rule's rate (conversations it
+  flags) on the retrained model's dev conversations against v2's dev conversations: does the kind
+  of error meta-healing found become rarer? An overall gain is credited to the loop as a whole, not
+  to meta-healing alone: separating them needs a second retrain without its fixes, which is a next
+  step.
 
 ## Decision 2: the dev gate, third and last decision (SEL-104)
 
