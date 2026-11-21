@@ -75,10 +75,10 @@ article on Hugging Face with an interactive demo.
 |---|---|
 | **Title and claim** | **Reflexive Agents:** a detect → fix → retrain → gate loop that cuts an open 32B agent's hallucinations from 95% to 10% of conversations and solves 3.5× as many τ²-bench tasks |
 | **Track** | Track 3: Agentic Fine-tuning (AgentTune, AuditKIT) |
-| **Problem statements** | **Self-healing agents** (the main one): detect failing runs, classify why, generate corrective training examples, retrain, gate redeployment.<br>**Agentic distillation:** GLM-5.3-Flash's verified trajectories distilled into Aya Expanse 32B.<br>**Reliable tool calling:** tool-call validity 72.2% → 97.6%; we also tried RL on real tool-calling rollouts (GRPO), which didn't beat SFT.<br>**Efficient trajectories** (partly): loops 49% → 27% with success up, but steps per conversation rose (the agent now finishes tasks).<br>**Reward design and reward-hacking defences** (negative result): our GRPO rewards were gamed, and we report how. |
+| **Problem statements** (Track 3 numbering, in the order on the [tracks page](https://hackathon.lexsi.ai/tracks)) | **#8 Self-healing agents** (the main one): detect failing runs, classify why, generate corrective training examples, retrain, gate redeployment.<br>**#3 Agentic distillation:** GLM-5.3-Flash's verified trajectories distilled into Aya Expanse 32B.<br>**#1 Reliable tool calling:** tool-call validity 72.2% → 97.6%; we also tried RL on real tool-calling rollouts (GRPO), which didn't beat SFT.<br>**#2 Efficient trajectories** (partly): loops 49% → 27% with success up, but steps per conversation rose (the agent now finishes tasks).<br>**#9 Reward design and reward-hacking defences** (negative result): our GRPO rewards were gamed, and we report how. |
 | **Headline** | Conversations with a Tool or Arg hallucination **95% → 10%**; task success **14.5% → 51.5%** (τ²-bench test) |
 | **Base model + method** | Aya Expanse 32B + QLoRA (rank 16) SFT on a stronger teacher's verified conversations, inside a detect → fix → retrain → gate loop |
-| **Team** | Katie Kitchen ([katiemarieek](https://huggingface.co/katiemarieek)), Chiara Picardi ([cp89](https://huggingface.co/cp89), [chiara89](https://github.com/chiara89)), Charlie Galvin ([cg3849](https://huggingface.co/cg3849), [CharlieGalvin](https://github.com/CharlieGalvin)) |
+| **Team** | Katie Kitchen ([katiemarieek](https://huggingface.co/katiemarieek), [katiemarieek](https://github.com/katiemarieek)), Chiara Picardi ([cp89](https://huggingface.co/cp89), [chiara89](https://github.com/chiara89)), Charlie Galvin ([cg3849](https://huggingface.co/cg3849), [CharlieGalvin](https://github.com/CharlieGalvin)) |
 
 ## Overview
 
@@ -248,6 +248,7 @@ between splits, since τ²-bench tasks within a domain share tools and policy by
 | Conversations with a loop | ↓ | 49.0% (42–56) | 49.5% | **27.0% (21–33.5)** |
 | Tool-call validity (AuditKIT) | ↑ | 72.2% | 75.3% | **97.6%** |
 | Seconds per agent request, median | ↓ | 3.3 | 3.5 | **2.4** |
+| Seconds per conversation, mean | ↓ | 52.5 | 59.6 | 94.3 |
 | Output tokens per agent request, median | ↓ | 117 | 117 | **78** |
 
 **By domain** (healed agent B, with untuned A in brackets):
@@ -257,13 +258,16 @@ between splits, since τ²-bench tasks within a domain share tools and policy by
 | Task success | 60.0% (12.5%) | 30.0% (17.5%) | 53.8% (15.0%) |
 | Tool-call validity | 100% (98.8%) | 99.9% (97.7%) | 94.1% (32.8%) |
 | Seconds per agent request, median | 2.9 (2.8) | 2.7 (3.4) | 2.1 (4.0) |
+| Seconds per conversation, mean | 79.8 (43.6) | 94.8 (50.5) | 108.7 (62.4) |
 
 Tool-call validity checks that the tool exists and every argument matches its schema. Its gain is in
 telecom, where the untuned agent kept calling tools only the customer can use on their own phone. It
 checks the form of a call, not its content, so an invented but well-formed value (such as
 `email="something@example.com"`) passes it; our classifier's Arg findings catch those. Latency is
 the time for one model response, measured by the harness: B self-hosted on one H100 with vLLM, A and
-C on Cohere's hosted API, so the comparison includes the difference in serving.
+C on Cohere's hosted API, so the comparison includes the difference in serving. B's mean per
+request is 2.8 seconds. Its conversations take longer on average (94 against 52 seconds for A)
+because they run more than twice as many steps (25.7 against 11.3 on average).
 
 **Checking the automatic judges.** Two automatic judges score the runs.
 - **Task success** is τ²-bench's evaluator: database and environment checks, plus LLM judges in retail
@@ -527,6 +531,18 @@ time and compute, we would:
   the same settings, through AuditKIT. This shows whether healing cost the model
   anything elsewhere, and it might show side benefits: an agent that stops inventing values and
   repeating itself may do better on other tool-use and reasoning tasks too.
+
+**Expected before → after.** These are forecasts, not measurements; each comes with the reasoning
+behind it and would be tested under a rule written down first, as in Stage 1.
+
+| Work | Metric | Now (Arm B) | Expected | Why we expect it |
+|---|---|---:|---:|---|
+| Made-up-intent detector as a guard | Task success, τ²-bench test | 51.5% | 55–60% | 37 of B's 55 failed dev and validation conversations are decisions, not hallucinations. If the guard turns 1 in 5 of those into passes, success rises about 6 points |
+| Same guard | Unrequested state changes per conversation | not yet measured | down by half or more | The guard blocks a flagged change and asks the customer first, so it removes most of what it flags |
+| Learning from more than one teacher | Airline success, test | 30.0% | 35–40% | Airline is B's weakest domain; going from v1 to v2, which added 34 verified airline conversations (and more steps), turned the gate's airline check from −2 to +1 |
+| Retraining v2 so it no longer needs the guard | Task success without the guard | 51.5% | close to the guarded result, within 3 points | Verified fixes taught the Tool/Arg behaviour in Stage 1 (95% → 10%) |
+| General ability before and after | Standard benchmarks (instruction following, knowledge, maths) | not measured | within 2 points of base Aya | QLoRA trains 0.3% of the weights, on 146 conversations, with the loss on agent turns only |
+| Fresh held-out tasks | Task success | 51.5% on the used test split | within B's 95% interval (43.5–59.5%) | Same domains and policies; the split was frozen and never used for selection |
 
 The week-by-week plan (which would commence only after the hack has finished), and the questions to answer first, are in [`docs/FUTURE_WORK.md`](docs/FUTURE_WORK.md).
 
