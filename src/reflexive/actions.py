@@ -17,8 +17,8 @@ call and the domain policy. It never reads τ²-bench's expected actions or the 
 * ``live=False``: needs more than the moment of the change (later turns, the outcome), or is too
   slow to run on every call. Used by the gate and in reports only; the guard logs it, never blocks.
 
-This is the agreed interface. ``RULES`` holds SEL-88's ``no_yes`` (`reflexive.intent`); meta-healing
-rules (SEL-91) join it before the checker is frozen.
+This is the agreed interface. ``RULES`` holds SEL-88's ``no_yes`` (`reflexive.intent`), then the
+meta-healing rules (SEL-91, `reflexive.meta_heal`) a person accepted into ``configs/meta_rules.json``.
 """
 
 from __future__ import annotations
@@ -38,6 +38,7 @@ class ActionFinding:
     rule: str  # the rule that fired, e.g. "no_yes"
     reason: str  # one sentence a person can read in the log
     live: bool  # True: checkable at the moment of the change, so the guard may block on it
+    message: str = ""  # what the guard tells the agent when it blocks; "" means its BLOCK_MESSAGE
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -80,3 +81,8 @@ def check_action(
 from reflexive.intent import no_yes  # noqa: E402
 
 RULES.append(no_yes)
+
+# SEL-91: the meta-healing rules a person accepted (configs/meta_rules.json), after "no yes".
+from reflexive.meta_heal import meta_rules  # noqa: E402
+
+RULES.extend(meta_rules())

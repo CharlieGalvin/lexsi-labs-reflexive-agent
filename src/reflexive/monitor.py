@@ -272,6 +272,7 @@ class ActionGuard:
     blocks: list[dict[str, Any]] = field(default_factory=list)
     reasks: list[dict[str, Any]] = field(default_factory=list)  # each block message, as the agent saw it
     _counts: dict[str, int] = field(default_factory=dict)
+    _message: str = BLOCK_MESSAGE  # the last block's message: its rule's own, or BLOCK_MESSAGE
 
     def __post_init__(self) -> None:
         if self.mode not in MODES:
@@ -310,6 +311,10 @@ class ActionGuard:
                 entry["action"] = "blocked" if seen < MAX_BLOCKS_PER_CHANGE else "overridden"
             entries.append((key, entry))
         block = any(e["action"] == "blocked" for _, e in entries)
+        if block:  # the first blocked call's rule words the re-ask (meta-healing rules have their own)
+            self._message = (
+                next(e.get("message") for _, e in entries if e["action"] == "blocked") or BLOCK_MESSAGE
+            )
         for key, e in entries:
             if e["action"] == "blocked":
                 self._counts[key] = self._counts.get(key, 0) + 1
@@ -329,14 +334,14 @@ class ActionGuard:
         last = prompt[-1] if prompt else {}
         self.reasks.append(
             {
-                "text": BLOCK_MESSAGE,
+                "text": self._message,
                 "role": "user",
                 "after_view_index": len(prompt) - 1,
                 "after_role": last.get("role"),
                 "before_agent_turn": agent_turn,
             }
         )
-        return [*prompt, {"role": "user", "content": BLOCK_MESSAGE}]
+        return [*prompt, {"role": "user", "content": self._message}]
 
     def to_dict(self) -> dict[str, Any]:
         counts = {

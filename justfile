@@ -330,6 +330,10 @@ reproduce *args:
 intent-rates *args:
     python scripts/labels/intent_rates.py {{args}}
 
+# Meta-healing (SEL-91): the checker proposes rules from failures it can't explain; split | propose | score | review | accept
+meta-heal *args:
+    python scripts/heal/meta_heal.py {{args}}
+
 # Score a detector against the truth (precision, recall, F1, FP rate) or two labellers (Cohen's kappa), SEL-85/98
 label-metrics +args:
     python scripts/labels/label_metrics.py {{args}}
