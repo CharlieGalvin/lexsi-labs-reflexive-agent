@@ -291,6 +291,17 @@ def test_a_guarded_run_is_named_as_its_own_run(tmp_path: Path, monkeypatch) -> N
     assert json.loads(out.read_text())["run"] == "arm-A-retail-dev"
 
 
+def test_an_action_guarded_run_is_named_apart_from_the_loop_guard(tmp_path: Path, monkeypatch) -> None:
+    # PR #73 review: -guard is Stage 1's loop-guard ablation; the action guard acting is -actions
+    dev = splits.task_ids("retail", "dev")[:2]
+    mon = {"mode": "log", "nudged_at": None, "actions": {"mode": "act"}}
+    recs = [rec(t, False, monitor=mon) for t in dev]
+    code, out = _run(tmp_path, monkeypatch, recs, name="A-retail-dev-actions")
+    m = json.loads(out.read_text())
+    assert code == 0 and m["run"] == "arm-A-retail-dev-actions"
+    assert m["monitor"] == "log or off" and m["actions"].startswith("act")
+
+
 def test_name_gives_a_run_its_own_name(tmp_path: Path, monkeypatch) -> None:
     # SEL-69 review: a second plain run on the same split mustn't take the baseline's name
     dev = splits.task_ids("retail", "dev")[:2]

@@ -498,6 +498,21 @@ def test_a_checker_error_is_kept_and_the_call_runs():
     def broken(*a):
         raise RuntimeError("boom")
 
-    w = Watcher("act", TOOLS, write_tools=WRITES, policy="policy", checker=broken)
+    w = Watcher("log", TOOLS, write_tools=WRITES, policy="policy", checker=broken, actions="act")
     assert w.before_step(OPENER, reply_with(write_call()), 2) is False
     assert w.error is not None and "boom" in w.error and w.to_dict()["actions"]["mode"] == "off"
+    # PR #73 review: kept on the guard too, so a later monitor error can't overwrite it
+    w.error = "a later monitor error"
+    a = w.to_dict()["actions"]
+    assert "boom" in a["error"] and a["switched_off_by_error"] is True
+
+
+def test_the_action_guard_has_its_own_mode():
+    # PR #73 review: acting on changes mustn't switch on the loop guard's nudge and stop, or back
+    w = Watcher("log", TOOLS, write_tools=WRITES, policy="policy", checker=no_yes, actions="act")
+    assert (w.guard.mode, w.actions.mode) == ("log", "act")
+    assert w.before_step(OPENER, reply_with(write_call()), 2) is True
+    loop = Watcher("act", TOOLS, write_tools=WRITES, policy="policy", checker=no_yes)
+    assert (loop.guard.mode, loop.actions.mode) == ("act", "log")
+    assert loop.before_step(OPENER, reply_with(write_call()), 2) is False
+    assert loop.to_dict()["actions"]["switched_off_by_error"] is False

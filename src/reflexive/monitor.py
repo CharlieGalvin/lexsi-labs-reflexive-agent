@@ -271,6 +271,7 @@ class ActionGuard:
     checker: Any = None  # (conversation, call, policy) -> ActionFinding | None; default check_action
     blocks: list[dict[str, Any]] = field(default_factory=list)
     reasks: list[dict[str, Any]] = field(default_factory=list)  # each block message, as the agent saw it
+    error: str | None = None  # a checker error, which switched the check off (`Watcher.before_step`)
     _counts: dict[str, int] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -342,7 +343,15 @@ class ActionGuard:
         counts = {
             a: sum(e["action"] == a for e in self.blocks) for a in ("blocked", "overridden", "held", "logged")
         }
-        return {"mode": self.mode, "counts": counts, "blocks": self.blocks, "reasks": self.reasks}
+        return {
+            "mode": self.mode,
+            "counts": counts,
+            "blocks": self.blocks,
+            "reasks": self.reasks,
+            # its own copy: `Watcher.error` is shared with the monitor and the audit log
+            "error": self.error,
+            "switched_off_by_error": self.error is not None,
+        }
 
 
 # --- The audit log (what FullClosedLoop reads) ----------------------------------------------
@@ -501,6 +510,10 @@ class Watcher:
 
     ``after_turn(view)`` returns ``"nudge"``, ``"stop"`` or None. A monitor error is kept in
     ``error`` and switches it off: it must never break the conversation it watches.
+
+    ``mode`` is the loop monitor's (`Guard`); ``actions`` is the action guard's (`ActionGuard`,
+    SEL-89), set apart so that one can act while the other only logs (Stage 2 keeps the loop
+    monitor at ``log`` for every arm).
     """
 
     def __init__(
@@ -513,9 +526,10 @@ class Watcher:
         write_tools: Collection[str] = (),
         policy: str = "",
         checker: Any = None,
+        actions: str = "log",
     ) -> None:
         self.guard = Guard(mode)
-        self.actions = ActionGuard(mode, frozenset(write_tools), policy, checker)
+        self.actions = ActionGuard(actions, frozenset(write_tools), policy, checker)
         self.monitor = RuntimeMonitor(tools, customer_tools) if mode != "off" else None
         self.writer = AuditWriter(audit_log, trajectory_id) if audit_log else None
         self.error: str | None = None
@@ -530,7 +544,7 @@ class Watcher:
         try:
             return self.actions.check(view, reply, agent_turn)
         except Exception as e:  # noqa: BLE001 - the guard must never break a conversation
-            self.error = f"{type(e).__name__}: {str(e)[:200]}"
+            self.error = self.actions.error = f"{type(e).__name__}: {str(e)[:200]}"
             self.actions.mode = "off"
             return False
 

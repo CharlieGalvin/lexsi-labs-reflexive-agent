@@ -425,13 +425,15 @@ def test_act_mode_blocks_an_unconfirmed_change_then_lets_it_run_after_the_custom
         "retail",
         "0",
         judges=False,
-        monitor="act",
+        actions="act",
         checker=asked_first,
         max_steps=12,
         **CUSTOMER,
     )
     a = rec["monitor"]["actions"]
-    assert rec["monitor"]["error"] is None and a["mode"] == "act"
+    assert rec["monitor"]["error"] is None and a["mode"] == "act" and a["error"] is None
+    # PR #73 review: the action guard's own mode; the loop monitor stays at its default, log
+    assert rec["monitor"]["mode"] == "log" and rec["monitor"]["nudged_at"] is None
     # agent turn 1 is τ²-bench's greeting; the student's first reply (turn 2) is blocked
     (b,) = a["blocks"]
     assert (b["action"], b["rule"], b["tool"], b["agent_turn"], b["live"]) == (

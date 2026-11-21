@@ -183,6 +183,7 @@ def run_episode(
     judges: bool = True,
     sample: int = 0,
     monitor: str = "log",
+    actions: str = "log",
     audit_log: Path | str | None = None,
     checker: Any = None,
     **episode_kwargs: Any,
@@ -199,14 +200,15 @@ def run_episode(
     audit-log format AgentTune's ``FullClosedLoop`` reads.
 
     Before each reply is sent, every state-changing call in it goes through `check_action`
-    (SEL-89, `reflexive.monitor.ActionGuard`), in the same mode: ``log`` records findings, ``act``
-    blocks a reply with a live finding and asks the agent again. ``checker`` replaces
+    (SEL-89, `reflexive.monitor.ActionGuard`). ``actions``, its own mode, apart from ``monitor``:
+    ``log`` (default) records findings, ``act`` blocks a reply with a live finding and asks the
+    agent again, ``off`` checks nothing. ``checker`` replaces
     `reflexive.actions.check_action` (tests, smoke runs); what it decided is in
     ``rec["monitor"]["actions"]``.
     """
     from reflexive.monitor import Guard, Watcher
 
-    Guard(monitor)  # refuse an unknown mode before the conversation starts
+    Guard(monitor), Guard(actions)  # refuse an unknown mode before the conversation starts
     ep = make_episode(arm, domain, task_id, **episode_kwargs)
     watch: Watcher | None = None
     start = time.monotonic()
@@ -224,6 +226,7 @@ def run_episode(
             write_tools=ep.write_tools,
             policy=ep.policy,
             checker=checker,
+            actions=actions,
         )
         nudge = reask = False
         while not ep.done:
