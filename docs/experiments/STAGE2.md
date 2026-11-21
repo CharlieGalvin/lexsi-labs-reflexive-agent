@@ -89,6 +89,12 @@ instruction after the details were set out ("Just cancel them, please"). So:
   and counted in Decision 1's report.
 - The word match's train-task flag rates are kept (`--judge off`) beside the two-stage rule's, so
   the paper can say what the judge adds.
+- **Telecom: only `refuel_data` is checked.** Retail and airline policies require an explicit yes
+  before any change; telecom's asks only for the price of a data top-up to be confirmed. With the
+  judge, the rule still flagged 3 telecom train passes, all roaming or resume changes telecom's
+  policy allows without a yes. Its other write tools (`disable_roaming`, `enable_roaming`,
+  `resume_line`, `send_payment_request`, `suspend_line`) are out of scope for the rule and the
+  guard; the list of state-changing tools above is kept as τ²-bench's own.
 
 **Meta-healing (SEL-91).** An LLM reads v2's train-task failures that no current rule explains,
 plus some passes, and proposes candidate rules (Python checks or fixed judge prompts). v2's
