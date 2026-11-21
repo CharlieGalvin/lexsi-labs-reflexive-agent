@@ -173,7 +173,43 @@ passes (`just rule-rates`), and of base Aya's (Arm A) train-task passes when tho
 test (corrupted changes from passing conversations: caught, and originals flagged) are reported
 whatever they show. Measured once; the wording is not tuned on the result.
 
-**Freeze: Sat 21 Nov, 23:59 UK (SEL-95).** The checker is tagged `stage2-checker-frozen`; the rule
+**Amended Sat 21 Nov, 22:05 UK, before any v2 code, data or result: meta-healing v2, and the
+freeze moves to Sun 22 Nov 16:00 UK.** v1's result above stands. v1 had three diagnosed gaps: the
+proposer never saw what the right actions were, tool results were cut to 600 / 1,200 characters,
+and there was no feedback before the held-out test. Its held-out third (5 unexplained failures)
+was also too small. v2, decided now:
+
+- **Data.** Learning set: SFT v2's 112 train-pool conversations (already read by v1 and by the
+  mismatch measurement). Held-out set: fresh conversations, run tonight: SFT v2 on the same 112
+  train-pool tasks, 2 new samples each, guard and loop monitor in log mode
+  (`S2-<domain>-fresh.jsonl`). Same tasks, new conversations: a rule that only works by knowing a
+  task's details would pass here and not in Decision 1, so the review reads rules for generality.
+  No validation, dev or test task is used.
+- **Proposer.** GPT-4.1 (`gpt-4.1-2025-04-14`). On the learning set only, it sees each failure's
+  expected actions (τ²-bench's) and full tool results. Its prompt names no error kind. The rules
+  still read only the conversation, the call and the policy.
+- **Feedback.** Up to 3 rounds on the learning set: propose, score every candidate there, show the
+  proposer what each caught and wrongly flagged, refine. At most 8 candidates per round. Only the
+  last round's candidates are scored on the held-out set, once.
+- **Checker.** Full GPT-4.1 at temperature 0, tool results up to 6,000 characters, evidence must be
+  in the conversation, an error counts as not flagged (with the worst case reported).
+- **Unexplained, for proposing:** no Tool / Arg / Loop and no live "no yes" finding. "Mismatch" is
+  left out, so we can see whether v2 rediscovers it: for each candidate we report the share of
+  held-out failures "mismatch" flags that it also flags.
+- **Accepted only if, on the held-out set:** it flags at least 3, and at least 10%, of the
+  held-out failures that no frozen rule catches (Tool / Arg / Loop, "no yes" and "mismatch"); it
+  flags at most 1 in 10 held-out passes, at worst; and a person reads 5 conversations it flags
+  (the added catches first) and finds at least 4 real errors of the kind the rule names. At most 3
+  accepted. If none passes, that is the result.
+- **Also reported:** "mismatch" on the held-out set, its first out-of-sample rates.
+- **Freeze: Sun 22 Nov, 16:00 UK, a hard deadline.** Accepted v2 rules join the checker if they are
+  accepted by then; otherwise the freeze goes ahead with "no yes" and "mismatch", and v2 is
+  reported separately. The freeze does not move again. Decision 1 runs after it.
+- **The outer loop.** One full turn (checker rules → guard → guard fixes → retrain → gates) is in
+  scope. Further turns are reported as next steps unless the timetable allows them; any extra turn
+  is judged on fresh train conversations, and validation is used once, for Decision 1.
+
+**Freeze: Sat 21 Nov, 23:59 UK; moved to Sun 22 Nov 16:00 UK, above (SEL-95).** The checker is tagged `stage2-checker-frozen`; the rule
 list and each rule's live / after-the-fact mark are added below this line in the same commit.
 Nothing changes the checker after the tag. If meta-healing isn't ready, the freeze goes ahead with
 the "no yes" rule only, and meta-healing's rules are reported offline as a separate result.
