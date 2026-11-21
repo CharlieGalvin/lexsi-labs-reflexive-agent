@@ -71,6 +71,25 @@ from the live environment; today they are: retail `cancel_pending_order`,
 `enable_roaming`, `refuel_data`, `resume_line`, `send_payment_request`, `suspend_line`.
 Built and tested on v2's train-task conversations only.
 
+**Amended Sat 21 Nov, before any Stage 2 run: a word match, then an LLM judge (SEL-88, PR #74).**
+On v2's train-task conversations the word match alone flagged 10 of 55 passes and 11 of 57
+failures. Read by hand, about half of the flagged passes were a yes the words couldn't see: an
+instruction after the details were set out ("Just cancel them, please"). So:
+
+- **A clear instruction counts as a yes**, the same as an agreement, when it comes after the change
+  or the details it applies to have been set out. A request or question before that, followed
+  straight away by the change, still doesn't ("Can I return the backpack too?").
+- **Two stages.** The word match runs first and is free. Only a change it would flag goes to an LLM
+  judge: `gpt-4.1-mini-2025-04-14` (pinned, not the customer's model), temperature 0, the prompt
+  in `reflexive.intent_judge`, answers cached by the exact request. The judge sees agent and
+  customer turns and the agent's calls, never the system prompt, tool results or the answer key.
+- **The judge must quote the customer.** It answers `yes_given`, `quote` and `reason`; a yes counts
+  only if the quote is the customer's own words from one of their messages.
+- **A judge error never blocks.** It is logged as an after-the-fact finding, `no_yes_judge_error`,
+  and counted in Decision 1's report.
+- The word match's train-task flag rates are kept (`--judge off`) beside the two-stage rule's, so
+  the paper can say what the judge adds.
+
 **Meta-healing (SEL-91).** An LLM reads v2's train-task failures that no current rule explains,
 plus some passes, and proposes candidate rules (Python checks or fixed judge prompts). v2's
 train-task conversations are split two thirds (propose) and one third (accept or reject),
