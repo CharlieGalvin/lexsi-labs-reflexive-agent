@@ -27,8 +27,13 @@ How the rule reads a conversation, plainly:
 * **Withdrawn**: a customer message after the yes that opens with a refusal cancels it.
 
 The change may run if some description is followed by a yes that isn't withdrawn before the call.
-Otherwise the rule flags it. Matching is by words, so it errs towards finding a yes: a guard that
-blocks good changes costs more than one that misses a few (STAGE2.md's Decision 1 bar).
+
+**Two stages.** That word match (`no_yes_words`) runs first and is free. Words miss the commonest
+way people agree, an instruction ("Just cancel them, please"), so a change the words would flag
+goes to an LLM judge (`reflexive.intent_judge`), which must quote the customer's yes word for word.
+`no_yes` flags only if the judge finds no yes. If the judge can't answer, the change isn't
+blocked: the rule returns an after-the-fact finding (``no_yes_judge_error``) so the log shows it.
+A guard that blocks good changes costs more than one that misses a few (STAGE2.md's Decision 1).
 """
 
 from __future__ import annotations
@@ -205,8 +210,8 @@ def is_refusal(message: Message) -> bool:
     return message.get("role") == "user" and bool(REFUSAL.match(_norm(_text(message.get("content"))).strip()))
 
 
-def no_yes(conversation: Sequence[Message], call: dict, policy: str) -> ActionFinding | None:
-    """SEL-88: flag a state-changing call with no explicit yes since the agent described it."""
+def no_yes_words(conversation: Sequence[Message], call: dict, policy: str) -> ActionFinding | None:
+    """The word match alone: a state-changing call with no explicit yes since it was described."""
     from reflexive.actions import ActionFinding
 
     tool = _name(call)
@@ -256,3 +261,32 @@ def intent_findings(rec: dict, rules: Sequence[Rule] | None = None) -> list[dict
             if f is not None:
                 out.append({"turn": i, "call": k, "tool": _name(call), **f.to_dict()})
     return out
+
+
+def no_yes(
+    conversation: Sequence[Message], call: dict, policy: str, judge: Any = "default"
+) -> ActionFinding | None:
+    """SEL-88: the word match, then the LLM judge on whatever the words would flag.
+
+    ``judge``: a `reflexive.intent_judge.Judge`-like callable ``(conversation, call) -> Verdict``;
+    ``"default"`` uses the shared one (None when ``REFLEXIVE_INTENT_JUDGE=off``); None means words only.
+    """
+    from reflexive.actions import ActionFinding
+
+    found = no_yes_words(conversation, call, policy)
+    if found is None:
+        return None
+    if judge == "default":
+        from reflexive.intent_judge import default_judge
+
+        judge = default_judge()
+    if judge is None:
+        return found
+    v = judge(conversation, call)
+    if v.error:
+        return ActionFinding(
+            "INTENT", "no_yes_judge_error", f"Not blocked: the judge couldn't answer ({v.error}).", live=False
+        )
+    if v.yes_given:
+        return None
+    return ActionFinding("INTENT", "no_yes", f"{found.reason} Judge: {v.reason}", live=True)

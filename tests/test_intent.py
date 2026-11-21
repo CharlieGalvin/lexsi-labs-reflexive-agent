@@ -136,3 +136,88 @@ def test_the_write_tools_match_tau2_bench():
         assert tk is not None
         live = {n for n in tk.get_tools() if tk.tool_type(n) == ToolType.WRITE}
         assert live == tools, domain
+
+
+# --- The LLM judge behind the word match ------------------------------------------------------
+
+from types import SimpleNamespace  # noqa: E402
+
+from reflexive.intent import no_yes_words  # noqa: E402
+from reflexive.intent_judge import Judge, quote_found, request  # noqa: E402
+
+ASKED = [SYS, DESCRIBE, user("Both were ordered by mistake. Just cancel them, please.")]
+
+
+def fake(answer):
+    """A stand-in for litellm.completion that returns ``answer`` and records each request."""
+    seen = []
+
+    def completion(**kw):
+        seen.append(kw)
+        content = answer if isinstance(answer, str) else json.dumps(answer)
+        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=content))])
+
+    completion.seen = seen  # ty: ignore[unresolved-attribute]
+    return completion
+
+
+def test_an_instruction_is_missed_by_the_words_and_found_by_the_judge():
+    assert no_yes_words(ASKED, CANCEL, "") is not None  # "Just cancel them, please." has no yes word
+    j = Judge(
+        completion=fake({"yes_given": True, "quote": "Just cancel them, please", "reason": "instruction"})
+    )
+    assert no_yes(ASKED, CANCEL, "", judge=j) is None
+    kw = j._completion.seen[0]  # ty: ignore[unresolved-attribute]
+    assert kw["model"] == "gpt-4.1-mini-2025-04-14" and kw["temperature"] == 0
+
+
+def test_the_judge_is_only_asked_when_the_words_would_flag():
+    j = Judge(completion=fake({"yes_given": False, "quote": "", "reason": "x"}))
+    assert no_yes([SYS, DESCRIBE, user("Yes please.")], CANCEL, "", judge=j) is None
+    assert j.calls == 0
+
+
+def test_a_yes_whose_quote_isnt_the_customers_words_does_not_count():
+    j = Judge(completion=fake({"yes_given": True, "quote": "Yes, cancel it", "reason": "made up"}))
+    f = no_yes(ASKED, CANCEL, "", judge=j)
+    assert f is not None and f.live and "quote isn't in any customer message" in f.reason
+    assert quote_found("just cancel them please", ASKED) and not quote_found("", ASKED)
+
+
+def test_no_yes_from_the_judge_flags_live():
+    j = Judge(completion=fake({"yes_given": False, "quote": "", "reason": "a question, then the change"}))
+    f = no_yes([SYS, user("Can I return the backpack too?")], CANCEL, "", judge=j)
+    assert f is not None and (f.rule, f.live) == ("no_yes", True) and "a question" in f.reason
+
+
+def test_a_judge_error_never_blocks_and_is_logged():
+    def broken(**kw):
+        raise TimeoutError("slow")
+
+    f = no_yes(ASKED, CANCEL, "", judge=Judge(completion=broken))
+    assert f is not None and (f.rule, f.live) == ("no_yes_judge_error", False)
+    bad_json = no_yes(ASKED, CANCEL, "", judge=Judge(completion=fake("not json")))
+    assert bad_json is not None and bad_json.live is False
+
+
+def test_answers_are_cached_by_the_exact_request(tmp_path):
+    path = tmp_path / "cache.jsonl"
+    answer = {"yes_given": True, "quote": "Just cancel them, please", "reason": "instruction"}
+    j = Judge(completion=fake(answer), cache_path=path)
+    assert j(ASKED, CANCEL).yes_given and j(ASKED, CANCEL).cached and j.calls == 1
+    again = Judge(completion=fake({"yes_given": False}), cache_path=path)  # a new run reads the file
+    assert again(ASKED, CANCEL).yes_given and again.calls == 0
+
+
+def test_the_judge_sees_the_conversation_and_the_change_but_no_system_prompt_or_tool_results():
+    conv = [SYS, DESCRIBE, {"role": "tool", "content": "SECRET RESULT"}, user("ok then")]
+    text = request(conv, CANCEL)[1]["content"]
+    assert "policy text" not in text and "SECRET RESULT" not in text
+    assert "CUSTOMER: ok then" in text and "cancel_pending_order" in text
+
+
+def test_tests_run_with_words_only():
+    import os
+
+    assert os.environ["REFLEXIVE_INTENT_JUDGE"] == "off"
+    assert no_yes(ASKED, CANCEL, "") is not None  # no network: the default judge is off

@@ -2,6 +2,7 @@
 
     python scripts/labels/intent_rates.py                       # S2-*-trainpool.jsonl → stdout
     python scripts/labels/intent_rates.py --json results/intent-no_yes-train.metrics.json
+    python scripts/labels/intent_rates.py --judge off          # the word match alone, no API calls
 
 Train tasks only (`assert_not_test` on every conversation): this is where the rule is built and
 tuned. Dev and validation judge the frozen checker once, in SEL-98, never here.
@@ -9,7 +10,9 @@ tuned. Dev and validation judge the frozen checker once, in SEL-98, never here.
 For each domain: the share of failed conversations with at least one finding (we want it high), the
 share of passed conversations with one (each is a change the guard would have blocked in a
 conversation that went well: we want it low; STAGE2.md's Decision 1 bar is 1 in 10), and the
-findings per conversation. Intervals are Wilson 95%. Use ``--show N`` to print N flagged
+findings per conversation. Intervals are Wilson 95%. With the judge on (the default; it needs
+OPENAI_API_KEY), its answers are cached in results/cache/intent-judge.jsonl, so a re-run is free
+and gives the same numbers; judge errors are counted apart and never flag. Use ``--show N`` to print N flagged
 conversations from passes, the likely wrong blocks, to check the rule by hand.
 """
 
@@ -17,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -56,9 +60,14 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--split", default="trainpool", help="file suffix (default trainpool: train tasks)")
     p.add_argument("--json", type=Path, help="also write the numbers here")
     p.add_argument("--show", type=int, default=0, help="print this many flagged passes to check by hand")
+    p.add_argument("--judge", choices=["on", "off"], default="on", help="the LLM judge behind the words")
+    p.add_argument("--cache", type=Path, default=ROOT / "results" / "cache" / "intent-judge.jsonl")
     a = p.parse_args(argv)
+    os.environ["REFLEXIVE_INTENT_JUDGE"] = a.judge
+    os.environ.setdefault("REFLEXIVE_JUDGE_CACHE", str(a.cache))
 
-    out: dict = {"rule": "no_yes", "arm": a.arm, "split": a.split, "domains": {}}
+    out: dict = {"rule": "no_yes", "judge": a.judge, "arm": a.arm, "split": a.split, "domains": {}}
+    errors = 0
     shown = 0
     for d in DOMAINS:
         f = a.episodes / f"{a.arm}-{d}-{a.split}.jsonl"
@@ -69,7 +78,9 @@ def main(argv: list[str] | None = None) -> int:
         rows = {"failed": [0, 0, 0], "passed": [0, 0, 0]}  # flagged conversations, all, findings
         for r in recs:
             assert_not_test(d, str(r["task_id"]))
-            found = intent_findings(r)
+            every = intent_findings(r)
+            found = [x for x in every if x["live"]]  # judge errors are logged, never a flag
+            errors += len(every) - len(found)
             key = "passed" if r["outcome"]["passed"] else "failed"
             rows[key][0] += bool(found)
             rows[key][1] += 1
@@ -88,6 +99,15 @@ def main(argv: list[str] | None = None) -> int:
             f"{d:8s} failures flagged {fl['k']:>3}/{fl['n']:<3}"
             f"  passes flagged {pa['k']:>3}/{pa['n']:<3}"
             f" ({(pa['rate'] or 0):.0%}, 95% CI {pa['ci95'][0]:.0%}–{pa['ci95'][1]:.0%})"
+        )
+    out["judge_errors"] = errors
+    if a.judge == "on":
+        from reflexive.intent_judge import default_judge
+
+        j = default_judge()
+        print(
+            f"\njudge: {j.calls if j else 0} new calls, {errors} errors"
+            f" (cache: {os.environ['REFLEXIVE_JUDGE_CACHE']})"
         )
     if a.json:
         a.json.parent.mkdir(parents=True, exist_ok=True)
