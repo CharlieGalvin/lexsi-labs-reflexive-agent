@@ -138,15 +138,18 @@ bookings. Review used 4 of 5 as the bar; that number was not written here before
 2–3 of 5 fails any majority bar too. The other 9 candidates failed the numbers. All 10, with their
 scores, are in `results/meta-heal.metrics.json`. The checker freezes with "no yes" only.
 
-**Amended Sat 21 Nov, 11:50 UK, before it is measured: a hand-written "mismatch" rule (PR #76).**
+**Amended Sat 21 Nov, 11:38 UK, before it is measured: a hand-written "mismatch" rule (PR #76).**
 Meta-healing's round 2 and its misfires pointed at changes that don't match the request (see the
 result above); a person wrote the tight version. At 7 listed changes (retail: modify items,
 exchange, return, cancel order; airline: update flights, update bags, cancel reservation) the
 checker asks whether the change differs from what the customer asked for and agreed to, or from
 the agent's own lookups. Checked by full GPT-4.1 (`gpt-4.1-2025-04-14`, temperature 0; amended
-11:55, still before measuring: mini read meta-healing's rules too loosely), through the same
+11:43, chosen before any result: mini read meta-healing's rules too loosely), through the same
 machinery as meta-healing's rules (evidence must be in the conversation, errors never block), tool
-results shown in full; live, with its own block message. "No yes" keeps gpt-4.1-mini. It joins the frozen checker only if it flags at most 1 in 10 of SFT v2's train-task
+results shown in full; live, with its own block message. "No yes" keeps gpt-4.1-mini. (Times corrected 11:50 to the commits' own;
+earlier text gave 11:50 and 11:55 by mistake.) A run with gpt-4.1-mini, started from the 11:38
+version, finished at 11:43, just after the switch was committed: it is reported beside the GPT-4.1
+run and does not decide anything. The GPT-4.1 run is the measurement. It joins the frozen checker only if it flags at most 1 in 10 of SFT v2's train-task
 passes (`just rule-rates`), and of base Aya's (Arm A) train-task passes when those are run too
 (validation tasks dropped). Failures flagged, unexplained failures flagged and an injected-error
 test (corrupted changes from passing conversations: caught, and originals flagged) are reported
