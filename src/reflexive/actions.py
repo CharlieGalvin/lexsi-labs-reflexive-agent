@@ -17,8 +17,8 @@ call and the domain policy. It never reads τ²-bench's expected actions or the 
 * ``live=False``: needs more than the moment of the change (later turns, the outcome), or is too
   slow to run on every call. Used by the gate and in reports only; the guard logs it, never blocks.
 
-This is the agreed interface; ``RULES`` is empty until SEL-88 adds its rule, so today
-`check_action` flags nothing.
+This is the agreed interface. ``RULES`` holds SEL-88's ``no_yes`` (`reflexive.intent`); meta-healing
+rules (SEL-91) join it before the checker is frozen.
 """
 
 from __future__ import annotations
@@ -47,7 +47,7 @@ Rule = Callable[[Sequence[Message], dict, str], "ActionFinding | None"]
 """``rule(conversation, call, policy) -> ActionFinding | None``, the same arguments as `check_action`."""
 
 RULES: list[Rule] = []
-"""The rules `check_action` runs, in order. SEL-88's ``no_yes`` goes here."""
+"""The rules `check_action` runs, in order: SEL-88's ``no_yes``, registered at the end of this module."""
 
 
 def check_action(
@@ -74,3 +74,9 @@ def check_action(
             return finding
         later = later or finding
     return later
+
+
+# The rules, registered last because reflexive.intent builds its findings from this module.
+from reflexive.intent import no_yes  # noqa: E402
+
+RULES.append(no_yes)
