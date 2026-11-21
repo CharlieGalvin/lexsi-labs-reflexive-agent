@@ -326,6 +326,10 @@ blog-figures:
 reproduce *args:
     python scripts/blog/reproduce.py {{args}}
 
+# How often the "no yes" rule (SEL-88) flags v2's train-task failures and passes
+intent-rates *args:
+    python scripts/labels/intent_rates.py {{args}}
+
 # Score a detector against the truth (precision, recall, F1, FP rate) or two labellers (Cohen's kappa), SEL-85/98
 label-metrics +args:
     python scripts/labels/label_metrics.py {{args}}

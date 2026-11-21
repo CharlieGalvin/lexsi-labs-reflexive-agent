@@ -489,9 +489,10 @@ def test_log_mode_records_but_never_blocks_and_after_the_fact_findings_never_blo
     assert off.check(OPENER, reply_with(write_call()), 2) is False and off.blocks == []
 
 
-def test_the_default_checker_is_check_action_which_flags_nothing_yet():
+def test_the_default_checker_is_check_action_with_sel_88s_rule():
     g = ActionGuard("act", WRITES, "policy")
-    assert g.check(OPENER, reply_with(write_call()), 2) is False and g.blocks == []
+    assert g.check(OPENER, reply_with(write_call()), 2) is True  # never described or confirmed
+    assert g.blocks[0]["rule"] == "no_yes"
 
 
 def test_a_checker_error_is_kept_and_the_call_runs():

@@ -12,9 +12,13 @@ CALL = {
 VIEW = [{"role": "system", "content": "policy"}, {"role": "user", "content": "Cancel order #W1."}]
 
 
-def test_with_no_rules_nothing_is_flagged():
-    assert RULES == []  # SEL-88 adds the first rule
-    assert check_action(VIEW, CALL, "policy") is None
+def test_with_no_rules_nothing_is_flagged_and_sel_88s_rule_is_the_default():
+    assert check_action(VIEW, CALL, "policy", rules=[]) is None
+    from reflexive.intent import no_yes
+
+    assert RULES == [no_yes]  # SEL-88
+    f = check_action(VIEW, CALL, "policy")  # a request up front, never described or confirmed
+    assert f is not None and (f.rule, f.live) == ("no_yes", True)
 
 
 def test_a_rule_gets_the_conversation_the_call_and_the_policy_and_live_findings_come_first():
