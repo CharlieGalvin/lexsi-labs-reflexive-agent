@@ -11,6 +11,24 @@
 \usepackage{booktabs}
 \usepackage{amsmath}
 
+% Float placement: let full-width tables share the top of a page with text, and
+% tighten the space around floats and captions, so columns don't end in gaps.
+\renewcommand{\topfraction}{0.9}
+\renewcommand{\dbltopfraction}{0.9}
+\renewcommand{\bottomfraction}{0.8}
+\renewcommand{\textfraction}{0.07}
+\renewcommand{\floatpagefraction}{0.85}
+\renewcommand{\dblfloatpagefraction}{0.85}
+\setcounter{topnumber}{3}
+\setcounter{dbltopnumber}{3}
+\setcounter{totalnumber}{5}
+\setlength{\floatsep}{6pt plus 2pt minus 2pt}
+\setlength{\dblfloatsep}{6pt plus 2pt minus 2pt}
+\setlength{\textfloatsep}{8pt plus 2pt minus 2pt}
+\setlength{\dbltextfloatsep}{8pt plus 2pt minus 2pt}
+\setlength{\abovecaptionskip}{4pt}
+\setlength{\belowcaptionskip}{0pt}
+
 \title{ReAgent: Closed-Loop Self-Healing for Structural Hallucinations in Open-Weight Tool-Calling Agents}
 
 \author{Katie Kitchen \quad Charlie Galvin \quad Chiara Picardi \\
