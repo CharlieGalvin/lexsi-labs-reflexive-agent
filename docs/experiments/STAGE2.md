@@ -108,6 +108,24 @@ stratified by domain and pass/fail, seed 0. A candidate is accepted only if, on 
 
 At most 10 candidates are scored and at most 3 accepted. If none passes, that is the result.
 
+**Amended Sat 21 Nov, 11:15 UK, after meta-healing round 1 and before round 2 (SEL-91, PR #75).**
+The proposer is GPT-4.1 (`gpt-4.1-2025-04-14`); each candidate is a fixed judge prompt run by
+`gpt-4.1-mini-2025-04-14` at temperature 0, whose quoted evidence must be in the conversation; a
+checker error never flags. Unexplained = no Tool / Arg / Loop and no live "no yes" finding. The
+split gives 38 held-out conversations, 5 of them unexplained failures (3 retail, 2 airline, 0
+telecom), so the bar is in effect 2 of 5.
+
+- **Round 1** proposed 5 candidates, all telecom; none met the bar (0/5 unexplained failures each,
+  1 to 8 of 19 passes flagged). Reported as it is.
+- **Round 2** uses the 5 candidates left of the 10. The proposer prompt adds: the rules already
+  tried (names and descriptions, not their scores), the failures it is shown by domain, rules
+  spread across domains in proportion, and "something never done" errors as whole-conversation
+  rules. The change was motivated by round 1's output on the propose set; we also knew, from the
+  split, that the held-out third has no unexplained telecom failures. Nothing else changes: same
+  split, same bar, same models. There is no round 3. Both rounds are reported.
+- A live meta-healing rule re-asks the agent with its own fixed one-sentence message instead of
+  the "no yes" message; whole-conversation rules are after the fact only.
+
 **Freeze: Sat 21 Nov, 23:59 UK (SEL-95).** The checker is tagged `stage2-checker-frozen`; the rule
 list and each rule's live / after-the-fact mark are added below this line in the same commit.
 Nothing changes the checker after the tag. If meta-healing isn't ready, the freeze goes ahead with
