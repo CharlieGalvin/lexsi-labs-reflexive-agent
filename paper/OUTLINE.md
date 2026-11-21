@@ -2,7 +2,8 @@
 
 EMNLP 2023 template (`paper/template/`), long paper: **8 pages** of main text. The Limitations
 section is mandatory; Limitations, Ethics, references and appendices don't count toward the 8 pages.
-Review mode, so the draft stays anonymous. Submission due **Tue 24 Nov** (SEL-80).
+Final (non-review) mode with the authors named (Katie Kitchen, Charlie Galvin, Chiara Picardi; Lloyds
+Banking Group), since the hackathon write-up isn't blind. Submission due **Tue 24 Nov** (SEL-80).
 
 ## PaperOrchestra verdict (SEL-90): yes for Stage 1 prose, no for related work
 
@@ -39,11 +40,11 @@ error analysis), the conclusion, Limitations, Ethics (with an AI-assistance decl
   character in the Aya Expanse author list.
 
 **Known gaps in the draft:**
-- **No figures.** Plotting was off, and the writer didn't include the 4 images we gave it (now in
-  `draft/figures/`).
+- ~~**No figures.**~~ Done 21 Nov: the 4 images are in Appendix D (Figures), referenced from §3.2.
 - **No Stage 2 content** (section 6, SEL-111) and **no threat model** (section 7, SEL-99).
-- **The AI-assistance declaration** says every number was verified by the authors. That only
-  becomes true with SEL-112; it's flagged with a comment in `main.tex`.
+- ~~**The AI-assistance declaration**~~ Reworded 21 Nov to say only what was done: an automated check
+  found every number in the committed docs, configs or results. SEL-112's `check_numbers.py` on the
+  `.tex` is still open.
 - **Section names:** it calls the system "ReAgent" and the arms A/C/B, as the README does.
 
 **What the reviewers asked for:** these are worth answering in the paper; Stage 2 covers some.
