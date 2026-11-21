@@ -1,0 +1,40 @@
+# Retention benchmarks (SEL-84): did healing cost Aya anything away from the task?
+# Fixed before any run (see docs/experiments/STAGE2.md). Same server, settings and decoding for every
+# model; full test sets, no sampling, so the two models answer exactly the same items.
+#
+# On the pod, one vLLM server holds both models (base as its HF name, v2 as "sft2"):
+#   ADAPTER= EXTRA_ADAPTERS="sft2=runs/sft-aya32b-r16-v2" bash scripts/pod/serve.sh
+# then: just retention-run base   and   just retention-run sft2   (scripts/retention/run.py)
+
+base_url: http://localhost:8000/v1/completions   # vLLM's OpenAI-compatible completions endpoint
+tokenizer: CohereLabs/aya-expanse-32b            # for lm-eval's chat template and token counts
+
+models:                       # label: the name vLLM serves it under
+  base: CohereLabs/aya-expanse-32b
+  sft2: sft2
+
+# Each benchmark: lm-eval tasks, and `score`, the lm-eval metric an item's "correct" must reproduce.
+# AuditKIT saves one copy of an item per lm-eval filter (GSM8K: strict and flexible, same item ID);
+# compare.py keeps the copy whose accuracy equals the run's own headline for this score, or stops.
+benchmarks:
+  - name: Instruction following (IFEval)
+    tasks: [ifeval]                       # 541 prompts; correct = every instruction followed (strict)
+    score: prompt_level_strict_acc
+  - name: Maths (GSM8K)
+    tasks: [gsm8k]                        # 1,319 test questions, 5-shot; correct = exact final answer
+    score: exact_match,strict-match
+  - name: General knowledge (Global-MMLU-Lite)
+    # Cohere's multilingual MMLU, 400 questions per language. Five of Aya's languages, five scripts
+    tasks: [global_mmlu_en, global_mmlu_fr, global_mmlu_ar, global_mmlu_hi, global_mmlu_ja]
+    score: acc
+
+decoding:
+  temperature: 0.0
+  seed: 0
+  apply_chat_template: true     # Aya is a chat model; both models get the same template
+  fewshot_as_multiturn: true    # GSM8K's 5 examples as earlier chat turns
+  concurrent: 16                # requests in flight to the server at once (lm-eval's num_concurrent)
+
+# The rule (STAGE2.md): healing "costs nothing" on a benchmark if the paired 95% interval of
+# (v2 − base) over the same items does not lie entirely below zero. Drops and rises are both reported.
+reps: 10000

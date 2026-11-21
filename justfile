@@ -325,3 +325,15 @@ blog-figures:
 # Walk through the blog's experiments and reproduce each result from results/ (no GPU or keys): `just reproduce 3`, `--list`
 reproduce *args:
     python scripts/blog/reproduce.py {{args}}
+
+# Score a detector against the truth (precision, recall, F1, FP rate) or two labellers (Cohen's kappa), SEL-85/98
+label-metrics +args:
+    python scripts/labels/label_metrics.py {{args}}
+
+# Retention benchmarks (SEL-84) on one model via AuditKIT's lm-eval engine, on the pod: `just retention-run base`, `--limit 5` to pilot
+retention-run label *args:
+    python scripts/retention/run.py {{label}} {{args}}
+
+# Did healing cost anything? Two models' retention runs, item by item, with paired 95% intervals (no GPU)
+retention-compare first second *args:
+    python scripts/retention/compare.py {{first}} {{second}} {{args}}

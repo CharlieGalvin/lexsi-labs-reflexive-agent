@@ -1,0 +1,278 @@
+{
+  "first": "base",
+  "second": "sft2",
+  "pilot": false,
+  "config": "configs/retention.yaml",
+  "rule": "drop = the paired 95% interval of (second \u2212 first) lies entirely below zero",
+  "method": "accuracy: Wilson; difference: paired percentile bootstrap over shared items, seed 0",
+  "benchmarks": {
+    "Instruction following (IFEval)": {
+      "items": 541,
+      "first": 0.6931608133086876,
+      "first_ci95": [
+        0.6530497499946113,
+        0.7305479782258476
+      ],
+      "second": 0.678373382624769,
+      "second_ci95": [
+        0.6378733941284124,
+        0.7163580008311502
+      ],
+      "diff": -0.014787430683918669,
+      "diff_ci95": [
+        -0.04621072088724584,
+        0.0166358595194085
+      ],
+      "verdict": "no clear change",
+      "only_first_right": 41,
+      "only_second_right": 33
+    },
+    "Maths (GSM8K)": {
+      "items": 1319,
+      "first": 0.8453373768006065,
+      "first_ci95": [
+        0.8248232837980183,
+        0.8638457148182936
+      ],
+      "second": 0.8551933282789992,
+      "second_ci95": [
+        0.8351698556532495,
+        0.8731538015404763
+      ],
+      "diff": 0.009855951478392721,
+      "diff_ci95": [
+        -0.006823351023502654,
+        0.026535253980288095
+      ],
+      "verdict": "no clear change",
+      "only_first_right": 58,
+      "only_second_right": 71
+    },
+    "General knowledge (Global-MMLU-Lite)": {
+      "items": 2000,
+      "first": 0.6345,
+      "first_ci95": [
+        0.613155072227062,
+        0.6553292231383999
+      ],
+      "second": 0.6585,
+      "second_ci95": [
+        0.6374305541500646,
+        0.6789617195705727
+      ],
+      "diff": 0.024,
+      "diff_ci95": [
+        0.0125,
+        0.035
+      ],
+      "verdict": "rise",
+      "only_first_right": 42,
+      "only_second_right": 90
+    },
+    "en": {
+      "items": 400,
+      "first": 0.72,
+      "first_ci95": [
+        0.6740651379481613,
+        0.7617493001879792
+      ],
+      "second": 0.7425,
+      "second_ci95": [
+        0.6974839488186008,
+        0.7829024204905541
+      ],
+      "diff": 0.0225,
+      "diff_ci95": [
+        0.0025,
+        0.045
+      ],
+      "verdict": "rise",
+      "only_first_right": 5,
+      "only_second_right": 14
+    },
+    "fr": {
+      "items": 400,
+      "first": 0.645,
+      "first_ci95": [
+        0.5969295604595849,
+        0.6903117737665078
+      ],
+      "second": 0.6725,
+      "second_ci95": [
+        0.6250574069613036,
+        0.7166607320318066
+      ],
+      "diff": 0.0275,
+      "diff_ci95": [
+        0.0,
+        0.055
+      ],
+      "verdict": "no clear change",
+      "only_first_right": 10,
+      "only_second_right": 21
+    },
+    "ar": {
+      "items": 400,
+      "first": 0.6475,
+      "first_ci95": [
+        0.5994796194705074,
+        0.6927141515525868
+      ],
+      "second": 0.6425,
+      "second_ci95": [
+        0.5943808773044147,
+        0.6879080201246762
+      ],
+      "diff": -0.005,
+      "diff_ci95": [
+        -0.0275,
+        0.0175
+      ],
+      "verdict": "no clear change",
+      "only_first_right": 11,
+      "only_second_right": 9
+    },
+    "hi": {
+      "items": 400,
+      "first": 0.5475,
+      "first_ci95": [
+        0.49850022043569253,
+        0.5955960787073378
+      ],
+      "second": 0.5875,
+      "second_ci95": [
+        0.538646588024871,
+        0.634688699870185
+      ],
+      "diff": 0.04,
+      "diff_ci95": [
+        0.015,
+        0.065
+      ],
+      "verdict": "rise",
+      "only_first_right": 5,
+      "only_second_right": 21
+    },
+    "ja": {
+      "items": 400,
+      "first": 0.6125,
+      "first_ci95": [
+        0.563901825022836,
+        0.6589578308422359
+      ],
+      "second": 0.6475,
+      "second_ci95": [
+        0.5994796194705074,
+        0.6927141515525868
+      ],
+      "diff": 0.035,
+      "diff_ci95": [
+        0.0075,
+        0.065
+      ],
+      "verdict": "rise",
+      "only_first_right": 11,
+      "only_second_right": 25
+    }
+  },
+  "score_checks": [
+    "base: global_mmlu_ar_business: one copy, accuracy 0.6724 = headline acc 0.6724 \u2713",
+    "base: global_mmlu_ar_humanities: one copy, accuracy 0.6373 = headline acc 0.6373 \u2713",
+    "base: global_mmlu_ar_medical: one copy, accuracy 0.6389 = headline acc 0.6389 \u2713",
+    "base: global_mmlu_ar_other: one copy, accuracy 0.7143 = headline acc 0.7143 \u2713",
+    "base: global_mmlu_ar_social_sciences: one copy, accuracy 0.6667 = headline acc 0.6667 \u2713",
+    "base: global_mmlu_ar_stem: one copy, accuracy 0.5217 = headline acc 0.5217 \u2713",
+    "base: global_mmlu_en_business: one copy, accuracy 0.7759 = headline acc 0.7759 \u2713",
+    "base: global_mmlu_en_humanities: one copy, accuracy 0.7353 = headline acc 0.7353 \u2713",
+    "base: global_mmlu_en_medical: one copy, accuracy 0.7222 = headline acc 0.7222 \u2713",
+    "base: global_mmlu_en_other: one copy, accuracy 0.7321 = headline acc 0.7321 \u2713",
+    "base: global_mmlu_en_social_sciences: one copy, accuracy 0.7647 = headline acc 0.7647 \u2713",
+    "base: global_mmlu_en_stem: one copy, accuracy 0.5000 = headline acc 0.5000 \u2713",
+    "base: global_mmlu_fr_business: one copy, accuracy 0.7069 = headline acc 0.7069 \u2713",
+    "base: global_mmlu_fr_humanities: one copy, accuracy 0.6373 = headline acc 0.6373 \u2713",
+    "base: global_mmlu_fr_medical: one copy, accuracy 0.6944 = headline acc 0.6944 \u2713",
+    "base: global_mmlu_fr_other: one copy, accuracy 0.7321 = headline acc 0.7321 \u2713",
+    "base: global_mmlu_fr_social_sciences: one copy, accuracy 0.6078 = headline acc 0.6078 \u2713",
+    "base: global_mmlu_fr_stem: one copy, accuracy 0.5217 = headline acc 0.5217 \u2713",
+    "base: global_mmlu_hi_business: one copy, accuracy 0.5172 = headline acc 0.5172 \u2713",
+    "base: global_mmlu_hi_humanities: one copy, accuracy 0.5980 = headline acc 0.5980 \u2713",
+    "base: global_mmlu_hi_medical: one copy, accuracy 0.4722 = headline acc 0.4722 \u2713",
+    "base: global_mmlu_hi_other: one copy, accuracy 0.6071 = headline acc 0.6071 \u2713",
+    "base: global_mmlu_hi_social_sciences: one copy, accuracy 0.5980 = headline acc 0.5980 \u2713",
+    "base: global_mmlu_hi_stem: one copy, accuracy 0.3478 = headline acc 0.3478 \u2713",
+    "base: global_mmlu_ja_business: one copy, accuracy 0.6724 = headline acc 0.6724 \u2713",
+    "base: global_mmlu_ja_humanities: one copy, accuracy 0.6275 = headline acc 0.6275 \u2713",
+    "base: global_mmlu_ja_medical: one copy, accuracy 0.6389 = headline acc 0.6389 \u2713",
+    "base: global_mmlu_ja_other: one copy, accuracy 0.6786 = headline acc 0.6786 \u2713",
+    "base: global_mmlu_ja_social_sciences: one copy, accuracy 0.6176 = headline acc 0.6176 \u2713",
+    "base: global_mmlu_ja_stem: one copy, accuracy 0.3913 = headline acc 0.3913 \u2713",
+    "base: gsm8k: copy 1 of 2, accuracy 0.8453 = headline exact_match,strict-match 0.8453 \u2713",
+    "base: ifeval: one copy, accuracy 0.6932 = headline prompt_level_strict_acc 0.6932 \u2713",
+    "sft2: global_mmlu_ar_business: one copy, accuracy 0.6379 = headline acc 0.6379 \u2713",
+    "sft2: global_mmlu_ar_humanities: one copy, accuracy 0.6471 = headline acc 0.6471 \u2713",
+    "sft2: global_mmlu_ar_medical: one copy, accuracy 0.6389 = headline acc 0.6389 \u2713",
+    "sft2: global_mmlu_ar_other: one copy, accuracy 0.7321 = headline acc 0.7321 \u2713",
+    "sft2: global_mmlu_ar_social_sciences: one copy, accuracy 0.6471 = headline acc 0.6471 \u2713",
+    "sft2: global_mmlu_ar_stem: one copy, accuracy 0.5217 = headline acc 0.5217 \u2713",
+    "sft2: global_mmlu_en_business: one copy, accuracy 0.7931 = headline acc 0.7931 \u2713",
+    "sft2: global_mmlu_en_humanities: one copy, accuracy 0.7549 = headline acc 0.7549 \u2713",
+    "sft2: global_mmlu_en_medical: one copy, accuracy 0.7500 = headline acc 0.7500 \u2713",
+    "sft2: global_mmlu_en_other: one copy, accuracy 0.8036 = headline acc 0.8036 \u2713",
+    "sft2: global_mmlu_en_social_sciences: one copy, accuracy 0.7745 = headline acc 0.7745 \u2713",
+    "sft2: global_mmlu_en_stem: one copy, accuracy 0.5000 = headline acc 0.5000 \u2713",
+    "sft2: global_mmlu_fr_business: one copy, accuracy 0.6897 = headline acc 0.6897 \u2713",
+    "sft2: global_mmlu_fr_humanities: one copy, accuracy 0.6667 = headline acc 0.6667 \u2713",
+    "sft2: global_mmlu_fr_medical: one copy, accuracy 0.7500 = headline acc 0.7500 \u2713",
+    "sft2: global_mmlu_fr_other: one copy, accuracy 0.7857 = headline acc 0.7857 \u2713",
+    "sft2: global_mmlu_fr_social_sciences: one copy, accuracy 0.6373 = headline acc 0.6373 \u2713",
+    "sft2: global_mmlu_fr_stem: one copy, accuracy 0.5435 = headline acc 0.5435 \u2713",
+    "sft2: global_mmlu_hi_business: one copy, accuracy 0.5690 = headline acc 0.5690 \u2713",
+    "sft2: global_mmlu_hi_humanities: one copy, accuracy 0.6176 = headline acc 0.6176 \u2713",
+    "sft2: global_mmlu_hi_medical: one copy, accuracy 0.5556 = headline acc 0.5556 \u2713",
+    "sft2: global_mmlu_hi_other: one copy, accuracy 0.6250 = headline acc 0.6250 \u2713",
+    "sft2: global_mmlu_hi_social_sciences: one copy, accuracy 0.6569 = headline acc 0.6569 \u2713",
+    "sft2: global_mmlu_hi_stem: one copy, accuracy 0.3696 = headline acc 0.3696 \u2713",
+    "sft2: global_mmlu_ja_business: one copy, accuracy 0.7069 = headline acc 0.7069 \u2713",
+    "sft2: global_mmlu_ja_humanities: one copy, accuracy 0.6471 = headline acc 0.6471 \u2713",
+    "sft2: global_mmlu_ja_medical: one copy, accuracy 0.6667 = headline acc 0.6667 \u2713",
+    "sft2: global_mmlu_ja_other: one copy, accuracy 0.6607 = headline acc 0.6607 \u2713",
+    "sft2: global_mmlu_ja_social_sciences: one copy, accuracy 0.6863 = headline acc 0.6863 \u2713",
+    "sft2: global_mmlu_ja_stem: one copy, accuracy 0.4565 = headline acc 0.4565 \u2713",
+    "sft2: gsm8k: copy 1 of 2, accuracy 0.8552 = headline exact_match,strict-match 0.8552 \u2713",
+    "sft2: ifeval: one copy, accuracy 0.6784 = headline prompt_level_strict_acc 0.6784 \u2713"
+  ],
+  "shared_items_by_task": {
+    "global_mmlu_ar_business": 58,
+    "global_mmlu_ar_humanities": 102,
+    "global_mmlu_ar_medical": 36,
+    "global_mmlu_ar_other": 56,
+    "global_mmlu_ar_social_sciences": 102,
+    "global_mmlu_ar_stem": 46,
+    "global_mmlu_en_business": 58,
+    "global_mmlu_en_humanities": 102,
+    "global_mmlu_en_medical": 36,
+    "global_mmlu_en_other": 56,
+    "global_mmlu_en_social_sciences": 102,
+    "global_mmlu_en_stem": 46,
+    "global_mmlu_fr_business": 58,
+    "global_mmlu_fr_humanities": 102,
+    "global_mmlu_fr_medical": 36,
+    "global_mmlu_fr_other": 56,
+    "global_mmlu_fr_social_sciences": 102,
+    "global_mmlu_fr_stem": 46,
+    "global_mmlu_hi_business": 58,
+    "global_mmlu_hi_humanities": 102,
+    "global_mmlu_hi_medical": 36,
+    "global_mmlu_hi_other": 56,
+    "global_mmlu_hi_social_sciences": 102,
+    "global_mmlu_hi_stem": 46,
+    "global_mmlu_ja_business": 58,
+    "global_mmlu_ja_humanities": 102,
+    "global_mmlu_ja_medical": 36,
+    "global_mmlu_ja_other": 56,
+    "global_mmlu_ja_social_sciences": 102,
+    "global_mmlu_ja_stem": 46,
+    "gsm8k": 1319,
+    "ifeval": 541
+  }
+}
