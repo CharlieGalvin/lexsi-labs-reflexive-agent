@@ -143,9 +143,10 @@ Meta-healing's round 2 and its misfires pointed at changes that don't match the 
 result above); a person wrote the tight version. At 7 listed changes (retail: modify items,
 exchange, return, cancel order; airline: update flights, update bags, cancel reservation) the
 checker asks whether the change differs from what the customer asked for and agreed to, or from
-the agent's own lookups. Same checker as meta-healing's rules (gpt-4.1-mini, evidence must be in
-the conversation, errors never block), tool results shown in full; live, with its own block
-message. It joins the frozen checker only if it flags at most 1 in 10 of SFT v2's train-task
+the agent's own lookups. Checked by full GPT-4.1 (`gpt-4.1-2025-04-14`, temperature 0; amended
+11:55, still before measuring: mini read meta-healing's rules too loosely), through the same
+machinery as meta-healing's rules (evidence must be in the conversation, errors never block), tool
+results shown in full; live, with its own block message. "No yes" keeps gpt-4.1-mini. It joins the frozen checker only if it flags at most 1 in 10 of SFT v2's train-task
 passes (`just rule-rates`), and of base Aya's (Arm A) train-task passes when those are run too
 (validation tasks dropped). Failures flagged, unexplained failures flagged and an injected-error
 test (corrupted changes from passing conversations: caught, and originals flagged) are reported
