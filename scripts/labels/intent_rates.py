@@ -67,7 +67,7 @@ def main(argv: list[str] | None = None) -> int:
     os.environ.setdefault("REFLEXIVE_JUDGE_CACHE", str(a.cache))
 
     out: dict = {"rule": "no_yes", "judge": a.judge, "arm": a.arm, "split": a.split, "domains": {}}
-    errors = 0
+    errors, first_error = 0, ""
     shown = 0
     for d in DOMAINS:
         f = a.episodes / f"{a.arm}-{d}-{a.split}.jsonl"
@@ -81,6 +81,7 @@ def main(argv: list[str] | None = None) -> int:
             every = intent_findings(r)
             found = [x for x in every if x["live"]]  # judge errors are logged, never a flag
             errors += len(every) - len(found)
+            first_error = first_error or next((x["reason"] for x in every if not x["live"]), "")
             key = "passed" if r["outcome"]["passed"] else "failed"
             rows[key][0] += bool(found)
             rows[key][1] += 1
@@ -101,6 +102,11 @@ def main(argv: list[str] | None = None) -> int:
             f" ({(pa['rate'] or 0):.0%}, 95% CI {pa['ci95'][0]:.0%}–{pa['ci95'][1]:.0%})"
         )
     out["judge_errors"] = errors
+    if errors:
+        print(f"\n⚠ {errors} judge errors: those changes were NOT flagged, so the rates above are too low.")
+        print(f"  first error: {first_error}")
+        print("  Fix it (usually OPENAI_API_KEY isn't set in this shell) and run again; nothing is written.")
+        return 1
     if a.judge == "on":
         from reflexive.intent_judge import default_judge
 
