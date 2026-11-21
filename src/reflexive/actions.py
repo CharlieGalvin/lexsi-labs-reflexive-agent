@@ -17,7 +17,8 @@ call and the domain policy. It never reads τ²-bench's expected actions or the 
 * ``live=False``: needs more than the moment of the change (later turns, the outcome), or is too
   slow to run on every call. Used by the gate and in reports only; the guard logs it, never blocks.
 
-This is the agreed interface. ``RULES`` holds SEL-88's ``no_yes`` (`reflexive.intent`), then the
+This is the agreed interface. ``RULES`` holds SEL-88's ``no_yes`` (`reflexive.intent`), the hand-written
+``mismatch`` (`reflexive.mismatch`), then the
 meta-healing rules (SEL-91, `reflexive.meta_heal`) a person accepted into ``configs/meta_rules.json``.
 """
 
@@ -81,6 +82,11 @@ def check_action(
 from reflexive.intent import no_yes  # noqa: E402
 
 RULES.append(no_yes)
+
+# Hand-written after meta-healing: a change that doesn't match the request or the lookups.
+from reflexive.mismatch import mismatch  # noqa: E402
+
+RULES.append(mismatch)
 
 # SEL-91: the meta-healing rules a person accepted (configs/meta_rules.json), after "no yes".
 from reflexive.meta_heal import meta_rules  # noqa: E402

@@ -48,6 +48,9 @@ MIN_FLAGGED, MIN_SHARE, MAX_PASSES = 2, 0.20, 1  # STAGE2.md's acceptance bar, o
 HOLDOUT_SHARE = 1 / 3
 MAX_CHARS = 1200  # per message or tool result in a transcript
 MAX_POLICY_CHARS = 30_000
+MAX_ANSWER_TOKENS = (
+    4000  # a rule's answer is a few lines and the proposer's ten rules fit; a runaway stops here
+)
 ROOT = Path(__file__).resolve().parents[2]
 RULES_PATH = ROOT / "configs" / "meta_rules.json"
 
@@ -125,6 +128,9 @@ class Candidate:
     live: bool = False
     block_message: str = ""
     seen_in: tuple[str, ...] = ()
+    tools: tuple[str, ...] = ()  # the state-changing tools it checks; () = every one in the domain
+    tool_chars: int = 0  # how much of each tool result the checker sees; 0 = MAX_CHARS
+    model: str = ""  # the checker's model; "" = RULE_MODEL
 
     @classmethod
     def from_dict(cls, d: dict) -> Candidate:
@@ -145,10 +151,16 @@ class Candidate:
             live=live,
             block_message=str(d.get("block_message", "")).strip() if live else "",
             seen_in=tuple(str(x) for x in d.get("seen_in") or ()),
+            tools=tuple(str(x) for x in d.get("tools") or ()),
+            tool_chars=int(d.get("tool_chars") or 0),
+            model=str(d.get("model") or ""),
         )
 
     def to_dict(self) -> dict:
-        return {**asdict(self), "seen_in": list(self.seen_in)}
+        return {**asdict(self), "seen_in": list(self.seen_in), "tools": list(self.tools)}
+
+    def checks(self, tool: str) -> bool:
+        return not self.tools or tool in self.tools
 
 
 # --- The LLM, cached --------------------------------------------------------------------------
@@ -190,6 +202,7 @@ class LLM:
             response_format={"type": "json_object"},
             num_retries=2,
             timeout=180,
+            max_tokens=MAX_ANSWER_TOKENS,
         )
         self.calls += 1
         answer = json.loads(resp.choices[0].message.content or "{}")
@@ -208,17 +221,18 @@ def judges_off() -> bool:
     return os.environ.get("REFLEXIVE_INTENT_JUDGE", "on").lower() in ("off", "0", "false", "no")
 
 
-_rule_llm: LLM | None = None
+_rule_llms: dict[str, LLM] = {}
 
 
-def default_rule_llm() -> LLM | None:
-    """The shared rule checker, or None when ``REFLEXIVE_INTENT_JUDGE=off`` (then meta rules never fire)."""
-    global _rule_llm
+def default_rule_llm(model: str = "") -> LLM | None:
+    """The shared rule checker for ``model`` (default `RULE_MODEL`), or None when
+    ``REFLEXIVE_INTENT_JUDGE=off`` (then these rules never fire)."""
     if judges_off():
         return None
-    if _rule_llm is None:
-        _rule_llm = LLM(RULE_MODEL, cache_path=os.environ.get("REFLEXIVE_META_CACHE") or None)
-    return _rule_llm
+    model = model or RULE_MODEL
+    if model not in _rule_llms:
+        _rule_llms[model] = LLM(model, cache_path=os.environ.get("REFLEXIVE_META_CACHE") or None)
+    return _rule_llms[model]
 
 
 # --- Transcripts: what a rule reads -----------------------------------------------------------
@@ -241,8 +255,10 @@ def _name(call: dict) -> str:
     return str((call.get("function") or call).get("name"))
 
 
-def transcript(conversation: Sequence[Message], max_chars: int = MAX_CHARS) -> str:
-    """Customer and agent turns, the agent's calls and the tool results; no system prompt."""
+def transcript(conversation: Sequence[Message], max_chars: int = MAX_CHARS, tool_chars: int = 0) -> str:
+    """Customer and agent turns, the agent's calls and the tool results; no system prompt.
+
+    ``tool_chars``: how much of each tool result to keep (0: ``max_chars``)."""
     lines = []
     for m in conversation:
         role = m.get("role")
@@ -254,7 +270,7 @@ def transcript(conversation: Sequence[Message], max_chars: int = MAX_CHARS) -> s
                 lines.append(f"AGENT: {text[:max_chars]}")
             lines += [f"AGENT CALLS: {_call_text(c)[:max_chars]}" for c in m.get("tool_calls") or []]
         elif role == "tool":
-            lines.append(f"TOOL RESULT: {text[:max_chars]}")
+            lines.append(f"TOOL RESULT: {text[: tool_chars or max_chars]}")
     return "\n".join(lines)
 
 
@@ -276,7 +292,7 @@ def evidence_found(evidence: str, shown: str) -> bool:
 def rule_request(
     c: Candidate, conversation: Sequence[Message], policy: str, call: dict | None
 ) -> list[Message]:
-    shown = transcript(conversation)
+    shown = transcript(conversation, tool_chars=c.tool_chars)
     parts = [
         f"DOMAIN POLICY:\n{policy[:MAX_POLICY_CHARS]}",
         f"RULE: {c.what}\nQUESTION: {c.question}",
@@ -330,7 +346,7 @@ def candidate_findings(c: Candidate, rec: dict, llm: Callable[[list], dict]) -> 
         if m.get("role") != "assistant":
             continue
         for call in m.get("tool_calls") or []:
-            if _name(call) not in writes:
+            if _name(call) not in writes or not c.checks(_name(call)):
                 continue
             h = check(c, view[:i], policy, call, llm)
             if h.flagged or h.error:
@@ -341,19 +357,23 @@ def candidate_findings(c: Candidate, rec: dict, llm: Callable[[list], dict]) -> 
 # --- As a rule in reflexive.actions.RULES -----------------------------------------------------
 
 
-def as_rule(c: Candidate, llm: Any = "default") -> Callable[[Sequence[Message], dict, str], Any]:
-    """A ``call`` candidate as a `reflexive.actions.Rule` (conversation rules are after the fact only)."""
+def as_rule(
+    c: Candidate, llm: Any = "default", kind: str = "META", prefix: str = "meta_"
+) -> Callable[[Sequence[Message], dict, str], Any]:
+    """A ``call`` candidate as a `reflexive.actions.Rule` (conversation rules are after the fact only).
+
+    ``kind``: the finding type (``META`` for meta-healing's rules; a hand-written rule names its own)."""
 
     def rule(conversation: Sequence[Message], call: dict, policy: str) -> Any:
         from reflexive.actions import ActionFinding
 
-        checker = default_rule_llm() if llm == "default" else llm
-        if checker is None:
+        checker = default_rule_llm(c.model) if llm == "default" else llm
+        if checker is None or not c.checks(_name(call)):
             return None
         h = check(c, conversation, policy, call, checker)
         if h.error:
             return ActionFinding(
-                "META",
+                kind,
                 f"{c.name}_error",
                 f"Not blocked: the checker couldn't answer ({h.error}).",
                 live=False,
@@ -362,10 +382,10 @@ def as_rule(c: Candidate, llm: Any = "default") -> Callable[[Sequence[Message], 
             return None
         message = f"Note from the system, not the customer: {c.block_message}" if c.live else ""
         return ActionFinding(
-            "META", c.name, f'{c.what} Evidence: "{h.evidence}". {h.reason}', live=c.live, message=message
+            kind, c.name, f'{c.what} Evidence: "{h.evidence}". {h.reason}', live=c.live, message=message
         )
 
-    rule.__name__ = f"meta_{c.name}"
+    rule.__name__ = f"{prefix}{c.name}"
     return rule
 
 
@@ -383,12 +403,14 @@ def meta_rules(path: Path | str = RULES_PATH) -> list[Callable]:
 
 def conversation_findings(rec: dict, path: Path | str = RULES_PATH, llm: Any = "default") -> list[dict]:
     """The accepted conversation rules (after the fact) on a whole saved conversation."""
-    checker = default_rule_llm() if llm == "default" else llm
-    if checker is None:
+    if judges_off() and llm == "default":
         return []
     out = []
     for c in accepted(path):
         if c.applies_to == "conversation":
+            checker = default_rule_llm(c.model) if llm == "default" else llm
+            if checker is None:
+                continue
             out += [{"rule": c.name, "live": False, **f} for f in candidate_findings(c, rec, checker)]
     return out
 
