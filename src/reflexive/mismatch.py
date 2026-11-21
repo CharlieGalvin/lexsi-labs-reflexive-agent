@@ -9,15 +9,17 @@ v2's failures had the same signal (about 15 unrequested changes and 14 wrong arg
 person wrote the tight version: the tools are listed, no "or similar", and the checker sees the
 tool results in full, since a mismatch is only visible against them.
 
-It runs through the same machinery as meta-healing's rules (`reflexive.meta_heal`): the pinned
-``gpt-4.1-mini-2025-04-14`` at temperature 0, cached; the quoted evidence must be in the
-conversation; a checker error never blocks. It reads the conversation, the call and the policy
-only. With ``REFLEXIVE_INTENT_JUDGE=off`` it never fires.
+It runs through the same machinery as meta-healing's rules (`reflexive.meta_heal`), with the
+pinned full ``gpt-4.1-2025-04-14`` (mini read meta-healing's rules too loosely), at temperature 0,
+cached. The quoted evidence must be in the conversation, and a checker error never blocks. It reads
+the conversation, the call and the policy only. With ``REFLEXIVE_INTENT_JUDGE=off`` it never fires.
 """
 
 from __future__ import annotations
 
 from reflexive.meta_heal import Candidate, as_rule
+
+MODEL = "gpt-4.1-2025-04-14"  # full GPT-4.1, not mini: comparing IDs and options across long lookups is hard
 
 TOOLS = (
     # retail: the changes that act on items, or on a whole order
@@ -60,6 +62,7 @@ RULE = Candidate(
     block_message=BLOCK,
     tools=TOOLS,
     tool_chars=6000,
+    model=MODEL,
 )
 
 mismatch = as_rule(RULE, kind="INTENT", prefix="")

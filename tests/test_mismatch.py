@@ -38,6 +38,8 @@ class Fake:
 def test_it_is_registered_after_no_yes_and_is_live_with_its_own_message():
     assert [r.__name__ for r in RULES][:2] == ["no_yes", "mismatch"]
     assert RULE.live and RULE.block_message and RULE.applies_to == "call"
+    assert RULE.model == "gpt-4.1-2025-04-14"  # full GPT-4.1, pinned
+    assert mh.default_rule_llm() is None  # conftest: judges off
 
 
 def test_it_checks_only_the_listed_tools_and_never_fires_with_judges_off():

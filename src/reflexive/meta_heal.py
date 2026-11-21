@@ -127,6 +127,7 @@ class Candidate:
     seen_in: tuple[str, ...] = ()
     tools: tuple[str, ...] = ()  # the state-changing tools it checks; () = every one in the domain
     tool_chars: int = 0  # how much of each tool result the checker sees; 0 = MAX_CHARS
+    model: str = ""  # the checker's model; "" = RULE_MODEL
 
     @classmethod
     def from_dict(cls, d: dict) -> Candidate:
@@ -149,6 +150,7 @@ class Candidate:
             seen_in=tuple(str(x) for x in d.get("seen_in") or ()),
             tools=tuple(str(x) for x in d.get("tools") or ()),
             tool_chars=int(d.get("tool_chars") or 0),
+            model=str(d.get("model") or ""),
         )
 
     def to_dict(self) -> dict:
@@ -215,17 +217,18 @@ def judges_off() -> bool:
     return os.environ.get("REFLEXIVE_INTENT_JUDGE", "on").lower() in ("off", "0", "false", "no")
 
 
-_rule_llm: LLM | None = None
+_rule_llms: dict[str, LLM] = {}
 
 
-def default_rule_llm() -> LLM | None:
-    """The shared rule checker, or None when ``REFLEXIVE_INTENT_JUDGE=off`` (then meta rules never fire)."""
-    global _rule_llm
+def default_rule_llm(model: str = "") -> LLM | None:
+    """The shared rule checker for ``model`` (default `RULE_MODEL`), or None when
+    ``REFLEXIVE_INTENT_JUDGE=off`` (then these rules never fire)."""
     if judges_off():
         return None
-    if _rule_llm is None:
-        _rule_llm = LLM(RULE_MODEL, cache_path=os.environ.get("REFLEXIVE_META_CACHE") or None)
-    return _rule_llm
+    model = model or RULE_MODEL
+    if model not in _rule_llms:
+        _rule_llms[model] = LLM(model, cache_path=os.environ.get("REFLEXIVE_META_CACHE") or None)
+    return _rule_llms[model]
 
 
 # --- Transcripts: what a rule reads -----------------------------------------------------------
@@ -360,7 +363,7 @@ def as_rule(
     def rule(conversation: Sequence[Message], call: dict, policy: str) -> Any:
         from reflexive.actions import ActionFinding
 
-        checker = default_rule_llm() if llm == "default" else llm
+        checker = default_rule_llm(c.model) if llm == "default" else llm
         if checker is None or not c.checks(_name(call)):
             return None
         h = check(c, conversation, policy, call, checker)
@@ -396,12 +399,14 @@ def meta_rules(path: Path | str = RULES_PATH) -> list[Callable]:
 
 def conversation_findings(rec: dict, path: Path | str = RULES_PATH, llm: Any = "default") -> list[dict]:
     """The accepted conversation rules (after the fact) on a whole saved conversation."""
-    checker = default_rule_llm() if llm == "default" else llm
-    if checker is None:
+    if judges_off() and llm == "default":
         return []
     out = []
     for c in accepted(path):
         if c.applies_to == "conversation":
+            checker = default_rule_llm(c.model) if llm == "default" else llm
+            if checker is None:
+                continue
             out += [{"rule": c.name, "live": False, **f} for f in candidate_findings(c, rec, checker)]
     return out
 
