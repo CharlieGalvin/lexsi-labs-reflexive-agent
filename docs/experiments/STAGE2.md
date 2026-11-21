@@ -138,6 +138,19 @@ bookings. Review used 4 of 5 as the bar; that number was not written here before
 2–3 of 5 fails any majority bar too. The other 9 candidates failed the numbers. All 10, with their
 scores, are in `results/meta-heal.metrics.json`. The checker freezes with "no yes" only.
 
+**Amended Sat 21 Nov, 11:50 UK, before it is measured: a hand-written "mismatch" rule (PR #76).**
+Meta-healing's round 2 and its misfires pointed at changes that don't match the request (see the
+result above); a person wrote the tight version. At 7 listed changes (retail: modify items,
+exchange, return, cancel order; airline: update flights, update bags, cancel reservation) the
+checker asks whether the change differs from what the customer asked for and agreed to, or from
+the agent's own lookups. Same checker as meta-healing's rules (gpt-4.1-mini, evidence must be in
+the conversation, errors never block), tool results shown in full; live, with its own block
+message. It joins the frozen checker only if it flags at most 1 in 10 of SFT v2's train-task
+passes (`just rule-rates`), and of base Aya's (Arm A) train-task passes when those are run too
+(validation tasks dropped). Failures flagged, unexplained failures flagged and an injected-error
+test (corrupted changes from passing conversations: caught, and originals flagged) are reported
+whatever they show. Measured once; the wording is not tuned on the result.
+
 **Freeze: Sat 21 Nov, 23:59 UK (SEL-95).** The checker is tagged `stage2-checker-frozen`; the rule
 list and each rule's live / after-the-fact mark are added below this line in the same commit.
 Nothing changes the checker after the tag. If meta-healing isn't ready, the freeze goes ahead with
