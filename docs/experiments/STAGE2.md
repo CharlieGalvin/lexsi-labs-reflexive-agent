@@ -155,7 +155,19 @@ Amended Sat 21 Nov, before the GPT-4.1 run's numbers were seen: its first attemp
 checker error (a runaway answer, invalid JSON), after printing 5 flagged passes but no rates. As in
 the guard, a checker error counts as not flagged; the count is reported and each rate is also given
 at worst (every error flagged). The bar is read overall: at most 5 of the 55 passes, using the
-at-worst count. Answers are capped at 4,000 tokens. The rule's wording is unchanged. It joins the frozen checker only if it flags at most 1 in 10 of SFT v2's train-task
+at-worst count. Answers are capped at 4,000 tokens. The rule's wording is unchanged.
+
+**Result, Sat 21 Nov 11:53 UK (GPT-4.1, no checker errors): it meets the bar and joins the
+checker.** On SFT v2's 112 train-task conversations, "mismatch" flags 5 of 55 passes (9%, 95% CI
+4–20%; all 5 retail, retail 5/21), 14 of 57 failures (25%) and 7 of the 24 failures no Tool / Arg /
+Loop finding explains (29%). "No yes" alone: 3/55 passes, 4/57 failures. Either rule, as the guard
+will run them: 6/55 passes (11%), 15/57 failures (26%). Injected errors: 37/40 caught (92%); the
+same changes uncorrupted, 8/40 flagged (20%). Of the 5 flagged passes, read by hand, 1 is a real
+mismatch the tool then rejected (retail 92, turn 29: an item from another order) and 4 are the
+checker's reasoning slips (retail 109, 104, 11, 81). Expect some wrong blocks in retail in
+Decision 1. The gpt-4.1-mini run, for comparison: passes 6/55, failures 21/57, injected 39/40 with
+17/40 originals flagged. These are in-sample rates: the rule was written after reading v2's
+train failures. Decision 1, on validation, is its first out-of-sample test. It joins the frozen checker only if it flags at most 1 in 10 of SFT v2's train-task
 passes (`just rule-rates`), and of base Aya's (Arm A) train-task passes when those are run too
 (validation tasks dropped). Failures flagged, unexplained failures flagged and an injected-error
 test (corrupted changes from passing conversations: caught, and originals flagged) are reported
