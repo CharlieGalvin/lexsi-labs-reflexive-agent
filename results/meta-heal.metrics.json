@@ -1,0 +1,663 @@
+{
+  "ticket": "SEL-91",
+  "seed": 0,
+  "rule_model": "gpt-4.1-mini-2025-04-14",
+  "bar": {
+    "min_flagged": 2,
+    "min_share": 0.2,
+    "max_passes": 1
+  },
+  "max_candidates_scored": 10,
+  "propose_conversations": 74,
+  "holdout_ids": [
+    "airline:0#0",
+    "airline:14#0",
+    "airline:15#0",
+    "airline:33#0",
+    "airline:42#0",
+    "airline:49#0",
+    "airline:5#0",
+    "retail:103#0",
+    "retail:107#0",
+    "retail:14#0",
+    "retail:2#0",
+    "retail:29#0",
+    "retail:43#0",
+    "retail:54#0",
+    "retail:57#0",
+    "retail:7#0",
+    "retail:8#0",
+    "retail:84#0",
+    "retail:89#0",
+    "retail:92#0",
+    "retail:93#0",
+    "retail:95#0",
+    "telecom:[mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|break_apn_mms_setting|break_app_both_permissions|data_mode_off|data_usage_exceeded|unseat_sim_card|user_abroad_roaming_disabled_off[PERSONA:Hard]#0",
+    "telecom:[mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|break_apn_mms_setting|break_app_storage_permission|data_usage_exceeded|unseat_sim_card|user_abroad_roaming_disabled_off[PERSONA:Easy]#0",
+    "telecom:[mms_issue]airplane_mode_on|bad_network_preference|break_apn_mms_setting|break_app_both_permissions|data_mode_off|data_usage_exceeded|user_abroad_roaming_enabled_off[PERSONA:None]#0",
+    "telecom:[mms_issue]bad_network_preference|break_app_sms_permission|data_mode_off|data_usage_exceeded|user_abroad_roaming_enabled_off[PERSONA:None]#0",
+    "telecom:[mms_issue]bad_wifi_calling|break_apn_mms_setting|break_app_sms_permission|data_usage_exceeded[PERSONA:Hard]#0",
+    "telecom:[mms_issue]break_apn_mms_setting|data_mode_off|user_abroad_roaming_disabled_on[PERSONA:Hard]#0",
+    "telecom:[mobile_data_issue]airplane_mode_on|bad_network_preference|bad_vpn|data_mode_off|data_saver_mode_on|data_usage_exceeded|user_abroad_roaming_disabled_on[PERSONA:None]#0",
+    "telecom:[mobile_data_issue]airplane_mode_on|bad_network_preference|bad_vpn|data_mode_off|data_saver_mode_on|user_abroad_roaming_disabled_off[PERSONA:Hard]#0",
+    "telecom:[mobile_data_issue]airplane_mode_on|bad_network_preference|bad_vpn|data_mode_off|data_usage_exceeded|user_abroad_roaming_enabled_off[PERSONA:Easy]#0",
+    "telecom:[mobile_data_issue]airplane_mode_on|bad_network_preference|data_mode_off|data_usage_exceeded|user_abroad_roaming_disabled_on[PERSONA:None]#0",
+    "telecom:[mobile_data_issue]airplane_mode_on|user_abroad_roaming_enabled_off[PERSONA:None]#0",
+    "telecom:[mobile_data_issue]bad_network_preference|bad_vpn|user_abroad_roaming_disabled_on[PERSONA:None]#0",
+    "telecom:[mobile_data_issue]bad_vpn|data_saver_mode_on|user_abroad_roaming_disabled_on[PERSONA:None]#0",
+    "telecom:[service_issue]airplane_mode_on|break_apn_settings|unseat_sim_card[PERSONA:None]#0",
+    "telecom:[service_issue]airplane_mode_on|overdue_bill_suspension|unseat_sim_card[PERSONA:Easy]#0",
+    "telecom:[service_issue]break_apn_settings|overdue_bill_suspension|unseat_sim_card[PERSONA:Hard]#0"
+  ],
+  "rounds": [
+    {
+      "round": 1,
+      "proposer_model": "gpt-4.1-2025-04-14",
+      "proposed": 5,
+      "unexplained_failures_shown": [
+        "airline:11#0",
+        "airline:21#0",
+        "airline:3#0",
+        "airline:9#0",
+        "retail:22#0",
+        "retail:24#0",
+        "retail:28#0",
+        "retail:3#0",
+        "retail:31#0",
+        "retail:63#0",
+        "retail:66#0",
+        "retail:72#0",
+        "retail:98#0",
+        "telecom:[mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|break_apn_mms_setting|break_app_storage_permission|data_mode_off|data_usage_exceeded|unseat_sim_card|user_abroad_roaming_disabled_off[PERSONA:Easy]#0",
+        "telecom:[mms_issue]bad_network_preference|bad_wifi_calling|break_app_both_permissions|data_usage_exceeded|unseat_sim_card|user_abroad_roaming_disabled_off[PERSONA:None]#0",
+        "telecom:[mobile_data_issue]data_mode_off|data_usage_exceeded[PERSONA:None]#0",
+        "telecom:[service_issue]airplane_mode_on|break_apn_settings|contract_end_suspension|unseat_sim_card[PERSONA:Easy]#0",
+        "telecom:[service_issue]lock_sim_card_pin|overdue_bill_suspension[PERSONA:Easy]#0"
+      ],
+      "candidates": [
+        {
+          "name": "telecom_roaming_not_enabled_on_line_when_abroad",
+          "what": "The agent fails to enable roaming on the user's line when the user is abroad and data/MMS is not working.",
+          "applies_to": "call",
+          "question": "Is the user currently abroad (outside their home network), their device's data roaming is enabled, but the agent has not enabled roaming on the user's line in the system before attempting to resolve data/MMS issues?",
+          "live": true,
+          "unexplained_failures": [
+            0,
+            5
+          ],
+          "other_failures": [
+            1,
+            14
+          ],
+          "passes": [
+            5,
+            19
+          ],
+          "share": 0.0,
+          "meets_bar": false,
+          "flagged_ids": [
+            {
+              "id": "telecom:[mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|break_apn_mms_setting|break_app_storage_permission|data_usage_exceeded|unseat_sim_card|user_abroad_roaming_disabled_off[PERSONA:Easy]#0",
+              "kind": "other_failures",
+              "turns": [
+                17,
+                77
+              ]
+            },
+            {
+              "id": "telecom:[mms_issue]break_apn_mms_setting|data_mode_off|user_abroad_roaming_disabled_on[PERSONA:Hard]#0",
+              "kind": "passes",
+              "turns": [
+                21
+              ]
+            },
+            {
+              "id": "telecom:[mobile_data_issue]airplane_mode_on|bad_network_preference|bad_vpn|data_mode_off|data_saver_mode_on|data_usage_exceeded|user_abroad_roaming_disabled_on[PERSONA:None]#0",
+              "kind": "passes",
+              "turns": [
+                31
+              ]
+            },
+            {
+              "id": "telecom:[mobile_data_issue]airplane_mode_on|bad_network_preference|bad_vpn|data_mode_off|data_saver_mode_on|user_abroad_roaming_disabled_off[PERSONA:Hard]#0",
+              "kind": "passes",
+              "turns": [
+                49
+              ]
+            },
+            {
+              "id": "telecom:[mobile_data_issue]airplane_mode_on|bad_network_preference|data_mode_off|data_usage_exceeded|user_abroad_roaming_disabled_on[PERSONA:None]#0",
+              "kind": "passes",
+              "turns": [
+                15,
+                17
+              ]
+            },
+            {
+              "id": "telecom:[mobile_data_issue]bad_vpn|data_saver_mode_on|user_abroad_roaming_disabled_on[PERSONA:None]#0",
+              "kind": "passes",
+              "turns": [
+                23
+              ]
+            }
+          ]
+        },
+        {
+          "name": "telecom_data_roaming_not_enabled_on_device_when_abroad",
+          "what": "The agent fails to instruct the user to enable data roaming on their device when the user is abroad and data/MMS is not working.",
+          "applies_to": "call",
+          "question": "Is the user currently abroad (outside their home network), their line is roaming-enabled, but the agent has not instructed the user to enable data roaming on their device before attempting to resolve data/MMS issues?",
+          "live": true,
+          "unexplained_failures": [
+            0,
+            5
+          ],
+          "other_failures": [
+            1,
+            14
+          ],
+          "passes": [
+            4,
+            19
+          ],
+          "share": 0.0,
+          "meets_bar": false,
+          "flagged_ids": [
+            {
+              "id": "telecom:[mms_issue]bad_network_preference|break_app_sms_permission|data_mode_off|data_usage_exceeded|user_abroad_roaming_enabled_off[PERSONA:None]#0",
+              "kind": "other_failures",
+              "turns": [
+                29,
+                51
+              ]
+            },
+            {
+              "id": "telecom:[mms_issue]break_apn_mms_setting|data_mode_off|user_abroad_roaming_disabled_on[PERSONA:Hard]#0",
+              "kind": "passes",
+              "turns": [
+                21
+              ]
+            },
+            {
+              "id": "telecom:[mobile_data_issue]airplane_mode_on|bad_network_preference|bad_vpn|data_mode_off|data_saver_mode_on|user_abroad_roaming_disabled_off[PERSONA:Hard]#0",
+              "kind": "passes",
+              "turns": [
+                49
+              ]
+            },
+            {
+              "id": "telecom:[mobile_data_issue]airplane_mode_on|bad_network_preference|bad_vpn|data_mode_off|data_usage_exceeded|user_abroad_roaming_enabled_off[PERSONA:Easy]#0",
+              "kind": "passes",
+              "turns": [
+                41
+              ]
+            },
+            {
+              "id": "telecom:[mobile_data_issue]airplane_mode_on|bad_network_preference|data_mode_off|data_usage_exceeded|user_abroad_roaming_disabled_on[PERSONA:None]#0",
+              "kind": "passes",
+              "turns": [
+                15,
+                17
+              ]
+            }
+          ]
+        },
+        {
+          "name": "telecom_missing_speed_test_for_data_confirmation",
+          "what": "The agent fails to confirm data connectivity with a speed test after making changes that should restore data, before proceeding with further troubleshooting.",
+          "applies_to": "call",
+          "question": "Has the agent made changes (e.g., refueled data, enabled roaming, toggled data) that should restore data, but not instructed the user to run a speed test to confirm data connectivity before further troubleshooting?",
+          "live": true,
+          "unexplained_failures": [
+            0,
+            5
+          ],
+          "other_failures": [
+            5,
+            14
+          ],
+          "passes": [
+            8,
+            19
+          ],
+          "share": 0.0,
+          "meets_bar": false,
+          "flagged_ids": [
+            {
+              "id": "telecom:[mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|break_apn_mms_setting|break_app_both_permissions|data_mode_off|data_usage_exceeded|unseat_sim_card|user_abroad_roaming_disabled_off[PERSONA:Hard]#0",
+              "kind": "other_failures",
+              "turns": [
+                17
+              ]
+            },
+            {
+              "id": "telecom:[mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|break_apn_mms_setting|break_app_storage_permission|data_usage_exceeded|unseat_sim_card|user_abroad_roaming_disabled_off[PERSONA:Easy]#0",
+              "kind": "other_failures",
+              "turns": [
+                17,
+                77
+              ]
+            },
+            {
+              "id": "telecom:[mms_issue]airplane_mode_on|bad_network_preference|break_apn_mms_setting|break_app_both_permissions|data_mode_off|data_usage_exceeded|user_abroad_roaming_enabled_off[PERSONA:None]#0",
+              "kind": "passes",
+              "turns": [
+                17
+              ]
+            },
+            {
+              "id": "telecom:[mms_issue]bad_network_preference|break_app_sms_permission|data_mode_off|data_usage_exceeded|user_abroad_roaming_enabled_off[PERSONA:None]#0",
+              "kind": "other_failures",
+              "turns": [
+                29,
+                51,
+                75
+              ]
+            },
+            {
+              "id": "telecom:[mms_issue]break_apn_mms_setting|data_mode_off|user_abroad_roaming_disabled_on[PERSONA:Hard]#0",
+              "kind": "passes",
+              "turns": [
+                21,
+                35
+              ]
+            },
+            {
+              "id": "telecom:[mobile_data_issue]airplane_mode_on|bad_network_preference|bad_vpn|data_mode_off|data_saver_mode_on|data_usage_exceeded|user_abroad_roaming_disabled_on[PERSONA:None]#0",
+              "kind": "passes",
+              "turns": [
+                17,
+                31
+              ]
+            },
+            {
+              "id": "telecom:[mobile_data_issue]airplane_mode_on|bad_network_preference|bad_vpn|data_mode_off|data_saver_mode_on|user_abroad_roaming_disabled_off[PERSONA:Hard]#0",
+              "kind": "passes",
+              "turns": [
+                37
+              ]
+            },
+            {
+              "id": "telecom:[mobile_data_issue]airplane_mode_on|bad_network_preference|bad_vpn|data_mode_off|data_usage_exceeded|user_abroad_roaming_enabled_off[PERSONA:Easy]#0",
+              "kind": "passes",
+              "turns": [
+                17,
+                41
+              ]
+            },
+            {
+              "id": "telecom:[mobile_data_issue]airplane_mode_on|bad_network_preference|data_mode_off|data_usage_exceeded|user_abroad_roaming_disabled_on[PERSONA:None]#0",
+              "kind": "passes",
+              "turns": [
+                15,
+                17
+              ]
+            },
+            {
+              "id": "telecom:[mobile_data_issue]airplane_mode_on|user_abroad_roaming_enabled_off[PERSONA:None]#0",
+              "kind": "other_failures",
+              "turns": [
+                27,
+                31
+              ]
+            },
+            {
+              "id": "telecom:[mobile_data_issue]bad_vpn|data_saver_mode_on|user_abroad_roaming_disabled_on[PERSONA:None]#0",
+              "kind": "passes",
+              "turns": [
+                23
+              ]
+            },
+            {
+              "id": "telecom:[service_issue]airplane_mode_on|overdue_bill_suspension|unseat_sim_card[PERSONA:Easy]#0",
+              "kind": "other_failures",
+              "turns": [
+                25,
+                35
+              ]
+            },
+            {
+              "id": "telecom:[service_issue]break_apn_settings|overdue_bill_suspension|unseat_sim_card[PERSONA:Hard]#0",
+              "kind": "passes",
+              "turns": [
+                21
+              ]
+            }
+          ]
+        },
+        {
+          "name": "telecom_premature_mms_troubleshooting_without_data_connectivity",
+          "what": "The agent attempts MMS troubleshooting steps before confirming that mobile data is working with a speed test.",
+          "applies_to": "call",
+          "question": "Is the agent attempting MMS troubleshooting steps (e.g., APN, permissions, Wi-Fi Calling) before confirming that mobile data is working with a speed test?",
+          "live": true,
+          "unexplained_failures": [
+            0,
+            5
+          ],
+          "other_failures": [
+            3,
+            14
+          ],
+          "passes": [
+            1,
+            19
+          ],
+          "share": 0.0,
+          "meets_bar": false,
+          "flagged_ids": [
+            {
+              "id": "airline:15#0",
+              "kind": "other_failures",
+              "turns": [
+                23
+              ]
+            },
+            {
+              "id": "telecom:[mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|break_apn_mms_setting|break_app_storage_permission|data_usage_exceeded|unseat_sim_card|user_abroad_roaming_disabled_off[PERSONA:Easy]#0",
+              "kind": "other_failures",
+              "turns": [
+                77
+              ]
+            },
+            {
+              "id": "telecom:[mms_issue]airplane_mode_on|bad_network_preference|break_apn_mms_setting|break_app_both_permissions|data_mode_off|data_usage_exceeded|user_abroad_roaming_enabled_off[PERSONA:None]#0",
+              "kind": "passes",
+              "turns": [
+                17
+              ]
+            },
+            {
+              "id": "telecom:[mms_issue]bad_network_preference|break_app_sms_permission|data_mode_off|data_usage_exceeded|user_abroad_roaming_enabled_off[PERSONA:None]#0",
+              "kind": "other_failures",
+              "turns": [
+                75
+              ]
+            }
+          ]
+        },
+        {
+          "name": "telecom_missing_roaming_enable_on_line_when_user_reports_abroad",
+          "what": "The agent does not check or enable roaming on the user's line when the user reports being abroad and data/MMS is not working.",
+          "applies_to": "call",
+          "question": "Has the user reported being abroad, but the agent has not checked or enabled roaming on the user's line before troubleshooting data/MMS issues?",
+          "live": true,
+          "unexplained_failures": [
+            0,
+            5
+          ],
+          "other_failures": [
+            1,
+            14
+          ],
+          "passes": [
+            2,
+            19
+          ],
+          "share": 0.0,
+          "meets_bar": false,
+          "flagged_ids": [
+            {
+              "id": "telecom:[mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|break_apn_mms_setting|break_app_storage_permission|data_usage_exceeded|unseat_sim_card|user_abroad_roaming_disabled_off[PERSONA:Easy]#0",
+              "kind": "other_failures",
+              "turns": [
+                17
+              ]
+            },
+            {
+              "id": "telecom:[mobile_data_issue]airplane_mode_on|bad_network_preference|bad_vpn|data_mode_off|data_saver_mode_on|user_abroad_roaming_disabled_off[PERSONA:Hard]#0",
+              "kind": "passes",
+              "turns": [
+                37,
+                49
+              ]
+            },
+            {
+              "id": "telecom:[mobile_data_issue]airplane_mode_on|bad_network_preference|bad_vpn|data_mode_off|data_usage_exceeded|user_abroad_roaming_enabled_off[PERSONA:Easy]#0",
+              "kind": "passes",
+              "turns": [
+                41
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "round": 2,
+      "proposer_model": "gpt-4.1-2025-04-14",
+      "proposed": 5,
+      "unexplained_failures_shown": [
+        "airline:11#0",
+        "airline:21#0",
+        "airline:3#0",
+        "airline:9#0",
+        "retail:22#0",
+        "retail:24#0",
+        "retail:28#0",
+        "retail:3#0",
+        "retail:31#0",
+        "retail:63#0",
+        "retail:66#0",
+        "retail:72#0",
+        "retail:98#0",
+        "telecom:[mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|break_apn_mms_setting|break_app_storage_permission|data_mode_off|data_usage_exceeded|unseat_sim_card|user_abroad_roaming_disabled_off[PERSONA:Easy]#0",
+        "telecom:[mms_issue]bad_network_preference|bad_wifi_calling|break_app_both_permissions|data_usage_exceeded|unseat_sim_card|user_abroad_roaming_disabled_off[PERSONA:None]#0",
+        "telecom:[mobile_data_issue]data_mode_off|data_usage_exceeded[PERSONA:None]#0",
+        "telecom:[service_issue]airplane_mode_on|break_apn_settings|contract_end_suspension|unseat_sim_card[PERSONA:Easy]#0",
+        "telecom:[service_issue]lock_sim_card_pin|overdue_bill_suspension[PERSONA:Easy]#0"
+      ],
+      "candidates": [
+        {
+          "name": "retail_cancel_entire_order_instead_of_item_level",
+          "what": "The agent cancels an entire pending order when the customer requested to cancel only specific items, resulting in more items being cancelled than the customer requested.",
+          "applies_to": "call",
+          "question": "Is the agent calling a cancel_pending_order or similar tool for an entire order when the customer only requested to cancel specific items, and the policy allows item-level cancellation or modification?",
+          "live": true,
+          "unexplained_failures": [
+            0,
+            5
+          ],
+          "other_failures": [
+            0,
+            14
+          ],
+          "passes": [
+            0,
+            19
+          ],
+          "share": 0.0,
+          "meets_bar": false,
+          "flagged_ids": []
+        },
+        {
+          "name": "airline_modify_or_cancel_basic_economy",
+          "what": "The agent attempts to modify or cancel a basic economy reservation or flight segment, which is not allowed by policy.",
+          "applies_to": "call",
+          "question": "Is the agent attempting to modify or cancel a reservation or flight segment in basic economy, which is prohibited by the airline policy?",
+          "live": true,
+          "unexplained_failures": [
+            0,
+            5
+          ],
+          "other_failures": [
+            0,
+            14
+          ],
+          "passes": [
+            0,
+            19
+          ],
+          "share": 0.0,
+          "meets_bar": false,
+          "flagged_ids": []
+        },
+        {
+          "name": "retail_modify_pending_order_without_collecting_all_items",
+          "what": "The agent modifies a pending order without confirming with the customer that all items to be changed are included, risking incomplete or partial modifications.",
+          "applies_to": "call",
+          "question": "Is the agent making a modify_pending_order_items or similar call without confirming with the customer that all desired item changes are included, as required by policy?",
+          "live": false,
+          "unexplained_failures": [
+            3,
+            5
+          ],
+          "other_failures": [
+            5,
+            14
+          ],
+          "passes": [
+            1,
+            19
+          ],
+          "share": 0.6,
+          "meets_bar": true,
+          "flagged_ids": [
+            {
+              "id": "airline:33#0",
+              "kind": "unexplained_failures",
+              "turns": [
+                15,
+                27,
+                29
+              ]
+            },
+            {
+              "id": "retail:103#0",
+              "kind": "unexplained_failures",
+              "turns": [
+                29,
+                35
+              ]
+            },
+            {
+              "id": "retail:107#0",
+              "kind": "other_failures",
+              "turns": [
+                33
+              ]
+            },
+            {
+              "id": "retail:29#0",
+              "kind": "other_failures",
+              "turns": [
+                41
+              ]
+            },
+            {
+              "id": "retail:7#0",
+              "kind": "other_failures",
+              "turns": [
+                29
+              ]
+            },
+            {
+              "id": "retail:8#0",
+              "kind": "unexplained_failures",
+              "turns": [
+                21
+              ]
+            },
+            {
+              "id": "telecom:[mms_issue]bad_network_preference|break_app_sms_permission|data_mode_off|data_usage_exceeded|user_abroad_roaming_enabled_off[PERSONA:None]#0",
+              "kind": "other_failures",
+              "turns": [
+                75
+              ]
+            },
+            {
+              "id": "telecom:[mms_issue]break_apn_mms_setting|data_mode_off|user_abroad_roaming_disabled_on[PERSONA:Hard]#0",
+              "kind": "passes",
+              "turns": [
+                35
+              ]
+            },
+            {
+              "id": "telecom:[mobile_data_issue]airplane_mode_on|user_abroad_roaming_enabled_off[PERSONA:None]#0",
+              "kind": "other_failures",
+              "turns": [
+                31
+              ]
+            }
+          ]
+        },
+        {
+          "name": "telecom_fail_to_escalate_sim_locked",
+          "what": "The agent fails to escalate to a human agent when the SIM card is locked with a PIN or PUK, which requires human intervention per policy.",
+          "applies_to": "call",
+          "question": "Is the agent continuing troubleshooting or not transferring when the SIM card is locked with a PIN or PUK, instead of escalating to a human agent as required?",
+          "live": true,
+          "unexplained_failures": [
+            0,
+            5
+          ],
+          "other_failures": [
+            0,
+            14
+          ],
+          "passes": [
+            0,
+            19
+          ],
+          "share": 0.0,
+          "meets_bar": false,
+          "flagged_ids": []
+        },
+        {
+          "name": "airline_refund_to_wrong_payment_method",
+          "what": "The agent offers or attempts to process a refund to a payment method different from the original one used for the booking, which is not allowed by policy.",
+          "applies_to": "call",
+          "question": "Is the agent offering or attempting to process a refund to a payment method that is not the original payment method used for the booking, contrary to policy?",
+          "live": true,
+          "unexplained_failures": [
+            1,
+            5
+          ],
+          "other_failures": [
+            1,
+            14
+          ],
+          "passes": [
+            1,
+            19
+          ],
+          "share": 0.2,
+          "meets_bar": false,
+          "flagged_ids": [
+            {
+              "id": "retail:54#0",
+              "kind": "other_failures",
+              "turns": [
+                35
+              ]
+            },
+            {
+              "id": "retail:57#0",
+              "kind": "unexplained_failures",
+              "turns": [
+                17
+              ]
+            },
+            {
+              "id": "retail:95#0",
+              "kind": "passes",
+              "turns": [
+                25,
+                27,
+                29
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "meets_bar": [
+    "retail_modify_pending_order_without_collecting_all_items"
+  ],
+  "accepted": {
+    "names": [],
+    "reviewer": "Charlie",
+    "date": "2026-11-21"
+  }
+}
