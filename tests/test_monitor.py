@@ -394,3 +394,110 @@ def test_a_real_full_closed_loop_ingests_through_our_detector_and_classifier(tmp
     n = len(seen)
     asyncio.run(loop.ingest_once())
     assert len(seen) == n  # polled again: nothing new
+
+
+# --- Before a change runs (SEL-89) -------------------------------------------------------------
+
+from reflexive.actions import ActionFinding  # noqa: E402
+from reflexive.monitor import BLOCK_MESSAGE, MAX_BLOCKS, MAX_BLOCKS_PER_CHANGE, ActionGuard, Watcher  # noqa: E402
+
+WRITES = frozenset({"cancel_pending_order"})
+OPENER = [{"role": "system", "content": "policy"}, {"role": "user", "content": "Cancel order #W1."}]
+
+
+def write_call(name="cancel_pending_order", order="#W1", cid="c1"):
+    return {
+        "id": cid,
+        "type": "function",
+        "function": {"name": name, "arguments": json.dumps({"order_id": order})},
+    }
+
+
+def reply_with(*calls):
+    return {"role": "assistant", "content": "", "tool_calls": list(calls)}
+
+
+def no_yes(conversation, c, policy):
+    """A stand-in for SEL-88's rule: flag a change unless the customer's last message says yes."""
+    last = next((m["content"] for m in reversed(conversation) if m["role"] == "user"), "")
+    return None if "yes" in last.lower() else ActionFinding("INTENT", "no_yes", "no yes yet", live=True)
+
+
+def test_act_mode_blocks_a_flagged_change_and_lets_an_allowed_one_run():
+    g = ActionGuard("act", WRITES, "policy", no_yes)
+    assert g.check(OPENER, reply_with(write_call()), agent_turn=2) is True  # blocked: no yes yet
+    yes = [
+        *OPENER,
+        {"role": "assistant", "content": "Cancel #W1?"},
+        {"role": "user", "content": "Yes, go ahead."},
+    ]
+    assert g.check(yes, reply_with(write_call()), agent_turn=3) is False  # allowed: the customer said yes
+    (b,) = g.blocks
+    assert (b["action"], b["rule"], b["tool"], b["arguments"], b["agent_turn"]) == (
+        "blocked",
+        "no_yes",
+        "cancel_pending_order",
+        {"order_id": "#W1"},
+        2,
+    )
+    prompt = g.reasked(OPENER, agent_turn=2)
+    assert prompt[-1] == {"role": "user", "content": BLOCK_MESSAGE} and prompt[:-1] == OPENER
+    assert g.to_dict()["reasks"][0]["before_agent_turn"] == 2 and g.to_dict()["counts"]["blocked"] == 1
+
+
+def test_only_state_changing_calls_are_checked():
+    seen = []
+    g = ActionGuard("act", WRITES, "policy", lambda v, c, p: seen.append(c) or no_yes(v, c, p))
+    assert g.check(OPENER, reply_with(write_call("get_order_details")), 2) is False
+    assert seen == [] and g.blocks == []
+
+
+def test_the_same_change_is_blocked_twice_then_runs_as_overridden():
+    g = ActionGuard("act", WRITES, "policy", no_yes)
+    decisions = [
+        g.check(OPENER, reply_with(write_call(cid=f"c{i}")), 2 + i) for i in range(MAX_BLOCKS_PER_CHANGE + 1)
+    ]
+    assert decisions == [True] * MAX_BLOCKS_PER_CHANGE + [False]
+    assert [b["action"] for b in g.blocks] == ["blocked"] * MAX_BLOCKS_PER_CHANGE + ["overridden"]
+    assert (
+        g.check(OPENER, reply_with(write_call(order="#W2")), 9) is True
+    )  # a different change has its own count
+
+
+def test_a_reply_is_blocked_whole_and_its_other_calls_are_held():
+    g = ActionGuard("act", WRITES, "policy", no_yes)
+    for i in range(MAX_BLOCKS_PER_CHANGE):
+        g.check(OPENER, reply_with(write_call(cid=f"a{i}")), 2 + i)
+    assert g.check(OPENER, reply_with(write_call(cid="x"), write_call(order="#W2", cid="y")), 5) is True
+    assert [b["action"] for b in g.blocks[-2:]] == ["held", "blocked"]
+
+
+def test_there_is_a_limit_on_blocks_per_conversation():
+    g = ActionGuard("act", WRITES, "policy", no_yes)
+    out = [g.check(OPENER, reply_with(write_call(order=f"#W{i}")), 2 + i) for i in range(MAX_BLOCKS + 1)]
+    assert out == [True] * MAX_BLOCKS + [False] and g.blocks[-1]["action"] == "logged"
+
+
+def test_log_mode_records_but_never_blocks_and_after_the_fact_findings_never_block():
+    g = ActionGuard("log", WRITES, "policy", no_yes)
+    assert g.check(OPENER, reply_with(write_call()), 2) is False and g.blocks[0]["action"] == "logged"
+    later = ActionGuard(
+        "act", WRITES, "policy", lambda v, c, p: ActionFinding("INTENT", "x", "later", live=False)
+    )
+    assert later.check(OPENER, reply_with(write_call()), 2) is False and later.blocks[0]["action"] == "logged"
+    off = ActionGuard("off", WRITES, "policy", no_yes)
+    assert off.check(OPENER, reply_with(write_call()), 2) is False and off.blocks == []
+
+
+def test_the_default_checker_is_check_action_which_flags_nothing_yet():
+    g = ActionGuard("act", WRITES, "policy")
+    assert g.check(OPENER, reply_with(write_call()), 2) is False and g.blocks == []
+
+
+def test_a_checker_error_is_kept_and_the_call_runs():
+    def broken(*a):
+        raise RuntimeError("boom")
+
+    w = Watcher("act", TOOLS, write_tools=WRITES, policy="policy", checker=broken)
+    assert w.before_step(OPENER, reply_with(write_call()), 2) is False
+    assert w.error is not None and "boom" in w.error and w.to_dict()["actions"]["mode"] == "off"
