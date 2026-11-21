@@ -78,7 +78,14 @@ A live monitor (\texttt{reflexive.monitor}) enforces \texttt{no\_progress}: afte
 \subsection{The ReAgent Detect--Fix--Retrain--Gate Loop}
 \label{sec:method_loop}
 
-ReAgent adapts $\pi_\theta$ through four sequential stages executable offline or autonomously on one GPU node (Figure~\ref{fig:loop} in the appendix).
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/heal-loop.png}
+\caption{The Detect--Fix--Retrain--Gate loop. The gate's example is SFT v2's dev result (11\% $\rightarrow$ 60\%), trained on 146 verified conversations.}
+\label{fig:loop}
+\end{figure}
+
+ReAgent adapts $\pi_\theta$ through four sequential stages executable offline or autonomously on one GPU node (Figure~\ref{fig:loop}).
 
 \paragraph{Stage 1: Detect.}
 The incumbent rolls out on frozen train-pool tasks (\texttt{assert\_not\_test()} blocks test IDs). Failed rollouts ($V(\tau)=0$) pass to $\mathcal{C}$ to log Tool/Arg/Loop findings and localize primary failure turn $t^*$.
@@ -299,21 +306,13 @@ We thank Lloyds Banking Group for the GPU credits that made this work possible, 
 
 \begin{figure*}[!t]
 \centering
-\begin{minipage}[b]{0.40\textwidth}
-\centering
-\includegraphics[width=\linewidth]{figures/heal-loop.png}
-\caption{The Detect--Fix--Retrain--Gate loop (\S\ref{sec:method_loop}). The gate's example is SFT v2's dev result (11\% $\rightarrow$ 60\%), trained on 146 verified conversations.}
-\label{fig:loop}
-\end{minipage}\hfill
-\begin{minipage}[b]{0.57\textwidth}
+\begin{minipage}[b]{0.55\textwidth}
 \centering
 \includegraphics[width=\linewidth]{figures/failure-types.png}
 \caption{The classifier's three failure types (\S\ref{sec:method_taxonomy}), with an example of each.}
 \label{fig:failure_types}
-\end{minipage}
-
-\vspace{6pt}
-\begin{minipage}[b]{0.55\textwidth}
+\end{minipage}\hfill
+\begin{minipage}[b]{0.42\textwidth}
 \centering
 \includegraphics[width=\linewidth]{figures/bakeoff_cost_vs_pass.png}
 \caption{Teacher bake-off (\S\ref{sec:exp_teacher}, Table~\ref{tab:bakeoff_full}): pass rate on 30 train tasks against the projected teacher cost for the whole project.}
