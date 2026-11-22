@@ -139,9 +139,13 @@ YES = re.compile(
 # Anchored to the start; "wait" and "stop" are whole words ("Waiting..." is not a refusal), and
 # "don't worry" / "don't hesitate" are friendly openings, not refusals.
 REFUSAL = re.compile(
-    r"^\W*(no\b(?!\W*(problem|worries|issue))|nope|not yet|wait\b|hold on|hold off|stop\b"
+    # an optional polite or hesitant opening first: "Please stop.", "Sorry, no.", "Oh wait, ..."
+    r"^\W*((please|sorry|oh|um+|hmm+|so|well|ok|okay|actually)\W+)?"
+    r"(no\b(?!\W*(problem|worries|issue))|nope|not yet|wait\b|hold on|hold off|stop\b"
     r"|(don'?t|do not)\b(?!\s+(worry|hesitate))|never ?mind|actually,? no)"
 )
+# A withdrawal anywhere in the message: "Please stop, I changed my mind." / "Sorry, I've changed my mind."
+CHANGED_MIND = re.compile(r"\b(i('ve| have)? )?changed my mind\b")
 # "not" as a word, or "n't" at the end of one ("isn't", "don't": no word boundary before the n).
 NOT_YES = re.compile(r"(\bnot|n't)\s+(\w+\s+){0,2}(correct|right|fine|ok|okay|sure|proceed|go ahead|do it)\b")
 ID_LIKE = re.compile(r"#?\b(?=[A-Za-z0-9_#-]*\d)(?=[A-Za-z0-9_#-]*[A-Za-z])[A-Za-z0-9_#-]{4,}\b")
@@ -221,13 +225,16 @@ def is_yes(message: Message) -> bool:
     if message.get("role") != "user":
         return False
     text = _norm(_text(message.get("content"))).strip()
-    if not text or REFUSAL.match(text) or NOT_YES.search(text):
+    if not text or REFUSAL.match(text) or CHANGED_MIND.search(text) or NOT_YES.search(text):
         return False
     return bool(YES.search(QUESTION.sub(" ", text)))
 
 
 def is_refusal(message: Message) -> bool:
-    return message.get("role") == "user" and bool(REFUSAL.match(_norm(_text(message.get("content"))).strip()))
+    if message.get("role") != "user":
+        return False
+    text = _norm(_text(message.get("content"))).strip()
+    return bool(REFUSAL.match(text) or CHANGED_MIND.search(text))
 
 
 def no_yes_words(conversation: Sequence[Message], call: dict, policy: str) -> ActionFinding | None:

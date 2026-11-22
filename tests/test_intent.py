@@ -82,6 +82,32 @@ def test_a_friendly_opening_is_not_a_refusal():
     assert is_refusal(user("Stop.")) and is_refusal(user("Don't cancel it."))
 
 
+def test_a_polite_opening_or_a_change_of_mind_still_withdraws_a_yes():
+    from reflexive.intent import is_refusal
+
+    for no in (
+        "Please stop, I changed my mind.",
+        "Sorry, no.",
+        "Oh wait, not that one.",
+        "Actually, no.",
+        "Hmm, hold on.",
+        "I've changed my mind, leave it.",
+        "OK so I changed my mind about the bag.",
+    ):
+        assert is_refusal(user(no)) and not is_yes(user(no)), no
+        assert flagged([DESCRIBE, user("Yes."), user(no)]), no
+    for ok in (
+        "Please go ahead.",
+        "Sorry, yes, go ahead.",
+        "OK, no problem, go ahead.",
+        "Well, sure, do it.",
+        "Please do.",
+        "So yes, confirm it.",
+    ):
+        assert not is_refusal(user(ok)) and is_yes(user(ok)), ok
+        assert not flagged([DESCRIBE, user(ok)]), ok
+
+
 def test_a_yes_to_a_later_question_does_not_cover_the_change():
     address = agent("Would you also like to update your address?")
     assert flagged([DESCRIBE, user("Hmm, let me think."), address, user("Yes.")])
