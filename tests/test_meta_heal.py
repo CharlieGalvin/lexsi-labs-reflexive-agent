@@ -236,7 +236,7 @@ def test_accepted_rules_load_into_rules_and_judges_off_means_they_never_fire(tmp
     live = {**REFUND.to_dict(), "live": True, "block_message": "Refunds go to the original payment method."}
     p.write_text(json.dumps({"accepted": [live, SAID.to_dict()]}))
     (rule,) = mh.meta_rules(p)  # the conversation rule is after the fact: not a call rule
-    assert rule.__name__ == "meta_wrong_refund_method"
+    assert rule.__name__ == "meta_wrong_refund_method"  # ty: ignore[unresolved-attribute]
     assert rule([], call(order_id="#W1"), "policy") is None  # conftest switches the judges off
 
 
