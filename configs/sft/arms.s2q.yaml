@@ -1,0 +1,27 @@
+# Arm S2Q: SFT v2 unchanged, served with FP8 weights and 64K context (Stage 2b step 2).
+# Serve on the pod:  ADAPTER= EXTRA_ADAPTERS="sft2=runs/sft-aya32b-r16-v2" QUANTIZATION=fp8 MAX_LEN=65536 bash scripts/pod/serve.sh
+# Validation, 4 samples (STAGE2.md, Stage 2b):
+#   python scripts/arms/val_rollout.py S2Q configs/sft/arms.s2q.yaml --from $VALDIR --samples 4
+# Same harness, prompt, decoding and customer as arms.sft2.yaml; only what the line above says differs.
+# Never on test unless the team declares it (Stage 2b's rule).
+
+student:
+  name: aya32-sft-r16-v2-fp8-64k
+  model: sft2
+  api_base: http://localhost:8000/v1
+  api_key_env: null
+  mode: prompted          # the data contract (SEL-35): don't change these two
+  style: cohere
+  temperature: 0.0
+  max_tokens: 1024
+  max_context: 65536      # = serve.sh MAX_LEN
+  reserve: 4096
+  rpm: 0
+
+customer: null            # GPT-4.1, as for every arm
+
+arms:
+  S2Q:
+    name: sft-r16-v2-fp8-64k
+    description: "SFT v2 unchanged, served with FP8 weights and 64K context (Stage 2b step 2)"
+    prompt_variant: default

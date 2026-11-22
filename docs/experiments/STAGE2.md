@@ -459,6 +459,71 @@ whatever the outcome. Recall: 40 conversations, flagged and not. The 37: one mai
 build the checker. Precision rests mostly on the base model's findings; false alarms could only
 overstate v2's rate, so the reported drop is conservative.
 
+## Stage 2b: training for an uplift over v2
+
+**Amended Sun 22 Nov, 16:04 UK, after Decision 1 and before any Stage 2b run.**
+
+**Decision 1's result (no-go).** v2 + guard (S2G), validation, 2 samples: 15.0 of 30 (retail 6.5,
+airline 1.5, telecom 7.0) against v2's 17.0 (6.5, 2.5, 8.0). Condition 1 fails, so it is a no-go
+whatever the others show. The guard blocked 5 replies in 2 of 60 conversations, both retail returns
+(task 10 sample 1, which v2 passed and S2G failed; task 25 sample 0, failed by both); 2 more were
+overridden. Wrongly blocked good changes 0 of 30 passes; no checker or judge errors; 0 crashed. By
+Stage 2's rules no guard fixes are collected, and the 21 full-conversation mismatch fixes are under
+30, so nothing is retrained. That is Stage 2's pre-registered result and stays the headline for it.
+
+**Why Stage 2b.** The evidence across Stage 1 and 2 says v2 is under-trained, and that validation at
+2 samples can't see a gain of +2:
+
+- v2 passes 55 of the 112 train tasks it trained on (SFT.md, v4), each with a verified teacher
+  conversation in its data.
+- More steps on the same data helped (v1 14.0, SL 15.5); v3 and v4 added data at a fixed 74 steps
+  and telecom fell in both, which SFT.md puts down to fewer passes over each telecom example.
+- Held-out loss was still falling at the end of every SFT run; the recipe (2 epochs, rank 16,
+  learning rate 1e-4) was never varied except SL's steps.
+- v1's two validation samples differed by 4; v3 and v4 (17.0) can't be told apart from v2.
+- Whole verified conversations train well where single turns don't (heal cycles: 6 → 22 against
+  4 → 4 on dev), which is why the 21 mismatch fixes are whole conversations.
+- 4 of v2's 26 validation failures ran past 32K context or into too many errors; the organisers
+  suggested quantising to free memory for a longer context, and checking the metrics hold.
+
+**The arms, fixed now: at most these five reach validation, in this order.** Each is trained from
+the base model, scored on the 30 validation tasks × **4 samples**, served as v2 was unless it says.
+
+| Arm | What changes from v2 | Config |
+|---|---|---|
+| S2E4 | 4 epochs (about 148 steps) | `configs/train/sft_aya32b_v2_e4.yaml`, `configs/sft/arms.s2e4.yaml` |
+| S2R64 | 4 epochs and LoRA rank 64 (alpha 128) | `configs/train/sft_aya32b_v2_e4_r64.yaml`, `configs/sft/arms.s2r64.yaml` |
+| S2Q | v2 itself, served with FP8 weights and 64K context | `configs/sft/arms.s2q.yaml`, `QUANTIZATION=fp8 MAX_LEN=65536` |
+| S2D | the best recipe of S2E4, S2R64 and v2, on v2's data + v4's 29 on-policy fixes + the 21 mismatch fixes + extra verified teacher passes for retail and telecom (attempts at temperature 0.7, as v2's airline extras), minus any audited conversation confirmed bad | its own PR, before it trains |
+| S2P | the practice round: the best model so far solves the train tasks outside validation 4 times each at temperature 0.7; its clean passes the checker doesn't flag, plus a teacher conversation for each task it never passes, are added to S2D's data; retrained from base with the same recipe | its own PR, before it trains |
+
+**The baseline:** v2 (S2) gets samples 2 and 3 on validation with its own config, so every
+comparison is 4 samples against 4. **The rule, for every arm but S2Q** (`scripts/arms/stage2b_compare.py
+S2 <arm>`): it meets the rule only if its gain over v2 is at least +2.0 of 30, the paired bootstrap
+95% range over the 30 tasks is above 0, and no domain falls by more than 1.5. The "best recipe" for
+S2D is the arm of S2E4 and S2R64 with the larger gain that meets the rule, else v2's recipe.
+**S2Q is a serving check, not a candidate:** it is adopted for S2D and S2P if its total is no more
+than 1.0 below v2's and fewer of its conversations end on the context limit; otherwise they are
+served as v2 was.
+
+**The winner** is the arm that meets the rule with the largest gain (a tie goes to fewer changes).
+It goes through the dev gate (Decision 2, as written) and one declared test run (100 × 2). If no arm
+meets the rule, v2 stays, and every arm is reported with its numbers.
+
+**The training-data audit (meta-healing on our own data).** `scripts/data/audit_training_data.py`
+runs the frozen checker ("no yes" and "mismatch") over every state-changing call in v2's training
+conversations. Its counts are reported whatever they show. Flagged conversations are read by two of
+us, separately, before S2D's data is built and before S2E4's or S2R64's validation results are read;
+only those both call a real unconfirmed or mismatched change are removed from S2D's data.
+
+**Also reported, not gates:** S2E4 on the train tasks outside validation (1 sample) against v2's
+55 of 112, the direct test of under-training; the checker's flags per conversation on each arm's
+validation conversations against v2's (the targeted measure); training and held-out loss per arm.
+
+**Disclosed:** the validation tasks have now judged Decision 1 and judge up to five Stage 2b arms,
+so a winner's validation gain is optimistic. Dev (Decision 2) and test are the held-out checks.
+Budget as above ($200 in total for Stage 2 and 2b).
+
 ## Launched before this file
 
 - Retention, base vs v2 (SEL-84): rule fixed in `configs/retention.yaml` before the result.
