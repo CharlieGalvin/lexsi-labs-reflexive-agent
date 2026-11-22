@@ -1,0 +1,39 @@
+# SFT Stage 2 (SEL-103): v2's data plus the mismatch fixes, plus the guard's fixes if Decision 1 says go.
+# Build the data:  python scripts/data/build_stage2_data.py --decision1 <go|no-go>
+# Train on the pod: just sft-train configs/train/sft_aya32b_s2.yaml --push
+#
+# STAGE2.md ("Retraining"): from the base model, exactly SFT v2's recipe (2 epochs, lr 1e-4, the same
+# QLoRA settings), on v2's data plus the fixes as their own groups. One change from v2: the added
+# fixes. No max_steps: v2's recipe is 2 epochs (v4 held the steps at 74; Stage 2 follows STAGE2.md).
+
+name: sft-aya32b-r16-s2
+model: CohereLabs/aya-expanse-32b
+data: data/train/sft-s2.jsonl          # v2's file + groups "mismatch" and (on a go) "guard"
+train_group: [healable, extra, mismatch, guard]  # a group with no examples is simply empty
+eval_group: solved_by_aya             # the same 15 held-out examples as v1 (no extras for them)
+max_len: 16384
+
+lora:
+  r: 16
+  alpha: 32
+  dropout: 0.05
+  target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+
+quantization:
+  load_in_4bit: true
+  quant_type: nf4
+  double_quant: true
+
+trainer:
+  num_train_epochs: 2
+  learning_rate: 1.0e-4
+  lr_scheduler_type: cosine
+  warmup_ratio: 0.05
+  per_device_train_batch_size: 1
+  gradient_accumulation_steps: 4
+  max_grad_norm: 1.0
+  weight_decay: 0.0
+  optim: paged_adamw_8bit
+  logging_steps: 1
+  eval_steps: 7
+  seed: 0

@@ -253,6 +253,13 @@ def test_v4_differs_from_v2_only_in_name_data_its_onpolicy_group_and_74_steps():
     )
 
 
+def test_stage2_differs_from_v2_only_in_name_data_and_its_two_fix_groups():
+    v2, s2 = _train_cfg("sft_aya32b_v2.yaml"), _train_cfg("sft_aya32b_s2.yaml")
+    assert s2["data"] == "data/train/sft-s2.jsonl" and "max_steps" not in s2["trainer"]  # v2's 2 epochs
+    assert s2["train_group"] == [*v2["train_group"], "mismatch", "guard"]
+    assert _without(s2, "name", "data", "train_group") == _without(v2, "name", "data", "train_group")
+
+
 def test_sl_is_v1_trained_for_v2s_74_steps():
     v1, sl = _train_cfg("sft_aya32b.yaml"), _train_cfg("sft_aya32b_long.yaml")
     assert sl["trainer"]["max_steps"] == 74

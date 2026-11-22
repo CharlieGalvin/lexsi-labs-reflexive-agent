@@ -246,6 +246,10 @@ sft-v4-data fixes="results/heal/onpolicy-fixes.jsonl":
     cat data/train/sft-v2.jsonl {{fixes}} > data/train/sft-v4.jsonl
     @echo "data/train/sft-v4.jsonl: $(wc -l < data/train/sft-v4.jsonl) examples ($(wc -l < {{fixes}}) on-policy)"
 
+# Stage 2 training data (SEL-102): v2's file + the mismatch fixes + the guard fixes on a go, e.g. `just stage2-data go`
+stage2-data decision1 *args:
+    python scripts/data/build_stage2_data.py --decision1 {{decision1}} {{args}}
+
 # SFT v3 data (SEL-72): v1's examples + the extra verified retail and airline passes
 sft-v3-data *args:
     python scripts/data/build_extra_fixes.py --domains retail airline --out data/train/sft-v3.jsonl {{args}}
