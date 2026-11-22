@@ -205,40 +205,47 @@ def numbered(view: Sequence[Message], tool_chars: int = 1500) -> str:
     return "\n".join(lines)
 
 
-def request(view: Sequence[Message], domain: str, classifier: Sequence[dict]) -> list[Message]:
-    """The judge's messages: the policy, the numbered conversation and the computed facts."""
+def facts(view: Sequence[Message], domain: str, classifier: Sequence[dict]) -> str:
+    """The COMPUTED FACTS block: changes in order, prices (retail), the classifier's findings."""
     from reflexive.intent import WRITE_TOOLS
 
-    policy = _text(view[0].get("content")) if view and view[0].get("role") == "system" else ""
     made = changes(view, WRITE_TOOLS.get(domain, ()))
-    facts = ["CHANGES MADE, IN ORDER (code):"]
-    facts += [
+    out = ["CHANGES MADE, IN ORDER (code):"]
+    out += [
         f"- [{c['turn']}] {c['call']} | tool {'accepted' if c['accepted'] else 'REJECTED'}"
         f' | customer\'s last message before it: "{c["customer_before"]}"'
         for c in made
     ] or ["- none"]
     if domain == "retail":
-        facts += [
+        out += [
             "",
             "PRICES IN THE LOOKUPS (code; product | item | price | options):",
             *(prices(view) or ["- none"]),
         ]
-    facts += ["", "STAGE 1 CLASSIFIER FINDINGS (code; made-up tools, arguments, loops):"]
-    facts += [
-        f"- [{f['turn']}] {f['type']}/{f['kind']}: {f.get('detail', '')[:200]}" for f in classifier
-    ] or ["- none"]
-    user = f"POLICY:\n{policy}\n\nCONVERSATION:\n{numbered(view)}\n\nCOMPUTED FACTS:\n" + "\n".join(facts)
+    out += ["", "STAGE 1 CLASSIFIER FINDINGS (code; made-up tools, arguments, loops):"]
+    out += [f"- [{f['turn']}] {f['type']}/{f['kind']}: {f.get('detail', '')[:200]}" for f in classifier] or [
+        "- none"
+    ]
+    return "\n".join(out)
+
+
+def request(view: Sequence[Message], domain: str, classifier: Sequence[dict]) -> list[Message]:
+    """The judge's messages: the policy, the numbered conversation and the computed facts."""
+    policy = _text(view[0].get("content")) if view and view[0].get("role") == "system" else ""
+    user = f"POLICY:\n{policy}\n\nCONVERSATION:\n{numbered(view)}\n\nCOMPUTED FACTS:\n" + facts(
+        view, domain, classifier
+    )
     return [{"role": "system", "content": SYSTEM}, {"role": "user", "content": user}]
 
 
-def verdict(answer: dict, view: Sequence[Message]) -> dict:
-    """The judge's answer, checked: an error counts only with a quoted piece of the conversation and
-    an agent turn."""
+def verdict(answer: dict, view: Sequence[Message], computed: str = "") -> dict:
+    """The judge's answer, checked: an error counts only with a quoted piece of the conversation (or of
+    the facts code computed from it, ``computed``) and an agent turn. A paraphrase doesn't count."""
     from reflexive.meta_heal import evidence_found
 
     err = answer.get("error") is True
     turn = answer.get("turn")
-    shown = numbered(view, tool_chars=100000)
+    shown = numbered(view, tool_chars=100000) + "\n" + computed
     if not err:
         return {"flagged": False, "turn": None, "kind": None, "invalid": None}
     if not isinstance(turn, int) or not 0 <= turn < len(view) or view[turn].get("role") != "assistant":
@@ -358,7 +365,7 @@ def judge_all(rows: list[dict], llm: Callable[[list], dict], workers: int) -> No
             answer = llm(request(row["_view"], row["domain"], row["_classifier"]))
         except Exception as e:  # noqa: BLE001 - an error never flags, and is counted
             return {"flagged": False, "turn": None, "kind": None, "invalid": f"judge error: {e}"[:200]}
-        v = verdict(answer, row["_view"])
+        v = verdict(answer, row["_view"], facts(row["_view"], row["domain"], row["_classifier"]))
         v["analysis"] = str(answer.get("analysis") or "")[:1500]
         return v
 

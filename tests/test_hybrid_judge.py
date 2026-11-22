@@ -112,3 +112,14 @@ def test_scoring_counts_recall_false_flags_and_localisation():
     assert s["at_true_turn"] == [1, 2] and s["within_near"] == [1, 2]
     both = hj.combine({"rules": {"flagged": False, "turn": None}, "checker": {"flagged": True, "turn": 9}})
     assert both == {"flagged": True, "turn": 9, "kind": None}
+
+
+def test_a_quote_from_the_computed_facts_counts_and_a_paraphrase_does_not():
+    computed = hj.facts(VIEW, "airline", [])
+    quote = '[9] cancel_reservation({"reservation_id": "HSR97W"}) | tool REJECTED'
+    assert hj.verdict({"error": True, "turn": 11, "evidence": quote}, VIEW, computed)["flagged"]
+    assert not hj.verdict({"error": True, "turn": 11, "evidence": quote}, VIEW)["flagged"]
+    para = hj.verdict(
+        {"error": True, "turn": 11, "evidence": "The agent never cancelled HSR97W properly"}, VIEW, computed
+    )
+    assert para["invalid"] == "evidence not in the conversation"
