@@ -544,6 +544,26 @@ conversations, v4 single teacher turns). Round 1 (S2P1, SEL-23), fixed now:
 - **S2R64 is dropped**, to give the GPU to the loop. **S2Q** runs Monday on whichever pod is free.
   **S2D** runs only if there is GPU time before Mon 22:00. Neither changes the rule.
 
+**Amended Sun 22 Nov, 21:11 UK, after S2E4's validation result and before any Stage 2 or 2b test
+conversation: S2E4 goes to test as a declared arm.** S2E4 on validation, 8 samples: 18.50 against
+v2's 16.00 (retail −0.88, airline +1.38, telecom +2.00), gain +2.50, 95% range −0.75 to +5.88.
+It meets "gain at least +2.0" and "no domain down more than 1.5" and fails "95% range above 0", so it
+**does not meet Stage 2b's rule**, and that verdict stands and is reported. Validation's 30 tasks
+can't separate a gain of this size from luck; test's 100 tasks × 2 are the better check, and test
+hasn't been opened in Stage 2. So, fixed now:
+
+- **S2E4 runs once on test** (100 × 2, `scripts/pod/overnight.py`, its config, the guard off),
+  compared with v2's Stage 1 test run (Arm B, 51.5%) paired on the same tasks, with a 95% bootstrap
+  range over tasks. It is reported whatever it shows, labelled as an arm that did not meet the
+  validation rule. It skips the dev gate: the gate is for a winner of the rule, and S2E4 isn't one.
+- **S2P1, if it meets the rule on validation,** also runs once on test, the same way, then the dev
+  gate as written. Both test results are reported against v2; neither is chosen after the fact. A
+  claim of an uplift over v2 on test needs a 95% range above 0 for that arm.
+- **S2Q moves to Monday** on whichever pod is free; its role is unchanged.
+- `overnight.py` reruns crashed conversations until every task has both samples scored, then stops
+  the pod; if a run is still incomplete after its retries, it stops the pod anyway and the run is
+  resumed later. No test conversation is opened until every Stage 2 test number is in.
+
 **The training-data audit (meta-healing on our own data).** `scripts/data/audit_training_data.py`
 runs the frozen checker ("no yes" and "mismatch") over every state-changing call in v2's training
 conversations. Its counts are reported whatever they show. Flagged conversations are read by two of
