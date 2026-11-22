@@ -1,0 +1,42 @@
+{
+  "ticket": "SEL-86",
+  "split": "test, 100 tasks x 2 samples",
+  "notes": "Cost per conversation = agent + simulated customer (GPT-4.1). GPT-4.1 agent priced from tokens at $2/$8 per M input/output (OpenRouter passes list price). Healed Aya (SFT v2) is self-hosted: one H100 at $4.39/h shared by 8 conversations at once (an estimate). Base Aya here is Stage 1's Arm A, reached through Cohere's API and priced at Aya's API rates; the like-for-like base Aya on our own server is the declared P test arm (SEL-105).",
+  "rows": {
+    "gpt-4.1 (reference)": {
+      "source": "results/roi-gpt41-test.metrics.json",
+      "conversations": 200,
+      "passed": 123,
+      "success": 0.615,
+      "seconds_per_request_median": 1.58,
+      "seconds_per_request_mean": 1.63,
+      "cost_per_conversation_usd": 0.2349,
+      "cost_per_solved_task_usd": 0.3819,
+      "customer": "gpt-4.1-2025-04-14 via OpenAI",
+      "agent": "openai/gpt-4.1 via OpenRouter (unpinned)"
+    },
+    "healed aya, sft v2 (arm B)": {
+      "source": "scripts/arms/roi.py S2 --gpu-hourly 4.39 --concurrency 8 (run 21 Nov on the pod)",
+      "conversations": 200,
+      "passed": 103,
+      "success": 0.515,
+      "seconds_per_request_median": 2.4,
+      "seconds_per_request_mean": 2.8,
+      "cost_per_conversation_usd": 0.052,
+      "cost_per_solved_task_usd": 0.1,
+      "customer": "gpt-4.1-2025-04-14 via OpenAI"
+    },
+    "base aya (arm A, Cohere API)": {
+      "source": "results/arm-A-test.eval.metrics.json",
+      "conversations": 200,
+      "passed": 29,
+      "success": 0.145,
+      "seconds_per_request_median": null,
+      "seconds_per_conversation_median": 43.55,
+      "cost_per_conversation_usd": 0.0683,
+      "cost_per_solved_task_usd": 0.4709,
+      "customer": "gpt-4.1-2025-04-14 via OpenAI",
+      "missing": "seconds per request needs A-*-test.jsonl, not on the pod (SEL-108)"
+    }
+  }
+}
