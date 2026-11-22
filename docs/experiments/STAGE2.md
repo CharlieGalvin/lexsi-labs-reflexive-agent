@@ -267,6 +267,22 @@ for crashed conversations, `score` is run once more: every answer already given 
 cache unchanged, and only the calls that errored are asked again. Rules, data, bar and models are
 unchanged. Both runs are reported; the second decides. No further re-runs.
 
+**Meta-healing v2 result, Sun 22 Nov 10:20 UK: no rule accepted.** Second run (2 calls at a time):
+every v2 rule answered on every conversation, with 1 checker error left on the frozen rules. Held
+out: 224 fresh conversations, 113 failures, 111 passes; 35 failures no frozen rule catches.
+
+- The closest, `retail_transfer_to_human_agent_on_policy_limit` (whole conversation), added 7/35
+  (20%) but flagged 14/111 passes (13%, bar 10%); it also flags 17 of the 29 failures "mismatch"
+  catches, so it fires on failure in general more than on one error. Every other rule added 0 or 1.
+- Rediscovery: two rules are slices of "mismatch" (5/29 and 4/29); none is the general rule.
+- First run (errors not re-asked): the same verdicts; the two telecom rules then had 51 errors each.
+- "Mismatch" out of sample: 29/113 failures (26%), 7/111 passes (6%), as in sample (25%, 9%).
+  "No yes": 4/113, 2/111. With Tool / Arg / Loop, the frozen checker spots 78/113 failures (69%,
+  from 56% for Tool / Arg / Loop alone) and flags 22/111 passes (20%, from 14%).
+
+Under the amendment of Sat 23:28, with no v2 rule accepted, retraining is as before it: only if
+Decision 1 says go.
+
 **Amended Sat 21 Nov, 23:28 UK, before meta-healing v2 is scored and before Decision 1 runs:
 meta-healing's fixes join retraining, and retraining no longer depends on Decision 1.**
 
