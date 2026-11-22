@@ -258,7 +258,7 @@ Retraining: with an accepted meta-healing rule, a no-go retrains on meta-healing
   One change from v2: the added fixes. Adapter published with its `lexsi_provenance.json`.
 - First score: validation 30 × 2 **without** the guard, reported whatever it shows.
 
-**Amended Sun 22 Nov, 10:16 UK, after meta-healing v2's held-out score and before its result is
+**Amended Sun 22 Nov, 10:14 UK, after meta-healing v2's held-out score and before its result is
 recorded: transient checker errors are re-asked once.** The score (Sun 00:35–01:10) had 51 checker
 errors on each of the two telecom whole-conversation rules and 1 on the frozen rules; no rule met the
 bar. A check at 10:14 re-asked 5 of the telecom errors and all 5 answered, so the errors were
