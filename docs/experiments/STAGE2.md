@@ -317,7 +317,7 @@ out: 224 fresh conversations, 113 failures, 111 passes; 35 failures no frozen ru
 Under the amendment of Sat 23:28, with no v2 rule accepted, retraining is as before it: only if
 Decision 1 says go.
 
-**Amended Sun 22 Nov, 14:15 UK, before Decision 1 runs and before any retraining: the mismatch fixes
+**Amended Sun 22 Nov, 14:10 UK, before Decision 1 runs and before any retraining: the mismatch fixes
 are checked over the whole conversation, with a fixed fallback; Stage 2's scope is closed.**
 SFT v4 (9 Nov) added 29 single-turn fixes of the same kind ("confirm, re-check or hold back") and
 scored 17.0 on validation, exactly v2's; its write-up's next step is to check the turns that follow.
