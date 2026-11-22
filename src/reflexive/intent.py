@@ -136,11 +136,14 @@ YES = re.compile(
     r"|sounds (good|great|fine|right)|do it|do that|absolutely|definitely|let'?s do|that works"
     r"|please go ahead|go for it|agreed|perfect)\b"
 )
+# Anchored to the start; "wait" and "stop" are whole words ("Waiting..." is not a refusal), and
+# "don't worry" / "don't hesitate" are friendly openings, not refusals.
 REFUSAL = re.compile(
-    r"^\W*(no\b(?!\W*(problem|worries|issue))|nope|not yet|wait|hold on|hold off|stop|don'?t|do not"
-    r"|never ?mind|actually,? no)"
+    r"^\W*(no\b(?!\W*(problem|worries|issue))|nope|not yet|wait\b|hold on|hold off|stop\b"
+    r"|(don'?t|do not)\b(?!\s+(worry|hesitate))|never ?mind|actually,? no)"
 )
-NOT_YES = re.compile(r"\b(not|n't)\s+(\w+\s+){0,2}(correct|right|fine|ok|okay|sure|proceed|go ahead|do it)\b")
+# "not" as a word, or "n't" at the end of one ("isn't", "don't": no word boundary before the n).
+NOT_YES = re.compile(r"(\bnot|n't)\s+(\w+\s+){0,2}(correct|right|fine|ok|okay|sure|proceed|go ahead|do it)\b")
 ID_LIKE = re.compile(r"#?\b(?=[A-Za-z0-9_#-]*\d)(?=[A-Za-z0-9_#-]*[A-Za-z])[A-Za-z0-9_#-]{4,}\b")
 UNIT = re.compile(r"^\d+(gb|mb|kb|am|pm|st|nd|rd|th|kg|lbs?|usd|eur|gbp)$")
 
@@ -209,11 +212,18 @@ def describes(message: Message, tool: str, args: dict) -> bool:
     return not _ids(text)  # names the action and no ID at all: "I'll cancel it for you, OK?"
 
 
+QUESTION = re.compile(r"[^.!?\n]*\?")
+
+
 def is_yes(message: Message) -> bool:
+    """A clear agreement in a customer message. Sentences that are questions don't count: "Will the
+    refund go to my card, is that correct?" asks, it doesn't agree."""
     if message.get("role") != "user":
         return False
     text = _norm(_text(message.get("content"))).strip()
-    return bool(text) and not REFUSAL.match(text) and not NOT_YES.search(text) and bool(YES.search(text))
+    if not text or REFUSAL.match(text) or NOT_YES.search(text):
+        return False
+    return bool(YES.search(QUESTION.sub(" ", text)))
 
 
 def is_refusal(message: Message) -> bool:
@@ -229,14 +239,25 @@ def no_yes_words(conversation: Sequence[Message], call: dict, policy: str) -> Ac
         return None
     args = _args(call)
     target = _target(args)
-    described = agreed = False
+    # `pending`: the agent's latest message describes this change, so the customer's next answer is
+    # an answer to it. A yes counts only then: once the agent moves on to something else ("Would you
+    # also like to update your address?"), a later yes answers that, not this change.
+    described = agreed = pending = False
     for m in conversation:
-        if describes(m, tool, args):
-            described = True
-        elif described and is_yes(m):
-            agreed = True
-        elif agreed and is_refusal(m):
-            agreed = False  # withdrawn; a new description and yes can still follow
+        role = m.get("role")
+        if role == "assistant":
+            text = _text(m.get("content"))
+            if describes(m, tool, args):
+                described = pending = True
+                if "?" in text:
+                    agreed = False  # proposed again: it needs a new yes ("Cancelling #W1 now." doesn't)
+            elif text.strip():
+                pending = False
+        elif role == "user":
+            if pending and is_yes(m):
+                agreed = True
+            elif agreed and is_refusal(m):
+                agreed = False  # withdrawn; a new description and yes can still follow
     if agreed:
         return None
     what = f"{tool} on {target}" if target else tool

@@ -30,6 +30,7 @@ import os
 import random
 import re
 import threading
+import warnings
 from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -52,7 +53,13 @@ MAX_ANSWER_TOKENS = (
     4000  # a rule's answer is a few lines and the proposer's ten rules fit; a runaway stops here
 )
 ROOT = Path(__file__).resolve().parents[2]
-RULES_PATH = ROOT / "configs" / "meta_rules.json"
+RULES_PATH = ROOT / "configs" / "meta_rules.json"  # the checkout's; REFLEXIVE_META_RULES overrides it
+
+
+def rules_path() -> Path:
+    """The accepted rules: ``$REFLEXIVE_META_RULES``, else the checkout's configs/meta_rules.json."""
+    return Path(os.environ.get("REFLEXIVE_META_RULES") or RULES_PATH)
+
 
 EXISTING_RULES = """\
 - TOOL: the agent calls a tool that doesn't exist, or one only the customer can use.
@@ -323,7 +330,8 @@ def check(
     evidence, reason = str(a.get("evidence") or ""), str(a.get("reason") or "")
     if a.get("violated") is not True:
         return Hit(False, evidence, reason)
-    shown = messages[1]["content"].split("CONVERSATION", 1)[1]
+    # Only the conversation and the call count as evidence, never the policy or the rule's own words.
+    shown = transcript(conversation) + ("\n" + _call_text(call) if call is not None else "")
     if not evidence_found(evidence, shown):
         return Hit(False, evidence, f"its evidence isn't in the conversation ({reason})")
     return Hit(True, evidence, reason)
@@ -389,19 +397,23 @@ def as_rule(
     return rule
 
 
-def accepted(path: Path | str = RULES_PATH) -> list[Candidate]:
-    p = Path(path)
+def accepted(path: Path | str | None = None) -> list[Candidate]:
+    p = Path(path) if path is not None else rules_path()
     if not p.exists():
+        if path is None:  # e.g. an installed package, away from the checkout: say so, don't go quiet
+            warnings.warn(
+                f"{p} not found: no meta-healing rules loaded (set REFLEXIVE_META_RULES)", stacklevel=2
+            )
         return []
     return [Candidate.from_dict(r) for r in json.loads(p.read_text()).get("accepted", [])]
 
 
-def meta_rules(path: Path | str = RULES_PATH) -> list[Callable]:
+def meta_rules(path: Path | str | None = None) -> list[Callable]:
     """The accepted call rules, ready for `reflexive.actions.RULES`."""
     return [as_rule(c) for c in accepted(path) if c.applies_to == "call"]
 
 
-def conversation_findings(rec: dict, path: Path | str = RULES_PATH, llm: Any = "default") -> list[dict]:
+def conversation_findings(rec: dict, path: Path | str | None = None, llm: Any = "default") -> list[dict]:
     """The accepted conversation rules (after the fact) on a whole saved conversation."""
     if judges_off() and llm == "default":
         return []
