@@ -152,7 +152,7 @@ def cmd_score(a: argparse.Namespace) -> int:
     if ferrs:
         print(f"  ⚠ {len(ferrs)} checker errors on the frozen rules, counted as not flagged")
     chk = checker()
-    scores = v2.held_out(cands, recs, frozen, chk, on_found=stop_on_setup_errors)
+    scores = v2.held_out(cands, recs, frozen, chk, workers=a.workers, on_found=stop_on_setup_errors)
     n_added = scores[0].added[1] if scores else 0
     print(
         f"\nbar: ≥{v2.MIN_ADDED} and ≥{v2.MIN_ADDED_SHARE:.0%} of the {n_added} failures "
@@ -305,6 +305,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--only", help="review only these rules (comma-separated)")
     p.add_argument("--names", help="accept: the reviewed rules (comma-separated; none is allowed)")
     p.add_argument("--reviewer")
+    p.add_argument(
+        "--workers", type=int, default=8, help="score: checker calls at a time (fewer avoids rate limits)"
+    )
     a = p.parse_args(argv)
     if a.rounds > v2.ROUNDS:
         sys.exit(f"STAGE2.md allows at most {v2.ROUNDS} rounds")
