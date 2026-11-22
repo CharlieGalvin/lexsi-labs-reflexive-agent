@@ -46,7 +46,7 @@ When an agent can change a database, a hallucination is no longer a wrong senten
 \begin{figure*}[t]
 \centering
 \includegraphics[width=0.78\textwidth]{figures/heal-loop.png}
-\caption{The Detect--Fix--Retrain--Gate loop. The gate's example is SFT v2's dev result (11\% $\rightarrow$ 60\%), trained on 146 verified conversations.}
+\caption{The Detect--Fix--Retrain--Gate loop. The gate's example is the healed model's dev result (11\% $\rightarrow$ 60\%), trained on 146 verified conversations.}
 \label{fig:loop}
 \end{figure*}
 
@@ -60,7 +60,7 @@ When an agent can change a database, a hallucination is no longer a wrong senten
 
 \paragraph{Approach.} ReAgent is a \textbf{Detect $\rightarrow$ Fix $\rightarrow$ Retrain $\rightarrow$ Gate} loop (Figure~\ref{fig:loop}). A deterministic classifier finds the turn where a conversation first went wrong and labels it \textbf{Tool}, \textbf{Arg} or \textbf{Loop}. An open-weight teacher, GLM-5.3-Flash, chosen from 12 models, supplies the fix, and we keep it only if $\tau^2$-bench verifies it. QLoRA retrains Aya on the fixes. Finally a gate written before any result, \texttt{DevGate}, decides whether the new adapter replaces the old one: it must solve at least 2 more of 36 dev tasks, net, with hallucination findings up by at most 10\% and no domain down by 2 or more.
 
-\paragraph{Research questions, judged by rules set in advance.} We asked four questions. (RQ1)~Does fine-tuning on verified teacher conversations heal hallucination on tasks the model has never seen? (RQ2)~Is a prompt enough? (RQ3)~Can the loop run unattended and promote only a better adapter? (RQ4)~Can reinforcement learning heal beyond fine-tuning? To keep ourselves honest, we froze the splits before training, wrote the gate and the rule for adopting a new SFT version before the runs they judged, and declared the three test arms before the only test run: \textbf{A}, untuned Aya; \textbf{C}, untuned Aya with a prompt that names every failure type; and \textbf{B}, the healed model (SFT v2).
+\paragraph{Research questions, judged by rules set in advance.} We asked four questions. (RQ1)~Does fine-tuning on verified teacher conversations heal hallucination on tasks the model has never seen? (RQ2)~Is a prompt enough? (RQ3)~Can the loop run unattended and promote only a better adapter? (RQ4)~Can reinforcement learning heal beyond fine-tuning? To keep ourselves honest, we froze the splits before training, wrote the gate and the rule for adopting a new SFT version before the runs they judged, and declared the three test arms before the only test run: \textbf{A}, untuned Aya; \textbf{C}, untuned Aya with a prompt that names every failure type; and \textbf{B}, the healed model, SFT v2. SFT v1 was our first fine-tuned version, trained on 112 verified teacher conversations; SFT v2 adds 34 more from airline, 146 in all (\S\ref{sec:exp_ablations}).
 
 \paragraph{Related work.} We build on $\tau^2$-bench's environments and use its evaluator as our judge of success. FireAct \citep{Chen2023FireAct} and AgentTuning \citep{Zeng2023AgentTuning} showed that open models learn agent behaviour from a stronger model's trajectories; we add verification of every trajectory and a gate on every adapter. Like DAgger \citep{Ross2011DAgger}, our heal cycles have an expert correct the states the learner actually reaches; unlike Reflexion \citep{Shinn2023Reflexion}, which corrects an agent in context, we correct its weights. Our attempt to go further with GRPO \citep{Shao2024DeepSeekMath} became a case of reward hacking \citep{Skalse2022RewardHacking}: rewards for well-formed calls were maximised by confident, unrequested write actions.
 
@@ -223,11 +223,11 @@ To answer RQ3, we ran the whole loop unattended on one H100, starting from base 
 \textbf{Arm / Model} & \textbf{Data / Recipe} & \textbf{Stp} & \textbf{DevGate} & \textbf{Mean (\%)} & \textbf{Ret} & \textbf{Air} & \textbf{Tel} & \textbf{Tot} & \textbf{T/A} & \textbf{Status} \\
 \midrule
 P (self-hosted base) & Untuned Aya 32B & --- & Control & 4.0 (11\%) & 5.0 & 2.0 & 2.0 & 9.0 & 52/60 & Baseline \\
-SFT v1 (S) & 112 golden convs & 56 & Reject (Air $-2$) & 13.5 (38\%) & 6.0 & 2.0 & 6.0 & 14.0 & 6/60 & Rejected \\
+SFT v1 & 112 golden convs & 56 & Reject (Air $-2$) & 13.5 (38\%) & 6.0 & 2.0 & 6.0 & 14.0 & 6/60 & Rejected \\
 SL (step ablation) & v1's 112 convs & 74 & --- & --- & 6.5 & 2.0 & 7.0 & 15.5 & 4/60 & Ablation \\
-\textbf{SFT v2 (S2 / Arm B)} & v1 + 34 airline (146) & 74 & \textbf{Promote} & \textbf{21.5 (60\%)} & 6.5 & 2.5 & \textbf{8.0} & \textbf{17.0} & 4/60 & \textbf{Adopted} \\
-SFT v3 (S3) & v2 + 20 retail (166) & 74 & --- & --- & \textbf{8.0} & 2.5 & 6.5 & 17.0 & 3/60 & Not adopted \\
-SFT v4 (S4) & v2 + 29 on-pol.\ (175) & 74 & --- & --- & 7.0 & \textbf{3.5} & 6.5 & 17.0 & --- & Not adopted \\
+\textbf{SFT v2 (Arm B)} & v1 + 34 airline (146) & 74 & \textbf{Promote} & \textbf{21.5 (60\%)} & 6.5 & 2.5 & \textbf{8.0} & \textbf{17.0} & 4/60 & \textbf{Adopted} \\
+SFT v3 & v2 + 20 retail (166) & 74 & --- & --- & \textbf{8.0} & 2.5 & 6.5 & 17.0 & 3/60 & Not adopted \\
+SFT v4 & v2 + 29 on-pol.\ (175) & 74 & --- & --- & 7.0 & \textbf{3.5} & 6.5 & 17.0 & --- & Not adopted \\
 \midrule
 GRPO G & v2 + tool turns only & 100 & --- & --- & --- & --- & --- & 0.5 & 36/60$^\dagger$ & Collapsed \\
 GRPO H & v2 + 177 fix + anc & 100 & Reject (24$\to$19) & 18.5 (51\%) & 5.5 & 2.5 & $\ge 7.0^\ddagger$ & $\le 17.0$ & --- & Rejected \\
