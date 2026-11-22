@@ -283,7 +283,7 @@ out: 224 fresh conversations, 113 failures, 111 passes; 35 failures no frozen ru
 Under the amendment of Sat 23:28, with no v2 rule accepted, retraining is as before it: only if
 Decision 1 says go.
 
-**Amended Sun 22 Nov, 10:44 UK, before the freeze and before Decision 1 runs: retraining runs either
+**Amended Sun 22 Nov, 10:40 UK, before the freeze and before Decision 1 runs: retraining runs either
 way, on fixes at the "mismatch" rule's findings.** The amendment of Sat 23:28 applies, with the
 frozen "mismatch" rule in place of an accepted meta-healing v2 rule (it is the rule meta-healing v1
 pointed to, tightened by a person, and the only new rule that held up out of sample). So:
