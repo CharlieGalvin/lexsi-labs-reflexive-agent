@@ -243,7 +243,8 @@ counts anywhere; before, only a refusal at the very start of the message did. Fo
 the review fixes. Its train rates are re-run with the same bar (at most 1 in 10 passes) and replace
 those above. Meta-healing v1's split is unchanged by the review fixes (checked at 12:56: the same
 74 / 38 conversations and unexplained failures per domain). The first tag, `stage2-checker-frozen`,
-stays where it is; every Stage 2 guarded run uses `stage2-checker-frozen-2`. A judge-only "no yes"
+stays where it is; every Stage 2 guarded run uses `stage2-checker-frozen-2`, which also has the
+`S2G` arm (PR #81: v2 with the guard, its own key so its records never mix with v2's). A judge-only "no yes"
 (the LLM decides every time, the word match only recorded) is noted as future work.
 
 ## The guard (SEL-89)
