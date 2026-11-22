@@ -283,7 +283,7 @@ out: 224 fresh conversations, 113 failures, 111 passes; 35 failures no frozen ru
 Under the amendment of Sat 23:28, with no v2 rule accepted, retraining is as before it: only if
 Decision 1 says go.
 
-**Amended Sun 22 Nov, 12:20 UK, after Chiara's review of PRs #74–#77 and before any re-run, merge
+**Amended Sun 22 Nov, 12:18 UK, after Chiara's review of PRs #74–#77 and before any re-run, merge
 or freeze.** Her review fixed bugs in all four (25 issues, each with a test). Three affect results
 already recorded, and are handled as follows, decided now:
 
