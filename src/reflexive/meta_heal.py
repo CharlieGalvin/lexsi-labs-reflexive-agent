@@ -136,6 +136,7 @@ class Candidate:
     tools: tuple[str, ...] = ()  # the state-changing tools it checks; () = every one in the domain
     tool_chars: int = 0  # how much of each tool result the checker sees; 0 = MAX_CHARS
     model: str = ""  # the checker's model; "" = RULE_MODEL
+    domains: tuple[str, ...] = ()  # the domains it was written for; () = every domain
 
     @classmethod
     def from_dict(cls, d: dict) -> Candidate:
@@ -159,13 +160,24 @@ class Candidate:
             tools=tuple(str(x) for x in d.get("tools") or ()),
             tool_chars=int(d.get("tool_chars") or 0),
             model=str(d.get("model") or ""),
+            domains=tuple(str(x) for x in d.get("domains") or ()),
         )
 
     def to_dict(self) -> dict:
-        return {**asdict(self), "seen_in": list(self.seen_in), "tools": list(self.tools)}
+        return {
+            **asdict(self),
+            "seen_in": list(self.seen_in),
+            "tools": list(self.tools),
+            "domains": list(self.domains),
+        }
 
     def checks(self, tool: str) -> bool:
+        if self.domains and tool not in set().union(*(WRITE_TOOLS.get(d, ()) for d in self.domains)):
+            return False  # another domain's change
         return not self.tools or tool in self.tools
+
+    def covers(self, domain: str) -> bool:
+        return not self.domains or domain in self.domains
 
 
 # --- The LLM, cached --------------------------------------------------------------------------
@@ -215,7 +227,8 @@ class LLM:
             timeout=180,
             **({"max_tokens": self.max_tokens} if self.max_tokens else {}),
         )
-        self.calls += 1
+        with self._lock:  # the checker runs from several threads
+            self.calls += 1
         if getattr(resp.choices[0], "finish_reason", None) == "length":
             raise ValueError(f"the answer was cut off at max_tokens={self.max_tokens}")
         answer = json.loads(resp.choices[0].message.content or "{}")
@@ -427,7 +440,7 @@ def conversation_findings(rec: dict, path: Path | str | None = None, llm: Any = 
         return []
     out = []
     for c in accepted(path):
-        if c.applies_to == "conversation":
+        if c.applies_to == "conversation" and c.covers(rec.get("domain", "")):
             checker = default_rule_llm(c.model) if llm == "default" else llm
             if checker is None:
                 continue

@@ -136,7 +136,7 @@ def pct(k: int, n: int) -> str:
 
 def cmd_score(a: argparse.Namespace) -> int:
     learned = read(OUT / "learn.json")
-    cands = [mh.Candidate.from_dict(c) for c in learned["final"]]
+    cands = [v2.with_domains(mh.Candidate.from_dict(c)) for c in learned["final"]]
     recs = load(a.episodes, "fresh")
     print(f"held-out set: {len(recs)} fresh conversations; {len(cands)} rules, scored once")
     frozen, ferrs = frozen_findings(recs)
@@ -153,15 +153,14 @@ def cmd_score(a: argparse.Namespace) -> int:
         print(f"  ⚠ {len(ferrs)} checker errors on the frozen rules, counted as not flagged")
     chk = checker()
     scores = v2.held_out(cands, recs, frozen, chk, workers=a.workers, on_found=stop_on_setup_errors)
-    n_added = scores[0].added[1] if scores else 0
     print(
-        f"\nbar: ≥{v2.MIN_ADDED} and ≥{v2.MIN_ADDED_SHARE:.0%} of the {n_added} failures "
-        "no frozen rule catches; "
-        f"≤{v2.MAX_PASS_SHARE:.0%} of passes, at worst\n"
+        f"\nbar: ≥{v2.MIN_ADDED} and ≥{v2.MIN_ADDED_SHARE:.0%} of the failures no frozen rule catches; "
+        f"≤{v2.MAX_PASS_SHARE:.0%} of passes, at worst; each rule on its own domains only\n"
     )
-    for s in scores:
+    for c, s in zip(cands, scores, strict=True):
         print(
-            f"  {'✓' if s.meets_bar else '✗'} {s.name:45s} added {pct(*s.added)}  passes {pct(*s.passes)}"
+            f"  {'✓' if s.meets_bar else '✗'} {s.name:45s} [{','.join(c.domains) or 'all'}]"
+            f" added {pct(*s.added)}  passes {pct(*s.passes)}"
             + (f" (at worst {s.passes[0] + s.passes_errored})" if s.passes_errored else "")
             + f"  rediscovers mismatch {s.rediscovers[0]}/{s.rediscovers[1]}"
             + (f"  ⚠ {s.errors} errors" if s.errors else "")
@@ -185,9 +184,22 @@ def cmd_score(a: argparse.Namespace) -> int:
         },
     )
     write_metrics(
-        learned, scores_d=[s.to_dict() for s in scores], short=short, rates=rates, accepted=None, layers=table
+        learned,
+        scores_d=[s.to_dict() for s in scores],
+        short=short,
+        rates=rates,
+        accepted=recorded_acceptance(),
+        layers=table,
+        domains={c.name: list(c.domains) for c in cands},
     )
     return 0
+
+
+def recorded_acceptance() -> dict | None:
+    """v2's accept already in configs/meta_rules.json (names, reviewer, date), so a re-score keeps it."""
+    p = mh.rules_path()
+    d = json.loads(p.read_text()) if p.exists() else {}
+    return {k: d[k] for k in ("names", "reviewer", "date")} if d.get("version") == 2 else None
 
 
 def print_layers(table: list[dict], note: str) -> None:
@@ -203,6 +215,7 @@ def write_metrics(
     rates: dict,
     accepted: dict | None,
     layers: list[dict] | None = None,
+    domains: dict[str, list[str]] | None = None,
 ) -> None:
     held = [
         {
@@ -236,9 +249,12 @@ def write_metrics(
                 "review": "≥4 of 5 real errors",
             },
             "learning": {
-                k: learned[k] for k in ("unexplained_failures", "passes_shown", "passes_scored", "rounds")
+                k: learned[k]
+                for k in ("unexplained_failures", "passes_shown", "passes_scored", "passes_overlap", "rounds")
+                if k in learned
             },
             "final": learned["final"],
+            "held_out_domains": domains,
             "held_out": held,
             "frozen_rules_held_out": rates,
             "layers": layers,
@@ -257,7 +273,11 @@ def cmd_review(a: argparse.Namespace) -> int:
         return 0
     order = {"added": 0, "failure": 1, "pass": 2}
     for name in names:
-        s = next(x for x in sc["scores"] if x["name"] == name)
+        s = next((x for x in sc["scores"] if x["name"] == name), None)
+        if s is None:
+            sys.exit(
+                f"no scored rule named {name!r}; there are: {', '.join(x['name'] for x in sc['scores'])}"
+            )
         flagged = sorted(s["flagged"], key=lambda x: order[x["kind"]])[: v2.REVIEW_EXAMPLES]
         lines = [
             f"# Review: {name}\n",
@@ -287,12 +307,21 @@ def cmd_accept(a: argparse.Namespace) -> int:
         sys.exit(f"not on the shortlist: {bad}")
     if names and not a.reviewer:
         sys.exit("--reviewer: who read the 5 conversations for each rule")
-    rules = [c for c in learned["final"] if c["name"] in names]
+    rules = [
+        v2.with_domains(mh.Candidate.from_dict(c)).to_dict() for c in learned["final"] if c["name"] in names
+    ]
     accepted = {"names": names, "reviewer": a.reviewer, "date": dt.date.today().isoformat()}
-    write(mh.RULES_PATH, {"ticket": "SEL-91", "v1_accepted": [], "version": 2, **accepted, "accepted": rules})
+    path = mh.rules_path()
+    old = json.loads(path.read_text()) if path.exists() else {}
+    # v1's accepted rules are kept, not erased: from the v1 file, or carried over from an earlier v2 accept.
+    v1 = old.get("v1_accepted", []) if old.get("version") == 2 else old.get("accepted", [])
+    write(path, {"ticket": "SEL-91", "v1_accepted": v1, "version": 2, **accepted, "accepted": rules})
     table = v2.layers(sc["ids"], sc["frozen"], sc["scores"], names)
     print_layers(table, "with the accepted rules")
-    write_metrics(learned, sc["scores"], sc["shortlist"], sc["frozen_rates"], accepted, layers=table)
+    domains = {c["name"]: list(v2.with_domains(mh.Candidate.from_dict(c)).domains) for c in learned["final"]}
+    write_metrics(
+        learned, sc["scores"], sc["shortlist"], sc["frozen_rates"], accepted, layers=table, domains=domains
+    )
     print(f"\naccepted: {', '.join(names) or 'none (that is the result)'}")
     return 0
 

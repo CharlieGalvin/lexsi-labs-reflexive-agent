@@ -23,6 +23,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field, replace
 
 from reflexive import meta_heal as mh
+from reflexive.intent import WRITE_TOOLS
 
 PROPOSER_MODEL = "gpt-4.1-2025-04-14"
 CHECKER_MODEL = "gpt-4.1-2025-04-14"
@@ -130,6 +131,18 @@ def proposer_request(
     return [{"role": "system", "content": SYSTEM}, {"role": "user", "content": user}]
 
 
+def with_domains(c: mh.Candidate) -> mh.Candidate:
+    """``c`` with the domains it was written for, when it doesn't say: from its name's prefix
+    (``retail_...``), else from its tools; neither means every domain. The proposer's prompt is
+    unchanged, so its cached answers still replay."""
+    if c.domains:
+        return c
+    domains = tuple(d for d in WRITE_TOOLS if c.name.startswith(f"{d}_"))
+    if not domains and c.tools:
+        domains = tuple(d for d, tools in WRITE_TOOLS.items() if set(c.tools) & tools)
+    return replace(c, domains=domains)
+
+
 def parse(answer: dict, limit: int = PER_ROUND) -> list[mh.Candidate]:
     out: list[mh.Candidate] = []
     for d in answer.get("rules") or []:
@@ -137,6 +150,7 @@ def parse(answer: dict, limit: int = PER_ROUND) -> list[mh.Candidate]:
             c = mh.Candidate.from_dict(d)
         except (ValueError, TypeError, KeyError):
             continue
+        # No domains here: learning runs each rule as the cached rounds did (see `learn`).
         c = replace(c, model=CHECKER_MODEL, tool_chars=CHECKER_TOOL_CHARS)
         if c.name not in {x.name for x in out}:
             out.append(c)
@@ -206,7 +220,13 @@ def learn(
     log: Callable[[str], None] = print,
     on_found: Callable[[dict], None] | None = None,
 ) -> dict:
-    """The learning rounds. Returns every round's candidates and learning-set counts, and the last."""
+    """The learning rounds. Returns every round's candidates and learning-set counts, and the last
+    round that produced rules.
+
+    The passes scored for feedback are drawn independently of those shown, so some overlap
+    (``passes_overlap``): the learning-set pass counts are partly on conversations the proposer
+    read. Learning-set counts run each rule on every domain; the held-out test (`held_out`) runs it
+    only on its own domains. Both are kept as they were so the cached proposer answers replay."""
     failures = [r for r in recs if not mh.passed(r) and not explained(r)]
     pool = sorted((r for r in recs if mh.passed(r)), key=mh.example_id)
     rng = random.Random(seed)
@@ -217,10 +237,15 @@ def learn(
     cands: list[mh.Candidate] = []
     for k in range(1, rounds + 1):
         answer = proposer(messages)
-        cands = parse(answer)
-        if not cands:
-            log(f"round {k}: no usable rules")
+        parsed = parse(answer)
+        if not parsed:
+            log(
+                f"round {k}: no usable rules; keeping round {k - 1}'s"
+                if cands
+                else f"round {k}: no usable rules"
+            )
             break
+        cands = parsed
         found = findings_by_record(cands, [*failures, *scored], checker, on_found=on_found)
         errors = sum(1 for c in found.values() for fs in c.values() for f in fs if f.get("error"))
         row = {"round": k, "candidates": [c.to_dict() for c in cands], "errors": errors, "counts": {}}
@@ -240,6 +265,7 @@ def learn(
         "unexplained_failures": [mh.example_id(r) for r in failures],
         "passes_shown": [mh.example_id(r) for r in shown],
         "passes_scored": [mh.example_id(r) for r in scored],
+        "passes_overlap": sorted({mh.example_id(r) for r in shown} & {mh.example_id(r) for r in scored}),
         "rounds": history,
         "final": [c.to_dict() for c in cands],
     }
@@ -293,12 +319,19 @@ def held_out(
     on_found: Callable[[dict], None] | None = None,
 ) -> list[HeldOut]:
     """``frozen``: per example id, whether Tool/Arg/Loop, "no yes" and "mismatch" catch it
-    (keys ``tal``, ``no_yes``, ``mismatch``)."""
-    found = findings_by_record(cands, recs, checker, workers, on_found)
+    (keys ``tal``, ``no_yes``, ``mismatch``).
+
+    Each rule is scored only on the conversations of its own domains (`with_domains`): a retail
+    rule's flags on airline passes say nothing about it, and the guard never runs it there."""
+    cands = [with_domains(c) for c in cands]
+    found: dict[str, dict[str, list[dict]]] = {c.name: {} for c in cands}
+    for c in cands:
+        mine = [r for r in recs if c.covers(r["domain"])]
+        found[c.name] = findings_by_record([c], mine, checker, workers, on_found)[c.name]
     out = []
     for c in cands:
         s = HeldOut(c.name)
-        for r in recs:
+        for r in (r for r in recs if c.covers(r["domain"])):
             rid = mh.example_id(r)
             fs = found[c.name][rid]
             err = any(f.get("error") for f in fs)
