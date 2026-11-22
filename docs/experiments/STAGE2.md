@@ -317,6 +317,26 @@ out: 224 fresh conversations, 113 failures, 111 passes; 35 failures no frozen ru
 Under the amendment of Sat 23:28, with no v2 rule accepted, retraining is as before it: only if
 Decision 1 says go.
 
+**Amended Sun 22 Nov, 14:15 UK, before Decision 1 runs and before any retraining: the mismatch fixes
+are checked over the whole conversation, with a fixed fallback; Stage 2's scope is closed.**
+SFT v4 (9 Nov) added 29 single-turn fixes of the same kind ("confirm, re-check or hold back") and
+scored 17.0 on validation, exactly v2's; its write-up's next step is to check the turns that follow.
+The 39 single-turn mismatch fixes are the same kind. So, decided now:
+
+- **Full-conversation fixes (primary).** From each of the 43 fix points, the conversation up to the
+  fixed turn plus the teacher's accepted fixed turn is continued by the teacher (GLM-5.3-Flash) with
+  the same customer (GPT-4.1) to its end, in τ²-bench from that message history. One continuation
+  per fix point. Kept only if τ²-bench passes the whole conversation and it is clean
+  (`golden.why_not_clean`). Trained on the fixed turn and every agent turn after it, never on the
+  student's earlier turns. Group `mismatch`, replacing the single-turn fixes.
+- **Fallback, fixed now:** if the continuation tooling isn't working by Sun 22 Nov 20:00 UK, the
+  39 single-turn fixes are used as planned. No other variant is tried.
+- **Unchanged:** at least 30 fixes used, or no retraining (guard fixes count on a Decision 1 go);
+  v2's recipe; the dev gate; the targeted measure; test once.
+- **Scope closed.** No further rules, checker changes, meta-healing rounds or data variants this
+  week. Judge-only "no yes", a "claimed but not done" rule, meta-healing v3 and a second loop turn
+  are next steps, reported as such, and considered only if the extension is confirmed.
+
 **Amended Sun 22 Nov, 12:18 UK, after Chiara's review of PRs #74–#77 and before any re-run, merge
 or freeze.** Her review fixed bugs in all four (25 issues, each with a test). Three affect results
 already recorded, and are handled as follows, decided now:
