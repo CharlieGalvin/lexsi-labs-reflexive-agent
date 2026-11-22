@@ -1,7 +1,7 @@
 # Arm S2Q: SFT v2 unchanged, served with FP8 weights and 64K context (Stage 2b step 2).
 # Serve on the pod:  ADAPTER= EXTRA_ADAPTERS="sft2=runs/sft-aya32b-r16-v2" QUANTIZATION=fp8 MAX_LEN=65536 bash scripts/pod/serve.sh
-# Validation, 4 samples (STAGE2.md, Stage 2b):
-#   python scripts/arms/val_rollout.py S2Q configs/sft/arms.s2q.yaml --from $VALDIR --samples 4
+# Validation, 8 samples (STAGE2.md, Stage 2b):
+#   python scripts/arms/val_rollout.py S2Q configs/sft/arms.s2q.yaml --from $VALDIR --samples 8 --actions off
 # Same harness, prompt, decoding and customer as arms.sft2.yaml; only what the line above says differs.
 # Never on test unless the team declares it (Stage 2b's rule).
 

@@ -1,7 +1,7 @@
-"""Stage 2b's decision rule: a candidate against SFT v2 on validation, 4 samples each (STAGE2.md).
+"""Stage 2b's decision rule: a candidate against SFT v2 on validation, 8 samples each (STAGE2.md).
 
     python scripts/arms/stage2b_compare.py S2 S2E4            # baseline, candidate (val files)
-    python scripts/arms/stage2b_compare.py S2 S2E4 --samples 4 --reps 10000
+    python scripts/arms/stage2b_compare.py S2 S2E4 --samples 8 --reps 10000
 
 Per task, each arm's passes are averaged over its samples; the difference (candidate − v2) is
 summed over the 30 tasks, so it reads in "tasks of 30", as v2's 17.0 does. Its 95% range is a
@@ -102,7 +102,7 @@ def main() -> int:
     p.add_argument("baseline")
     p.add_argument("candidate")
     p.add_argument("--split", default="val")
-    p.add_argument("--samples", type=int, default=4)
+    p.add_argument("--samples", type=int, default=8)
     p.add_argument("--reps", type=int, default=10000)
     a = p.parse_args()
     res = decide(per_task(load(a.baseline, a.split)), per_task(load(a.candidate, a.split)), a.samples, a.reps)

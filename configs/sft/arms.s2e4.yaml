@@ -1,7 +1,7 @@
 # Arm S2E4: SFT v2's data trained 4 epochs (Stage 2b step 1a).
 # Serve on the pod:  ADAPTER= EXTRA_ADAPTERS="sft2=runs/sft-aya32b-r16-v2 sft2e4=runs/sft-aya32b-v2-e4" bash scripts/pod/serve.sh
-# Validation, 4 samples (STAGE2.md, Stage 2b):
-#   python scripts/arms/val_rollout.py S2E4 configs/sft/arms.s2e4.yaml --from $VALDIR --samples 4
+# Validation, 8 samples (STAGE2.md, Stage 2b):
+#   python scripts/arms/val_rollout.py S2E4 configs/sft/arms.s2e4.yaml --from $VALDIR --samples 8 --actions off
 # Same harness, prompt, decoding and customer as arms.sft2.yaml; only what the line above says differs.
 # Never on test unless the team declares it (Stage 2b's rule).
 

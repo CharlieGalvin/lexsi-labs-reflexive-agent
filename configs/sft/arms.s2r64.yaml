@@ -1,7 +1,7 @@
 # Arm S2R64: SFT v2's data, 4 epochs, LoRA rank 64 (Stage 2b step 1b).
 # Serve on the pod:  ADAPTER= EXTRA_ADAPTERS="sft2r64=runs/sft-aya32b-v2-e4r64" bash scripts/pod/serve.sh
-# Validation, 4 samples (STAGE2.md, Stage 2b):
-#   python scripts/arms/val_rollout.py S2R64 configs/sft/arms.s2r64.yaml --from $VALDIR --samples 4
+# Validation, 8 samples (STAGE2.md, Stage 2b):
+#   python scripts/arms/val_rollout.py S2R64 configs/sft/arms.s2r64.yaml --from $VALDIR --samples 8 --actions off
 # Same harness, prompt, decoding and customer as arms.sft2.yaml; only what the line above says differs.
 # Never on test unless the team declares it (Stage 2b's rule).
 

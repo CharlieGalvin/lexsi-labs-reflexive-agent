@@ -487,7 +487,7 @@ Stage 2's rules no guard fixes are collected, and the 21 full-conversation misma
   suggested quantising to free memory for a longer context, and checking the metrics hold.
 
 **The arms, fixed now: at most these five reach validation, in this order.** Each is trained from
-the base model, scored on the 30 validation tasks × **4 samples**, served as v2 was unless it says.
+the base model, scored on the 30 validation tasks × **4 samples** (8: amended below), served as v2 was unless it says.
 
 | Arm | What changes from v2 | Config |
 |---|---|---|
@@ -509,6 +509,15 @@ served as v2 was.
 **The winner** is the arm that meets the rule with the largest gain (a tie goes to fewer changes).
 It goes through the dev gate (Decision 2, as written) and one declared test run (100 × 2). If no arm
 meets the rule, v2 stays, and every arm is reported with its numbers.
+
+**Amended Sun 22 Nov, 16:32 UK, after v2's 4-sample baseline and before any candidate is
+scored: 8 samples, not 4.** v2 (S2) on validation, 4 samples: 16, 18, 19 and 12 of 30 (mean 16.25;
+retail 7, 6, 7, 5; airline 3, 2, 3, 2; telecom 6, 10, 9, 5). The samples' spread (SD 3.1) puts the 95%
+range of a 4-against-4 difference at about ±4.3, so a real gain of +2 to +3 would usually fail the
+rule's "range above 0". At 8 samples it is about ±3. So v2 gets samples 4 to 7, and every arm that
+reaches validation is scored on 8 samples (`--samples 8`; `stage2b_compare.py` defaults to 8). The
+rule is unchanged: +2.0, a 95% range above 0, no domain down more than 1.5. S2Q's serving check
+uses the same 8 samples. Decision 1's S2G (15.0, 2 samples) sits inside v2's range of 12 to 19.
 
 **The training-data audit (meta-healing on our own data).** `scripts/data/audit_training_data.py`
 runs the frozen checker ("no yes" and "mismatch") over every state-changing call in v2's training
