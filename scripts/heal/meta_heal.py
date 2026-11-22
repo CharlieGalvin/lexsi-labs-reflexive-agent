@@ -175,11 +175,28 @@ def cmd_score(recs: list[dict], a: argparse.Namespace) -> int:
             f"Fix it (usually OPENAI_API_KEY) and run again; nothing is written. First: {first}"
         )
         return 1
-    write(paths(a.round)[1], {"rule_model": mh.RULE_MODEL, "scores": [s.to_dict() for s in scores]})
+    new = {s.name: s.to_dict() for s in scores}
+    if a.only and paths(a.round)[1].exists():  # keep the scores of the candidates not re-run
+        old = {s["name"]: s for s in read(paths(a.round)[1])["scores"]}
+        order = [c["name"] for c in cand["candidates"]]
+        merged = {**old, **new}
+        rows = [merged[n] for n in order if n in merged]
+    else:
+        rows = list(new.values())
+    write(paths(a.round)[1], {"rule_model": mh.RULE_MODEL, "scores": rows})
     short = shortlist()
     print(f"meets the bar, all rounds (best {mh.MAX_ACCEPTED}): {', '.join(short) or 'none'}")
-    write_metrics(accepted=None)
+    write_metrics(accepted=recorded_acceptance())
     return 0
+
+
+def recorded_acceptance() -> dict | None:
+    """The accept already in configs/meta_rules.json (names, reviewer, date), so a re-score keeps it."""
+    p = mh.rules_path()
+    if not p.exists():
+        return None
+    d = json.loads(p.read_text())
+    return {k: d[k] for k in ("names", "reviewer", "date")} if "names" in d else None
 
 
 def all_scores() -> list[dict]:
@@ -279,7 +296,7 @@ def cmd_accept(recs: list[dict], a: argparse.Namespace) -> int:
         sys.exit("--reviewer: who read the 5 conversations for each rule")
     rules = [c for n in rounds() for c in read(paths(n)[0])["candidates"] if c["name"] in names]
     accepted = {"names": names, "reviewer": a.reviewer, "date": dt.date.today().isoformat()}
-    write(mh.RULES_PATH, {"ticket": "SEL-91", "rule_model": mh.RULE_MODEL, **accepted, "accepted": rules})
+    write(mh.rules_path(), {"ticket": "SEL-91", "rule_model": mh.RULE_MODEL, **accepted, "accepted": rules})
     write_metrics(accepted)
     print(f"\naccepted: {', '.join(names) or 'none (that is the result)'}")
     return 0

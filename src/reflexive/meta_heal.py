@@ -30,6 +30,7 @@ import os
 import random
 import re
 import threading
+import warnings
 from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -48,11 +49,15 @@ MIN_FLAGGED, MIN_SHARE, MAX_PASSES = 2, 0.20, 1  # STAGE2.md's acceptance bar, o
 HOLDOUT_SHARE = 1 / 3
 MAX_CHARS = 1200  # per message or tool result in a transcript
 MAX_POLICY_CHARS = 30_000
-MAX_ANSWER_TOKENS = (
-    4000  # a rule's answer is a few lines and the proposer's ten rules fit; a runaway stops here
-)
+MAX_ANSWER_TOKENS = 4000  # the rule checker's cap: its answer is a few lines; a runaway stops here
 ROOT = Path(__file__).resolve().parents[2]
-RULES_PATH = ROOT / "configs" / "meta_rules.json"
+RULES_PATH = ROOT / "configs" / "meta_rules.json"  # the checkout's; REFLEXIVE_META_RULES overrides it
+
+
+def rules_path() -> Path:
+    """The accepted rules: ``$REFLEXIVE_META_RULES``, else the checkout's configs/meta_rules.json."""
+    return Path(os.environ.get("REFLEXIVE_META_RULES") or RULES_PATH)
+
 
 EXISTING_RULES = """\
 - TOOL: the agent calls a tool that doesn't exist, or one only the customer can use.
@@ -170,9 +175,15 @@ class LLM:
     """One pinned model at temperature 0, JSON answers, cached by the exact request (a re-run is free)."""
 
     def __init__(
-        self, model: str, completion: Callable[..., Any] | None = None, cache_path: Path | str | None = None
+        self,
+        model: str,
+        completion: Callable[..., Any] | None = None,
+        cache_path: Path | str | None = None,
+        max_tokens: int | None = None,
     ) -> None:
+        """``max_tokens``: a cap on each answer (the rule checker's); None, as for the proposer, is none."""
         self.model = model
+        self.max_tokens = max_tokens
         self._completion = completion
         self.cache_path = Path(cache_path) if cache_path else None
         self.cache: dict[str, dict] = {}
@@ -202,9 +213,11 @@ class LLM:
             response_format={"type": "json_object"},
             num_retries=2,
             timeout=180,
-            max_tokens=MAX_ANSWER_TOKENS,
+            **({"max_tokens": self.max_tokens} if self.max_tokens else {}),
         )
         self.calls += 1
+        if getattr(resp.choices[0], "finish_reason", None) == "length":
+            raise ValueError(f"the answer was cut off at max_tokens={self.max_tokens}")
         answer = json.loads(resp.choices[0].message.content or "{}")
         if not isinstance(answer, dict):
             raise ValueError(f"the model answered {answer!r}, not a JSON object")
@@ -231,7 +244,9 @@ def default_rule_llm(model: str = "") -> LLM | None:
         return None
     model = model or RULE_MODEL
     if model not in _rule_llms:
-        _rule_llms[model] = LLM(model, cache_path=os.environ.get("REFLEXIVE_META_CACHE") or None)
+        _rule_llms[model] = LLM(
+            model, cache_path=os.environ.get("REFLEXIVE_META_CACHE") or None, max_tokens=MAX_ANSWER_TOKENS
+        )
     return _rule_llms[model]
 
 
@@ -323,7 +338,8 @@ def check(
     evidence, reason = str(a.get("evidence") or ""), str(a.get("reason") or "")
     if a.get("violated") is not True:
         return Hit(False, evidence, reason)
-    shown = messages[1]["content"].split("CONVERSATION", 1)[1]
+    # Only the conversation and the call count as evidence, never the policy or the rule's own words.
+    shown = transcript(conversation) + ("\n" + _call_text(call) if call is not None else "")
     if not evidence_found(evidence, shown):
         return Hit(False, evidence, f"its evidence isn't in the conversation ({reason})")
     return Hit(True, evidence, reason)
@@ -389,19 +405,23 @@ def as_rule(
     return rule
 
 
-def accepted(path: Path | str = RULES_PATH) -> list[Candidate]:
-    p = Path(path)
+def accepted(path: Path | str | None = None) -> list[Candidate]:
+    p = Path(path) if path is not None else rules_path()
     if not p.exists():
+        if path is None:  # e.g. an installed package, away from the checkout: say so, don't go quiet
+            warnings.warn(
+                f"{p} not found: no meta-healing rules loaded (set REFLEXIVE_META_RULES)", stacklevel=2
+            )
         return []
     return [Candidate.from_dict(r) for r in json.loads(p.read_text()).get("accepted", [])]
 
 
-def meta_rules(path: Path | str = RULES_PATH) -> list[Callable]:
+def meta_rules(path: Path | str | None = None) -> list[Callable]:
     """The accepted call rules, ready for `reflexive.actions.RULES`."""
     return [as_rule(c) for c in accepted(path) if c.applies_to == "call"]
 
 
-def conversation_findings(rec: dict, path: Path | str = RULES_PATH, llm: Any = "default") -> list[dict]:
+def conversation_findings(rec: dict, path: Path | str | None = None, llm: Any = "default") -> list[dict]:
     """The accepted conversation rules (after the fact) on a whole saved conversation."""
     if judges_off() and llm == "default":
         return []
