@@ -204,3 +204,85 @@ def test_two_samples_fixed_at_the_same_turn_get_different_ids(monkeypatch):
 
     ids = {op.teach(F(s), point, mutating, 3)[0]["id"] for s in (0, 1)}
     assert ids == {"onpolicy/glm/airline/7/s0/t5/a1", "onpolicy/glm/airline/7/s1/t5/a1"}
+
+
+# --- --points mismatch (STAGE2.md, amended Sun 22 Nov 10:40) -----------------------------------
+
+
+def finding(turn, live=True, reason="Mismatch: the order is wrong."):
+    return {"turn": turn, "tool": "cancel_reservation", "live": live, "rule": "mismatch", "reason": reason}
+
+
+def test_the_mismatch_point_is_the_first_flagged_change_with_what_is_still_pending():
+    view = [
+        SYSTEM,
+        USER,
+        agent(("cancel_reservation", {"reservation_id": "A"})),
+        TOOL,
+        USER,
+        agent(("cancel_reservation", {"reservation_id": "B"})),
+    ]
+    expected = [
+        ("cancel_reservation", {"reservation_id": "A"}, None),
+        ("cancel_reservation", {"reservation_id": "C"}, None),
+    ]
+    point = op.mismatch_point({}, view, expected, mutating, findings=[finding(5), finding(2)])
+    assert (point.turn, point.kind, point.detail) == (2, "mismatch", "Mismatch: the order is wrong.")
+    assert len(point.pending) == 2  # nothing made before turn 2
+    later = op.mismatch_point({}, view, expected, mutating, findings=[finding(5)])
+    assert later.turn == 5 and [e[1]["reservation_id"] for e in later.pending] == ["C"]
+    assert op.mismatch_point({}, view, expected, mutating, findings=[]) is None
+
+
+def test_a_checker_error_before_any_flag_is_counted_not_fixed():
+    view = [SYSTEM, USER, agent(("cancel_reservation", {"reservation_id": "A"}))]
+    point = op.mismatch_point({}, view, [], mutating, findings=[finding(2, live=False, reason="timeout")])
+    assert point.kind == "checker_error"
+    assert op.skip_reason(point, False, "mismatch") == "checker error: not flagged"
+
+
+def test_a_flag_in_a_passing_conversation_gets_no_fix():
+    point = op.FixPoint(2, "mismatch", "x", ())
+    assert op.skip_reason(point, True, "mismatch") == "flagged, but the conversation passed: no fix"
+    assert op.skip_reason(point, False, "mismatch") is None  # a failure is sent to the teacher
+    assert op.skip_reason(None, True, "mismatch") == "not flagged (passed)"
+    assert op.skip_reason(None, False, "answer-key").startswith("no fix point")
+
+
+def test_the_flagged_change_may_not_come_back_unchanged():
+    original = [("cancel_reservation", {"reservation_id": "A"})]
+    same = agent(("cancel_reservation", {"reservation_id": "A"}))
+    other = agent(("cancel_reservation", {"reservation_id": "C"}))
+    ask = agent(text="Just to check: do you want to cancel reservation C, not A?")
+    assert op.unchanged(same, original, mutating) == ["the flagged change is made again unchanged"]
+    assert op.unchanged(other, original, mutating) == [] and op.unchanged(ask, original, mutating) == []
+
+
+def test_mismatch_fixes_get_their_own_group_and_file(monkeypatch):
+    from reflexive import heal
+
+    class Teacher:
+        def __init__(self, attempts, extra_check):
+            self.extra_check, self.tried, self.hint = extra_check, {}, None
+
+        def fix(self, failure):
+            seen.append(self.hint)
+            return {"source": {"teacher": "glm", "attempt": 1}}
+
+    seen = []
+    monkeypatch.setattr(heal, "PrefixTeacher", Teacher)
+    rec = {
+        "domain": "airline",
+        "task_id": "t1",
+        "sample": 1,
+        "agent_view": [SYSTEM, USER, agent(("cancel_reservation", {"reservation_id": "A"}))],
+    }
+    failure = type("F", (), {"record": rec, "task": ("airline", "t1")})()
+    ex, _ = op.teach(
+        failure, op.FixPoint(2, "mismatch", "Wrong reservation.", ()), mutating, 3, "S2-airline-fresh"
+    )
+    assert ex["group"] == "mismatch" and ex["id"].startswith(
+        "mismatch/glm/airline/t1/S2-airline-fresh/s1/t2/"
+    )
+    assert seen == [op.MISMATCH_HINT.format(detail="Wrong reservation.")]
+    assert op.MISMATCH_OUT.name == "mismatch-fixes.jsonl"

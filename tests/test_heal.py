@@ -149,6 +149,18 @@ def test_the_teacher_sees_only_the_prefix_and_its_fix_trains_on_that_turn_only()
     assert ex["source"]["fixed_turn"] == 2 and ex["source"]["attempt"] == 1
 
 
+def test_a_hint_reaches_the_teacher_but_never_the_saved_example():
+    model = FakeModel([GOOD])
+    teacher = PrefixTeacher(make_agent=model, hint="Note for this turn: check the order.")
+    ex = teacher.fix(failure())
+    assert ex is not None
+    (shown,) = model.seen
+    assert shown[0]["content"].endswith("Note for this turn: check the order.") and shown[1] == HI
+    assert ex["messages"][0]["content"].startswith(SYS["content"])  # the agent's own prompt, in Aya's format
+    assert all("Note for this turn" not in str(m.get("content")) for m in ex["messages"])
+    assert "Note for this turn" not in SYS["content"]  # and the prefix itself wasn't changed
+
+
 def test_the_teacher_retries_until_a_fix_passes_the_check():
     model = FakeModel([WRONG_TOOL, RuntimeError("rate limited"), GOOD])
     teacher = PrefixTeacher(make_agent=model)
