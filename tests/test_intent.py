@@ -61,6 +61,39 @@ def test_a_refusal_or_a_negation_is_not_a_yes_and_withdraws_an_earlier_one():
     assert not flagged([DESCRIBE, user("Yes."), user("Wait, actually no."), DESCRIBE, user("OK, yes now.")])
 
 
+def test_a_negative_contraction_is_not_a_yes():
+    for no in ("That isn't correct.", "I don't want to proceed yet.", "It doesn't sound right to me."):
+        assert not is_yes(user(no)), no
+        assert flagged([DESCRIBE, user(no)]), no
+
+
+def test_a_question_is_not_a_yes():
+    for q in ("Will the refund go to my card, is that correct?", "How do I proceed?", "Is that ok?"):
+        assert not is_yes(user(q)), q
+    assert is_yes(user("Yes, go ahead. How long will it take?"))
+
+
+def test_a_friendly_opening_is_not_a_refusal():
+    from reflexive.intent import is_refusal
+
+    for ok in ("Don't worry, go ahead.", "Don't hesitate, please do.", "Waiting on you, go ahead."):
+        assert not is_refusal(user(ok)) and is_yes(user(ok)), ok
+        assert not flagged([DESCRIBE, user(ok)]), ok
+    assert is_refusal(user("Stop.")) and is_refusal(user("Don't cancel it."))
+
+
+def test_a_yes_to_a_later_question_does_not_cover_the_change():
+    address = agent("Would you also like to update your address?")
+    assert flagged([DESCRIBE, user("Hmm, let me think."), address, user("Yes.")])
+    assert not flagged([DESCRIBE, user("Hmm, let me think."), user("OK, yes.")])  # still answering it
+
+
+def test_a_new_proposal_of_the_same_change_needs_a_new_yes():
+    again = agent("Before I do: cancelling order #W2378156 can't be undone. Still want to go ahead?")
+    assert flagged([DESCRIBE, user("Yes."), again, user("Hmm.")])
+    assert not flagged([DESCRIBE, user("Yes."), agent("Cancelling order #W2378156 now.")])
+
+
 def test_a_description_of_another_order_is_a_different_change():
     other = agent("I can cancel order #W9999999 for you. Shall I go ahead?")
     assert flagged([other, user("Yes.")])
@@ -212,6 +245,15 @@ def test_a_judge_error_never_blocks_and_is_logged():
     assert f is not None and (f.rule, f.live) == ("no_yes_judge_error", False)
     bad_json = no_yes(ASKED, CANCEL, "", judge=Judge(completion=fake("not json")))
     assert bad_json is not None and bad_json.live is False
+
+
+@pytest.mark.parametrize("answer", ["", {"answer": "yes"}, {"yes_given": "yes"}])
+def test_an_empty_or_incomplete_answer_is_a_judge_error_and_is_not_cached(tmp_path, answer):
+    path = tmp_path / "cache.jsonl"
+    j = Judge(completion=fake(answer), cache_path=path)
+    f = no_yes(ASKED, CANCEL, "", judge=j)
+    assert f is not None and (f.rule, f.live) == ("no_yes_judge_error", False)
+    assert not j.cache and not path.exists()
 
 
 def test_answers_are_cached_by_the_exact_request(tmp_path):
