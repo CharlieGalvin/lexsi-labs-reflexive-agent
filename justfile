@@ -330,6 +330,14 @@ reproduce *args:
 intent-rates *args:
     python scripts/labels/intent_rates.py {{args}}
 
+# The checker's rules on train conversations, with injected errors (the "mismatch" rule, Sat 21 Nov)
+rule-rates *args:
+    python scripts/labels/rule_rates.py {{args}}
+
+# Meta-healing v2 (STAGE2.md, Sat 21 Nov 22:01): learn | score | review | accept
+meta-heal-v2 *args:
+    python scripts/heal/meta_heal_v2.py {{args}}
+
 # Meta-healing (SEL-91): the checker proposes rules from failures it can't explain; split | propose | score | review | accept
 meta-heal *args:
     python scripts/heal/meta_heal.py {{args}}
