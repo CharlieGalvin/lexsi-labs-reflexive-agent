@@ -258,6 +258,15 @@ Retraining: with an accepted meta-healing rule, a no-go retrains on meta-healing
   One change from v2: the added fixes. Adapter published with its `lexsi_provenance.json`.
 - First score: validation 30 × 2 **without** the guard, reported whatever it shows.
 
+**Amended Sun 22 Nov, 10:16 UK, after meta-healing v2's held-out score and before its result is
+recorded: transient checker errors are re-asked once.** The score (Sun 00:35–01:10) had 51 checker
+errors on each of the two telecom whole-conversation rules and 1 on the frozen rules; no rule met the
+bar. A check at 10:14 re-asked 5 of the telecom errors and all 5 answered, so the errors were
+transient (most likely rate limits on long telecom prompts, 8 calls at a time). As the crash rule does
+for crashed conversations, `score` is run once more: every answer already given is replayed from the
+cache unchanged, and only the calls that errored are asked again. Rules, data, bar and models are
+unchanged. Both runs are reported; the second decides. No further re-runs.
+
 **Amended Sat 21 Nov, 23:28 UK, before meta-healing v2 is scored and before Decision 1 runs:
 meta-healing's fixes join retraining, and retraining no longer depends on Decision 1.**
 
