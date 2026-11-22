@@ -260,6 +260,7 @@ Released adapters and trajectories carry Aya Expanse 32B's CC BY-NC 4.0 licence.
 \bibliographystyle{acl_natbib}
 
 \appendix
+\renewcommand{\arraystretch}{1.15}
 
 \begin{figure*}[!t]
 \centering
@@ -287,9 +288,9 @@ Table~\ref{tab:rubric} specifies all three classes and 12 failure kinds detected
 
 \begin{table}[h]
 \centering
-\scriptsize
+\footnotesize
 \setlength{\tabcolsep}{2.5pt}
-\begin{tabular}{llp{3.45cm}}
+\begin{tabular}{llp{3.1cm}}
 \toprule
 \textbf{Class} & \textbf{Kind} & \textbf{Detection Criterion} \\
 \midrule
@@ -344,26 +345,24 @@ Table~\ref{tab:hyperparams} reports the exact training settings and single-H100 
 
 \begin{table*}[t]
 \centering
-\scriptsize
-\setlength{\tabcolsep}{2.8pt}
-\resizebox{\textwidth}{!}{%
-\begin{tabular}{lcccccccc}
+\footnotesize
+\setlength{\tabcolsep}{4.5pt}
+\begin{tabular}{llrrlr}
 \toprule
-\textbf{Run} & \textbf{Base / Init} & \textbf{Examples} & \textbf{Steps} & \textbf{LR (Sched.)} & \textbf{Batch} & \textbf{Loss / Objective} & \textbf{Runtime} & \textbf{Train / Val Loss} \\
+\textbf{Run} & \textbf{Training data} & \textbf{Steps} & \textbf{Batch} & \textbf{Runtime} & \textbf{Train / val loss} \\
 \midrule
-SFT v1 & Aya 32B (NF4) & 112 convs & 56 & 1e-4 (cos, 5\%) & $1 \times 4$ & Agent-turn CE (16K) & 23m (54 GB) & 0.450 / 0.393 \\
-SFT v2 (Arm B) & Aya 32B (NF4) & 146 convs & 74 & 1e-4 (cos, 5\%) & $1 \times 4$ & Agent-turn CE (16K) & 28m & 0.426 / 0.368 \\
-SL (ablation) & Aya 32B (NF4) & 112 convs & 74 & 1e-4 (cos, 5\%) & $1 \times 4$ & Agent-turn CE (16K) & 31m & 0.401 / 0.365 \\
-SFT v3 & Aya 32B (NF4) & 166 convs & 74 & 1e-4 (cos, 5\%) & $1 \times 4$ & Agent-turn CE (16K) & 29m & 0.408 / 0.368 \\
-SFT v4 & Aya 32B (NF4) & 175 convs & 74 & 1e-4 (cos, 5\%) & $1 \times 4$ & Agent-turn CE (16K) & $\approx 29$m & --- / $\approx 0.368$ \\
-Cycle 1 (turn) & Aya 32B (NF4) & 16 turns & 16 & 1e-4 (cos, 5\%) & $1 \times 2$ & Single-turn CE (938 tok) & --- & 0.479 / --- \\
-Cycle 2 (traj.) & Aya 32B (NF4) & 136 convs & 68 & 1e-4 (cos, 5\%) & $1 \times 4$ & Agent-turn CE (16K) & 23m (3.7h tot.) & 0.425 / --- \\
+SFT v1 & 112 conversations & 56 & $1 \times 4$ & 23 min (54 GB) & 0.450 / 0.393 \\
+SFT v2 (Arm B) & 146 conversations & 74 & $1 \times 4$ & 28 min & 0.426 / 0.368 \\
+SL (ablation) & 112 conversations & 74 & $1 \times 4$ & 31 min & 0.401 / 0.365 \\
+SFT v3 & 166 conversations & 74 & $1 \times 4$ & 29 min & 0.408 / 0.368 \\
+SFT v4 & 175 conversations & 74 & $1 \times 4$ & $\approx 29$ min & --- / $\approx 0.368$ \\
+Cycle 1 (turn-level) & 16 turns (938 target tokens) & 16 & $1 \times 2$ & --- & 0.479 / --- \\
+Cycle 2 (trajectory-level) & 136 conversations & 68 & $1 \times 4$ & 23 min (3.7 h in all) & 0.425 / --- \\
 \midrule
-GRPO G/H/H2 & SFT v2 & Tool / 177+anc & 100$^\dagger$ & 1e-5 & $1 \times 16$ & GRPO ($G=8$, $\beta=0.04$, $T=1.0$) & $\approx 3.7$h (64.2 GB) & max comp.\ 384 \\
+GRPO G, H, H2 & tool turns / 177 fixes + anchors & 100$^\dagger$ & $1 \times 16$ & $\approx 3.7$ h (64.2 GB) & --- \\
 \bottomrule
-\end{tabular}%
-}
-\caption{Training configurations across all SFT (QLoRA $r=16$, $\alpha=32$, dropout 0.05 on \texttt{q,k,v,o,gate,up,down}, paged AdamW 8-bit, max grad norm 1.0, weight decay 0, seed 0) and GRPO (AgentTune) runs on one H100 SXM. $^\dagger$Arm H2 stopped early via the 10-point reply-share drift guard.}
+\end{tabular}
+\caption{Training runs, all on one H100 SXM. Every SFT run fine-tunes Aya Expanse 32B in 4-bit NF4 with QLoRA ($r=16$, $\alpha=32$, dropout 0.05 on \texttt{q,k,v,o,gate,up,down}), learning rate $10^{-4}$ (cosine, 5\% warm-up), paged AdamW 8-bit, max grad norm 1.0, weight decay 0, seed 0, and cross-entropy on agent turns only, up to 16K tokens. GRPO (AgentTune) continues SFT v2 with learning rate $10^{-5}$, $G=8$ samples, $\beta=0.04$, temperature 1.0 and at most 384 new tokens. $^\dagger$H2 was stopped early by its 10-point reply-share drift guard.}
 \label{tab:hyperparams}
 \end{table*}
 
@@ -378,24 +377,22 @@ Every setting not listed here is the library's default; each run's full configur
 \begin{table}[t]
 \centering
 \footnotesize
-\setlength{\tabcolsep}{3pt}
-\resizebox{\columnwidth}{!}{%
-\begin{tabular}{lccc}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}p{4.65cm}ccc@{}}
 \toprule
 \textbf{Reward component} & \textbf{G} & \textbf{H} & \textbf{H2} \\
 \midrule
-Tool matches the teacher's (G) / no unavailable tool (H, H2) & 1.0 & 1.0 & 1.0 \\
-Arguments match (G) / no placeholder, invented ID or schema error & 1.0 & 1.0 & 1.0 \\
-Valid call (G) / no repeated failed call or reply (H, H2) & 0.5 & 0.5 & 0.5 \\
-Grounded arguments (G) / teacher's choice of reply or call (H, H2) & 0.5 & 1.0 & 0.5 \\
-No giving up (G) / call is the whole reply, no giving up (H, H2) & 0.5 & 0.5 & 0.5 \\
-Format (G) & 0.2 & --- & --- \\
-State change matches a pending expected action (H2) & --- & --- & 2.0 \\
+G: tool matches the teacher's. H, H2: no unavailable tool & 1.0 & 1.0 & 1.0 \\
+G: arguments match. H, H2: no placeholder, invented ID or schema error & 1.0 & 1.0 & 1.0 \\
+G: valid call. H, H2: no repeated failed call or reply & 0.5 & 0.5 & 0.5 \\
+G: grounded arguments. H, H2: the teacher's choice of reply or call & 0.5 & 1.0 & 0.5 \\
+G: no giving up. H, H2: the call is the whole reply, no giving up & 0.5 & 0.5 & 0.5 \\
+G: format & 0.2 & --- & --- \\
+H2: the state change matches a pending expected action & --- & --- & 2.0 \\
 \midrule
 Maximum reward & 3.7 & 4.0 & 5.5 \\
 \bottomrule
-\end{tabular}%
-}
+\end{tabular}
 \caption{GRPO reward weights. G scores each sampled turn against the teacher's turn; H and H2 score the Tool, Arg and Loop failures the classifier detects, and H2 adds a decision check against $\tau^2$-bench's expected actions.}
 \label{tab:grpo_rewards}
 \end{table}
@@ -445,22 +442,20 @@ Claude Opus 5.5$^\ddagger$ & Closed & 7/8 & 53--98\% & 7/8 & --- & 0.417 & 0.011
 \begin{table}[h]
 \centering
 \footnotesize
-\setlength{\tabcolsep}{2.5pt}
-\resizebox{\columnwidth}{!}{%
-\begin{tabular}{lccccc}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}lrrrrr@{}}
 \toprule
-\textbf{Pair (A vs.\ B)} & \textbf{A} & \textbf{B} & \textbf{$p$} & \textbf{Holm $p$} & \textbf{Diff.\ (95\% CI)} \\
+\textbf{Pair (A vs.\ B)} & \textbf{A} & \textbf{B} & \textbf{$p$} & \textbf{Holm} & \textbf{Diff., pts} \\
 \midrule
-Qwen3.8 vs.\ Sonnet 5.5 & 1 & 0 & 1.00 & 1.00 & 0 to $+10$ pts \\
-Qwen3.8 vs.\ GLM-5.3-F & 3 & 0 & 0.25 & 1.00 & 0 to $+23$ pts \\
-Qwen3.8 vs.\ DeepSeek V4 & 3 & 0 & 0.25 & 1.00 & 0 to $+23$ pts \\
-Sonnet 5.5 vs.\ GLM-5.3-F & 2 & 0 & 0.50 & 1.00 & 0 to $+17$ pts \\
-Sonnet 5.5 vs.\ DeepSeek & 3 & 1 & 0.63 & 1.00 & $-7$ to $+20$ pts \\
-GLM-5.3-F vs.\ DeepSeek & 1 & 1 & 1.00 & 1.00 & $-10$ to $+10$ pts \\
+Qwen vs.\ Sonnet & 1 & 0 & 1.00 & 1.00 & 0 to $+10$ \\
+Qwen vs.\ GLM & 3 & 0 & 0.25 & 1.00 & 0 to $+23$ \\
+Qwen vs.\ DeepSeek & 3 & 0 & 0.25 & 1.00 & 0 to $+23$ \\
+Sonnet vs.\ GLM & 2 & 0 & 0.50 & 1.00 & 0 to $+17$ \\
+Sonnet vs.\ DeepSeek & 3 & 1 & 0.63 & 1.00 & $-7$ to $+20$ \\
+GLM vs.\ DeepSeek & 1 & 1 & 1.00 & 1.00 & $-10$ to $+10$ \\
 \bottomrule
-\end{tabular}%
-}
-\caption{Pairwise exact McNemar comparisons (columns A and B are discordant task counts) and paired bootstrap 95\% CIs (10,000 resamples) among the top four Phase 1 teachers.}
+\end{tabular}
+\caption{Exact McNemar tests among the top four Phase 1 teachers (Qwen3.8 27B, Claude Sonnet 5.5, GLM-5.3-Flash, DeepSeek V4 Flash). A and B count the tasks only that model passed; the last column is the paired bootstrap 95\% CI of the difference (10,000 resamples).}
 \label{tab:bakeoff_mcnemar}
 \end{table}
 
@@ -469,11 +464,11 @@ Tables~\ref{tab:failure_shift} and~\ref{tab:val_causes} report the earliest clas
 
 \begin{table}[h]
 \centering
-\scriptsize
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{lccccc}
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}lrrrrr@{}}
 \toprule
-\textbf{Model, Split} & \textbf{Failed} & \textbf{NONE} & \textbf{LOOP} & \textbf{ARG} & \textbf{TOOL} \\
+\textbf{Model, split} & \textbf{Failed} & \textbf{NONE} & \textbf{LOOP} & \textbf{ARG} & \textbf{TOOL} \\
 \midrule
 Base P, dev & 64 & 2 & 0 & 55 & 7 \\
 SFT v2, dev & 29 & \textbf{20} & 8 & 1 & 0 \\
@@ -481,7 +476,7 @@ SFT v2, val & 26 & \textbf{17} & 7 & 0 & 2 \\
 SFT v2, train pool & 57 & 24 & 27 & 3 & 3 \\
 \bottomrule
 \end{tabular}
-\caption{Earliest classifier finding across failed runs. Before healing, 62/64 base failures start with ARG or TOOL (58 at turn $\le 3$); after healing, 37/55 dev+val failures have zero structural findings (\texttt{NONE}).}
+\caption{Earliest classifier finding in each failed run. Before healing, 62 of 64 base failures start with an ARG or TOOL error (58 by turn 3); after healing, 37 of 55 dev and validation failures have no structural finding (\texttt{NONE}).}
 \label{tab:failure_shift}
 \end{table}
 
@@ -512,42 +507,38 @@ Actions right, another check failed & 1 & 3 & 0 \\
 \centering
 \footnotesize
 \setlength{\tabcolsep}{3pt}
-\resizebox{\columnwidth}{!}{%
-\begin{tabular}{lccccc}
+\begin{tabular}{@{}lrrrrr@{}}
 \toprule
-\textbf{Rollout File} & \textbf{Convs} & \textbf{Step Lim.} & \textbf{Pass} & \textbf{Fired} & \textbf{Max Turns} \\
+\textbf{Rollouts} & \textbf{Convs} & \textbf{Limit} & \textbf{Pass} & \textbf{Fired} & \textbf{Turns} \\
 \midrule
-A-telecom-train & 74 & 6 & 5 & 6 (all lim.) & 100 \\
-C-telecom-train & 74 & 1 & 2 & 1 (lim.) & 99 \\
-A-retail-train & 59 & 0 & 8 & 0 & 27 \\
-A-retail-dev & 15 & 0 & 1 & 0 & 15 \\
-A-airline-train & 24 & 0 & 4 & 0 & 19 \\
-A-airline-dev & 6 & 0 & 1 & 0 & 13 \\
+A, telecom train & 74 & 6 & 5 & 6 & 100 \\
+C, telecom train & 74 & 1 & 2 & 1 & 99 \\
+A, retail train & 59 & 0 & 8 & 0 & 27 \\
+A, retail dev & 15 & 0 & 1 & 0 & 15 \\
+A, airline train & 24 & 0 & 4 & 0 & 19 \\
+A, airline dev & 6 & 0 & 1 & 0 & 13 \\
 \bottomrule
-\end{tabular}%
-}
-\caption{Turn-by-turn replay of the \texttt{no\_progress} runtime monitor across 252 saved Arm A and Arm C conversations. Longest repeat run on retail/airline was 1 (threshold: 3).}
+\end{tabular}
+\caption{The \texttt{no\_progress} monitor replayed turn by turn on 252 saved Arm A and C conversations (Limit: conversations that hit the step limit; Turns: the longest conversation). Every time it fired was a conversation that hit the step limit. The longest repeat run in retail and airline was 1 (threshold 3).}
 \label{tab:monitor_replay}
 \end{table}
 
 \begin{table}[h]
 \centering
-\scriptsize
-\setlength{\tabcolsep}{2.5pt}
-\resizebox{\columnwidth}{!}{%
-\begin{tabular}{lccc}
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}lrrrr@{}}
 \toprule
-\textbf{Telecom Dev Metric (30 vs.\ 30)} & \textbf{A (log)} & \textbf{A + Guard} & \textbf{Guard $-$ A (95\% CI)} \\
+\textbf{Metric} & \textbf{A} & \textbf{Guard} & \textbf{Diff.} & \textbf{95\% CI} \\
 \midrule
-Success rate & 10.0\% & 3.3\% & $-6.7$ ($-23.3$ to $+6.7$) \\
-Tool/Arg hallucination & 100\% & 100\% & 0.0 (0 to 0) \\
-Loop rate (classifier) & 70.0\% & 80.0\% & $+10.0$ ($-3.3$ to $+23.3$) \\
-Steps per task & 11.3 & 10.0 & $-1.2$ ($-3.0$ to $+0.6$) \\
-Redundant-call rate & 27.5\% & 34.8\% & $+7.3$ ($-0.1$ to $+14.1$) \\
+Success rate & 10.0\% & 3.3\% & $-6.7$ & $-23.3$, $+6.7$ \\
+Tool/Arg & 100\% & 100\% & 0.0 & 0, 0 \\
+Loop rate & 70.0\% & 80.0\% & $+10.0$ & $-3.3$, $+23.3$ \\
+Steps per task & 11.3 & 10.0 & $-1.2$ & $-3.0$, $+0.6$ \\
+Redundant calls & 27.5\% & 34.8\% & $+7.3$ & $-0.1$, $+14.1$ \\
 \bottomrule
-\end{tabular}%
-}
-\caption{Live telecom dev guard ablation (15 tasks $\times$ 2 samples, paired bootstrap 95\% CIs). Because \texttt{no\_progress} fired 0 times (max 25 turns), this acts as an A/A test.}
+\end{tabular}
+\caption{Live telecom dev test of the guard (15 tasks $\times$ 2, paired bootstrap 95\% CIs). \texttt{no\_progress} never fired (the longest conversation had 25 turns), so this is in effect an A/A test.}
 \label{tab:guard_ablation}
 \end{table}
 
@@ -607,8 +598,8 @@ Agent: get\_user\_details(user\_id="mei\_davis\_8935")
 \paragraph{With more credits.} Most of what is left are decision errors, so we would widen what counts as a hallucination to made-up intent (a change nobody asked for, or one made before the customer agreed) and use that detector as a guard that blocks a flagged change and asks the customer first. Since 37 of B's 55 failures are decisions, recovering 1 in 5 of them would add about 6 points of success, and the guard should at least halve unrequested changes. We would also learn from more than one teacher, which should help airline most: going from v1 to v2, airline data turned the gate's airline check from $-2$ to $+1$. Retraining v2 on the guard's corrections should bring it within 3 points of the guarded agent, as verified fixes did for Tool/Arg behaviour. We expect general ability to stay within 2 points of base Aya, because QLoRA trains 0.3\% of the weights on 146 conversations, and fresh held-out success within B's 95\% interval. Table~\ref{tab:forecast} summarises these forecasts, which are estimates, each to be tested under a rule set first.
 
 \par\smallskip\noindent
-{\centering\scriptsize\setlength{\tabcolsep}{3pt}%
-\begin{tabular}{@{}p{2.3cm}p{1.95cm}p{0.8cm}p{1.95cm}@{}}
+{\centering\footnotesize\setlength{\tabcolsep}{3pt}%
+\begin{tabular}{@{}p{2.2cm}p{1.9cm}p{0.85cm}p{2.1cm}@{}}
 \toprule
 \textbf{Work} & \textbf{Metric} & \textbf{Now} & \textbf{Expected} \\
 \midrule
