@@ -550,6 +550,32 @@ conversations. Its counts are reported whatever they show. Flagged conversations
 us, separately, before S2D's data is built and before S2E4's or S2R64's validation results are read;
 only those both call a real unconfirmed or mismatched change are removed from S2D's data.
 
+**Amended Sun 22 Nov, 17:05 UK, before it is run on anything: the hybrid judge (the organisers'
+"LLM-as-a-judge with rule-based exceptions").** Stage 1's Tool / Arg / Loop classifier is all rules;
+Stage 2's checker asks an LLM about one call at a time. The audit (below) showed how that judge
+fails on verified-good conversations: it judges one call of a multi-call change as the whole (6 of
+12 flags), its verdict contradicts its reasoning (2), it misreads prices (1). The hybrid judge
+(`scripts/labels/hybrid_judge.py`, `gpt-4.1-2025-04-14`, temperature 0, cached) reads the policy and
+the whole conversation once, after it ends, never the answer key, with facts computed by code for
+exactly those errors: every change made, in order, with the customer's last message before it and
+whether the tool accepted it; every variant's price and options from the lookups (retail); the Stage
+1 classifier's findings. It answers reasoning first, then the verdict, turn, kind and a quote; an
+error counts only if the quote is in the conversation and the turn is an agent turn.
+
+- **Scored against the answer key,** for the first time for any of our detectors: τ²-bench's verdict,
+  and for a failure the turn where the agent's changes first leave the expected ones (the fix step's
+  `fix_point`). Against three baselines: the rules, the frozen checker, and both together (what the
+  guard and the gate used).
+- **Development run:** v2's train-pool conversations (`--split trainpool`, 112), for plumbing only:
+  the prompt and the facts are fixed by this commit and don't change after it. If more than 1 in 20
+  answers are invalid or errors, the plumbing is fixed and the development run repeated, once.
+- **Held-out run, once:** the 224 fresh conversations (`--split fresh`), validation tasks left out.
+- **The bar:** the hybrid judge beats the stack if, on the held-out run, it flags at least as many
+  failures as rules + checker together and at most 1 in 10 passes. Also reported, whatever they
+  show: per domain, at the true turn, within 4 messages, the error kinds, and every invalid answer.
+- **If it meets the bar,** it may replace "no yes" as round 2's practice filter (S2P2), with
+  "flagged" as the filter; that choice is made from the held-out numbers before round 2 practises.
+
 **Also reported, not gates:** S2E4 on the train tasks outside validation (1 sample) against v2's
 55 of 112, the direct test of under-training; the checker's flags per conversation on each arm's
 validation conversations against v2's (the targeted measure); training and held-out loss per arm.
