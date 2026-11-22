@@ -183,7 +183,9 @@ class PrefixTeacher:
     it wrote, why it was refused, cost) for the audit record.
 
     ``extra_check(fixed)``: more reasons to refuse a turn, on top of `check_fix` (e.g. the
-    on-policy fixes' rule that every change must be one the task still expects). Running out of
+    on-policy fixes' rule that every change must be one the task still expects). ``hint``: a note
+    added to the end of the system prompt in what the *teacher* sees (e.g. what a checker flagged
+    at this turn); the saved example's conversation is the agent's own, without it. Running out of
     credits or a model that can't be reached (`reflexive.runner.OutOfCredits`, ``ModelUnavailable``)
     stops the run: every later attempt would fail too, so they aren't logged as refusals.
     """
@@ -192,6 +194,7 @@ class PrefixTeacher:
     model: str = TEACHER
     attempts: int = 3
     extra_check: Callable[[Message], list[str]] | None = None
+    hint: str | None = None
     tried: dict[Task, list[dict[str, Any]]] = field(default_factory=dict)
 
     def _agent(self, temperature: float) -> TurnAgent:
@@ -220,7 +223,10 @@ class PrefixTeacher:
             agent = self._agent(temperature)
             start = time.monotonic()
             try:
-                fixed = _clean_turn(agent.turn([dict(m) for m in prefix], tools))
+                shown = [dict(m) for m in prefix]
+                if self.hint:  # the teacher's copy only: the example keeps the agent's own prompt
+                    shown[0] = {**shown[0], "content": f"{shown[0].get('content') or ''}\n\n{self.hint}"}
+                fixed = _clean_turn(agent.turn(shown, tools))
             except Exception as e:  # noqa: BLE001 - an API failure is a refused attempt, not a crash
                 from reflexive.runner import ModelUnavailable, OutOfCredits
 
