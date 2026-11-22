@@ -317,6 +317,28 @@ out: 224 fresh conversations, 113 failures, 111 passes; 35 failures no frozen ru
 Under the amendment of Sat 23:28, with no v2 rule accepted, retraining is as before it: only if
 Decision 1 says go.
 
+**Amended Sun 22 Nov, 13:42 UK, after the mismatch-fix run and before the fixes are reviewed or
+used: a claimed-but-not-done check.** The run (`onpolicy_fixes.py --points mismatch`) found 43 fix
+points in failed train conversations, 12 flags in passing ones (no fix) and no checker errors; 39
+fixes were accepted (27 that ask or explain with no change, 9 that look something up, 3 that make an
+expected change), from 23 distinct tasks. A sample of 5 of the 27 showed one that says a change was
+made ("return submitted ✅", a refund quoted) with no call behind it: an action claimed but not
+done. Neither `check_fix` nor any rule looks at what a turn says, only at its calls. So, decided now,
+before the rest are read:
+
+- **A fix is dropped if its text says a change was made or is done (submitted, processed, cancelled,
+  exchanged, returned, updated, booked, refunded, "has been", ✅ beside a change) while the turn
+  makes no state-changing call that does it.** Saying what *will* happen once the customer agrees,
+  or what an earlier turn already did, is not a claim.
+- A person (Charlie) reads all 39 against this rule, with Claude's proposed verdict beside each;
+  the person's verdict decides. Nothing else is filtered: a fix isn't dropped for being cautious,
+  long or unhelpful.
+- The kept fixes are what "would be used"; fewer than 30 means the existing rule (retrain only if
+  Decision 1's guard fixes bring the total to 30). The count, the dropped ones' ids and the reason
+  are reported.
+- "Claimed but not done" is noted as an error class missing from the taxonomy, and as the next
+  rule to build (meta-healing v3).
+
 **Amended Sun 22 Nov, 12:18 UK, after Chiara's review of PRs #74–#77 and before any re-run, merge
 or freeze.** Her review fixed bugs in all four (25 issues, each with a test). Three affect results
 already recorded, and are handled as follows, decided now:
