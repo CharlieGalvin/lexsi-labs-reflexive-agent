@@ -25,3 +25,7 @@ arms:
     name: sft-v2-indicative
     description: "SFT v2: v1's data plus the teacher's extra verified airline passes (SEL-71; indicative, not Arm B)"
     prompt_variant: default
+  S2G:
+    name: sft-v2-guarded
+    description: "SFT v2 with the guard (Stage 2, Decision 1): the same model and settings as S2; run with --actions act --rules mismatch. Its own key, so its records never mix with S2's."
+    prompt_variant: default
