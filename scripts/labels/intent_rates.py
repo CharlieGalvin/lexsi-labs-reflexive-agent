@@ -24,12 +24,13 @@ import os
 import sys
 from pathlib import Path
 
-from reflexive.intent import intent_findings
+from reflexive.intent import intent_findings, no_yes
 from reflexive.metrics import is_broken
 from reflexive.splits import assert_not_test
 from reflexive.stats import wilson
 
 ROOT = Path(__file__).resolve().parents[2]
+CACHE = ROOT / "results" / "cache" / "intent-judge.jsonl"
 EPISODES = ROOT / "results" / "episodes" / "arms"
 DOMAINS = ("retail", "airline", "telecom")
 
@@ -61,10 +62,17 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--json", type=Path, help="also write the numbers here")
     p.add_argument("--show", type=int, default=0, help="print this many flagged passes to check by hand")
     p.add_argument("--judge", choices=["on", "off"], default="on", help="the LLM judge behind the words")
-    p.add_argument("--cache", type=Path, default=ROOT / "results" / "cache" / "intent-judge.jsonl")
+    p.add_argument(
+        "--cache",
+        type=Path,
+        help=f"judge cache (default: $REFLEXIVE_JUDGE_CACHE, else {CACHE.relative_to(ROOT)})",
+    )
     a = p.parse_args(argv)
     os.environ["REFLEXIVE_INTENT_JUDGE"] = a.judge
-    os.environ.setdefault("REFLEXIVE_JUDGE_CACHE", str(a.cache))
+    if a.cache:  # asked for explicitly: it wins over the shell's
+        os.environ["REFLEXIVE_JUDGE_CACHE"] = str(a.cache)
+    else:
+        os.environ.setdefault("REFLEXIVE_JUDGE_CACHE", str(CACHE))
 
     out: dict = {"rule": "no_yes", "judge": a.judge, "arm": a.arm, "split": a.split, "domains": {}}
     errors, first_error = 0, ""
@@ -78,10 +86,11 @@ def main(argv: list[str] | None = None) -> int:
         rows = {"failed": [0, 0, 0], "passed": [0, 0, 0]}  # flagged conversations, all, findings
         for r in recs:
             assert_not_test(d, str(r["task_id"]))
-            every = intent_findings(r)
-            found = [x for x in every if x["live"]]  # judge errors are logged, never a flag
-            errors += len(every) - len(found)
-            first_error = first_error or next((x["reason"] for x in every if not x["live"]), "")
+            every = intent_findings(r, rules=[no_yes])  # this script measures no_yes alone
+            found = [x for x in every if x["rule"] == "no_yes" and x["live"]]
+            failed = [x for x in every if x["rule"] == "no_yes_judge_error"]  # logged, never a flag
+            errors += len(failed)
+            first_error = first_error or next((x["reason"] for x in failed), "")
             key = "passed" if r["outcome"]["passed"] else "failed"
             rows[key][0] += bool(found)
             rows[key][1] += 1

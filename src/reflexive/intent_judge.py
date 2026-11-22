@@ -150,9 +150,15 @@ class Judge:
             timeout=60,
         )
         self.calls += 1
-        answer = json.loads(resp.choices[0].message.content or "{}")
+        content = resp.choices[0].message.content
+        if not content or not content.strip():
+            raise ValueError("the judge gave an empty answer")
+        answer = json.loads(content)
         if not isinstance(answer, dict):
             raise ValueError(f"the judge answered {answer!r}, not a JSON object")
+        if not isinstance(answer.get("yes_given"), bool):
+            # Raised, so it is a judge error (never a block) and isn't cached.
+            raise ValueError(f"the judge's answer has no true/false yes_given: {str(answer)[:120]}")
         return answer
 
     def __call__(self, conversation: Sequence[Message], call: dict) -> Verdict:
