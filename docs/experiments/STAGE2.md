@@ -240,8 +240,9 @@ the closest, `retail_transfer_to_human_agent_on_policy_limit`, adds 4/14 retail 
 validation run.** One change to "no yes" (PR #80): a refusal after a polite or hesitant opening
 ("Please stop, I changed my mind.", "Sorry, no.") now withdraws an earlier yes, and "changed my mind"
 counts anywhere; before, only a refusal at the very start of the message did. Found while checking
-the review fixes. Its train rates are re-run with the same bar (at most 1 in 10 passes) and replace
-those above. Meta-healing v1's split is unchanged by the review fixes (checked at 12:56: the same
+the review fixes. Its train rates were re-run with the same bar (at most 1 in 10 passes): unchanged ("no yes"
+3/55 passes, 4/57 failures; words only 10/55, 13/57; "mismatch" 5/55), since no train conversation has a
+withdrawal after a polite opening. Meta-healing v1's split is unchanged by the review fixes (checked at 12:56: the same
 74 / 38 conversations and unexplained failures per domain). The first tag, `stage2-checker-frozen`,
 stays where it is; every Stage 2 guarded run uses `stage2-checker-frozen-2`, which also has the
 `S2G` arm (PR #81: v2 with the guard, its own key so its records never mix with v2's). A judge-only "no yes"
