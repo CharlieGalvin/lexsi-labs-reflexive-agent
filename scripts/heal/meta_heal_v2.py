@@ -171,16 +171,38 @@ def cmd_score(a: argparse.Namespace) -> int:
         f"\nmeets the bar (best {v2.MAX_ACCEPTED}): {', '.join(short) or 'none'}"
         f"  ({chk.calls} new checker calls)"
     )
+    ids = {mh.example_id(r): mh.passed(r) for r in recs}
+    table = v2.layers(ids, frozen, [x.to_dict() for x in scores], short)
+    print_layers(table, "if every rule that meets the bar is accepted")
     write(
         OUT / "scores.json",
-        {"shortlist": short, "scores": [s.to_dict() for s in scores], "frozen_rates": rates},
+        {
+            "shortlist": short,
+            "scores": [s.to_dict() for s in scores],
+            "frozen_rates": rates,
+            "frozen": frozen,
+            "ids": ids,
+        },
     )
-    write_metrics(learned, scores_d=[s.to_dict() for s in scores], short=short, rates=rates, accepted=None)
+    write_metrics(
+        learned, scores_d=[s.to_dict() for s in scores], short=short, rates=rates, accepted=None, layers=table
+    )
     return 0
 
 
+def print_layers(table: list[dict], note: str) -> None:
+    print(f"\nwhat the loop sees without an answer key, on the held-out set ({note}):")
+    for row in table:
+        print(f"  {row['layer']:60s} failures {pct(*row['failures'])}   passes {pct(*row['passes'])}")
+
+
 def write_metrics(
-    learned: dict, scores_d: list[dict], short: list[str], rates: dict, accepted: dict | None
+    learned: dict,
+    scores_d: list[dict],
+    short: list[str],
+    rates: dict,
+    accepted: dict | None,
+    layers: list[dict] | None = None,
 ) -> None:
     held = [
         {
@@ -219,6 +241,7 @@ def write_metrics(
             "final": learned["final"],
             "held_out": held,
             "frozen_rules_held_out": rates,
+            "layers": layers,
             "meets_bar": short,
             "accepted": accepted,
         },
@@ -267,7 +290,9 @@ def cmd_accept(a: argparse.Namespace) -> int:
     rules = [c for c in learned["final"] if c["name"] in names]
     accepted = {"names": names, "reviewer": a.reviewer, "date": dt.date.today().isoformat()}
     write(mh.RULES_PATH, {"ticket": "SEL-91", "v1_accepted": [], "version": 2, **accepted, "accepted": rules})
-    write_metrics(learned, sc["scores"], sc["shortlist"], sc["frozen_rates"], accepted)
+    table = v2.layers(sc["ids"], sc["frozen"], sc["scores"], names)
+    print_layers(table, "with the accepted rules")
+    write_metrics(learned, sc["scores"], sc["shortlist"], sc["frozen_rates"], accepted, layers=table)
     print(f"\naccepted: {', '.join(names) or 'none (that is the result)'}")
     return 0
 

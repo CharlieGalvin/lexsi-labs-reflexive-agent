@@ -123,3 +123,23 @@ def test_the_script_allows_at_most_three_rounds():
 
     with pytest.raises(SystemExit, match="at most 3"):
         load_script("heal/meta_heal_v2").main(["learn", "--rounds", "4"])
+
+
+def test_the_layers_table_is_cumulative_and_counts_failures_and_passes():
+    ids = {"f1": False, "f2": False, "f3": False, "f4": False, "p1": True, "p2": True}
+    frozen = {
+        "f1": {"tal": True, "no_yes": False, "mismatch": False},
+        "f2": {"tal": False, "no_yes": True, "mismatch": True},
+        "f3": {"tal": False, "no_yes": False, "mismatch": True},
+        "f4": {"tal": False, "no_yes": False, "mismatch": False},
+        "p1": {"tal": False, "no_yes": False, "mismatch": True},
+        "p2": {"tal": False, "no_yes": False, "mismatch": False},
+    }
+    scores = [
+        {"name": "r1", "flagged": [{"id": "f4"}, {"id": "f3"}]},
+        {"name": "r2", "flagged": [{"id": "p2"}]},
+    ]
+    rows = v2.layers(ids, frozen, scores, ["r1"])
+    assert [r["failures"] for r in rows] == [[1, 4], [2, 4], [3, 4], [4, 4]]
+    assert [r["passes"] for r in rows] == [[0, 2], [0, 2], [1, 2], [1, 2]]  # r2 isn't accepted
+    assert len(v2.layers(ids, frozen, scores, [])) == 3  # nothing accepted: no fourth layer

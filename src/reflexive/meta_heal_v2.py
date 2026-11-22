@@ -327,6 +327,38 @@ def held_out(
     return out
 
 
+def layers(
+    ids: dict[str, bool], frozen: dict[str, dict[str, bool]], scores: Sequence[dict], names: Sequence[str]
+) -> list[dict]:
+    """What the loop can see without an answer key, one layer of the checker at a time.
+
+    ``ids``: example id -> passed. Each row is cumulative: failures caught and passes flagged by
+    Tool/Arg/Loop, then + "no yes", then + "mismatch", then + the meta-healing rules in ``names``."""
+    hits: dict[str, set[str]] = {s["name"]: {x["id"] for x in s["flagged"]} for s in scores}
+    fails = [i for i, ok in ids.items() if not ok]
+    passes = [i for i, ok in ids.items() if ok]
+    steps = [
+        ("Tool / Arg / Loop (Stage 1)", lambda i: frozen[i]["tal"]),
+        ('+ "no yes" (hand-written)', lambda i: frozen[i]["no_yes"]),
+        ('+ "mismatch" (hand-written after meta-healing v1)', lambda i: frozen[i]["mismatch"]),
+    ]
+    if names:
+        steps.append(
+            (f"+ meta-healing v2 ({', '.join(names)})", lambda i: any(i in hits.get(n, ()) for n in names))
+        )
+    rows, seen = [], set()
+    for label, caught in steps:
+        seen |= {i for i in ids if caught(i)}
+        rows.append(
+            {
+                "layer": label,
+                "failures": [sum(i in seen for i in fails), len(fails)],
+                "passes": [sum(i in seen for i in passes), len(passes)],
+            }
+        )
+    return rows
+
+
 def shortlist(scores: Sequence[HeldOut]) -> list[str]:
     ok = sorted((s for s in scores if s.meets_bar), key=lambda s: (-s.added[0], s.passes[0], s.name))
     return [s.name for s in ok[:MAX_ACCEPTED]]
