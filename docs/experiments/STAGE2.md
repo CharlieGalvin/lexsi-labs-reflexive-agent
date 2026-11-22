@@ -214,7 +214,7 @@ list and each rule's live / after-the-fact mark are added below this line in the
 Nothing changes the checker after the tag. If meta-healing isn't ready, the freeze goes ahead with
 the "no yes" rule only, and meta-healing's rules are reported offline as a separate result.
 
-**Frozen Sun 22 Nov, 12:40 UK, in the commit tagged `stage2-checker-frozen`.** The checker for every
+**Frozen Sun 22 Nov, 12:36 UK, in the commit tagged `stage2-checker-frozen`.** The checker for every
 Stage 2 guarded run (Decision 1, the guard-fix collection, the mismatch fixes, the dev gate's fifth
 check, and any guarded test arm):
 
