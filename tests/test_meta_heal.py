@@ -108,6 +108,16 @@ def test_made_up_evidence_and_errors_never_flag():
     assert not e["flagged"] and "TimeoutError" in e["error"]
 
 
+def test_evidence_must_come_from_the_conversation_not_the_rule_or_the_policy():
+    c = mh.Candidate(
+        "x", "The agent skips a step.", "conversation", "Does the CONVERSATION show a skipped step?"
+    )
+    assert mh.candidate_findings(c, rec(), violated("show a skipped step")) == []  # the rule's own words
+    assert mh.candidate_findings(c, rec(), violated("the original payment method")) == []  # the policy's
+    (hit,) = mh.candidate_findings(c, rec(), violated("your refund goes to your gift card"))
+    assert hit["flagged"]
+
+
 def test_only_state_changing_calls_are_checked():
     r = rec()
     r["agent_view"][2]["tool_calls"] = [call("get_order_details", order_id="#W1")]
@@ -230,6 +240,16 @@ def test_a_judge_failure_while_sorting_explained_from_unexplained_stops_the_run(
 # --- In the checker and the guard -------------------------------------------------------------
 
 
+def test_the_rules_file_can_be_set_and_a_missing_one_is_reported(tmp_path, monkeypatch):
+    p = tmp_path / "meta_rules.json"
+    p.write_text(json.dumps({"accepted": [REFUND.to_dict()]}))
+    monkeypatch.setenv("REFLEXIVE_META_RULES", str(p))
+    assert mh.rules_path() == p and [c.name for c in mh.accepted()] == ["wrong_refund_method"]
+    monkeypatch.setenv("REFLEXIVE_META_RULES", str(tmp_path / "missing.json"))
+    with pytest.warns(UserWarning, match="no meta-healing rules loaded"):
+        assert mh.accepted() == []
+
+
 def test_accepted_rules_load_into_rules_and_judges_off_means_they_never_fire(tmp_path):
     p = tmp_path / "meta_rules.json"
     assert mh.meta_rules(p) == []  # nothing accepted yet: RULES is just "no yes"
@@ -334,3 +354,32 @@ def test_the_script_shares_the_ten_across_rounds_and_shortlists_across_them(tmp_
     s.write_metrics(None)
     m = json.loads((tmp_path / "m.json").read_text())
     assert [r["round"] for r in m["rounds"]] == [1, 2] and m["meets_bar"] == ["a1"]
+
+
+def test_scoring_some_candidates_again_keeps_the_others_and_the_recorded_accept(tmp_path, monkeypatch):
+    from _scripts import load_script
+
+    s = load_script("heal/meta_heal")
+    monkeypatch.setattr(s, "OUT", tmp_path)
+    monkeypatch.setattr(s, "METRICS", tmp_path / "m.json")
+    rules = tmp_path / "meta_rules.json"
+    rules.write_text(json.dumps({"names": [], "reviewer": "Charlie", "date": "2026-11-21", "accepted": []}))
+    monkeypatch.setenv("REFLEXIVE_META_RULES", str(rules))
+    recs = [rec(task_id=str(i)) for i in range(6)]
+    _, held = mh.split(recs)
+    cands = [{**SAID.to_dict(), "name": n} for n in ("a0", "a1")]
+    base = {"seed": 0, "proposer_model": "p", "propose_ids": [], "unexplained_failures": [], "proposed": 2}
+    s.write(s.paths(1)[0], {**base, "holdout_ids": [mh.example_id(r) for r in held], "candidates": cands})
+    good = mh.Score("a1", unexplained_failures=[2, 5]).to_dict()
+    s.write(s.paths(1)[1], {"scores": [mh.Score("a0").to_dict(), good]})
+    monkeypatch.setattr(mh, "score", lambda cs, held, llm: [mh.Score(c.name) for c in cs])
+    monkeypatch.setattr(mh, "LLM", lambda *a, **k: SimpleNamespace(calls=0))
+    assert s.cmd_score(recs, SimpleNamespace(round=1, only="a0")) == 0
+    kept = json.loads(s.paths(1)[1].read_text())["scores"]
+    assert [x["name"] for x in kept] == ["a0", "a1"] and kept[1]["meets_bar"]
+    m = json.loads((tmp_path / "m.json").read_text())
+    assert m["meets_bar"] == ["a1"] and m["accepted"] == {
+        "names": [],
+        "reviewer": "Charlie",
+        "date": "2026-11-21",
+    }

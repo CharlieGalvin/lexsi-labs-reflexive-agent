@@ -24,7 +24,7 @@ meta-healing rules (SEL-91, `reflexive.meta_heal`) a person accepted into ``conf
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from typing import Any
 
 Message = dict[str, Any]
@@ -39,6 +39,9 @@ class ActionFinding:
     reason: str  # one sentence a person can read in the log
     live: bool  # True: checkable at the moment of the change, so the guard may block on it
     message: str = ""  # what the guard tells the agent when it blocks; "" means its BLOCK_MESSAGE
+    # After-the-fact findings from earlier rules on the same call (e.g. a no_yes_judge_error), kept
+    # on the live finding that wins so they still reach the log.
+    also: tuple[ActionFinding, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -66,15 +69,17 @@ def check_action(
     ``policy``: the domain policy text, as the agent's system prompt carries it.
     ``rules``: the rules to run; `RULES` when omitted.
     """
-    later: ActionFinding | None = None
+    later: list[ActionFinding] = []
     for rule in RULES if rules is None else rules:
         finding = rule(conversation, call, policy)
         if finding is None:
             continue
         if finding.live:
-            return finding
-        later = later or finding
-    return later
+            return replace(finding, also=tuple(later)) if later else finding
+        later.append(finding)
+    if not later:
+        return None
+    return replace(later[0], also=tuple(later[1:])) if len(later) > 1 else later[0]
 
 
 # The rules, registered last because reflexive.intent builds its findings from this module.
