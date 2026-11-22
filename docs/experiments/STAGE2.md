@@ -283,6 +283,25 @@ out: 224 fresh conversations, 113 failures, 111 passes; 35 failures no frozen ru
 Under the amendment of Sat 23:28, with no v2 rule accepted, retraining is as before it: only if
 Decision 1 says go.
 
+**Amended Sun 22 Nov, 10:44 UK, before the freeze and before Decision 1 runs: retraining runs either
+way, on fixes at the "mismatch" rule's findings.** The amendment of Sat 23:28 applies, with the
+frozen "mismatch" rule in place of an accepted meta-healing v2 rule (it is the rule meta-healing v1
+pointed to, tightened by a person, and the only new rule that held up out of sample). So:
+
+- **Fix points:** every change "mismatch" flags in the train conversations (v2's 112 train-pool and
+  224 fresh ones), failures and passes alike. GLM-5.3-Flash rewrites that turn, told the rule's
+  description, up to 3 attempts, through Stage 1's checks; on these train tasks a fix is kept only
+  if every change in it is one the task still expects. A wrong flag therefore yields no fix.
+- **Retraining:** Decision 1 go: v2's data + guard fixes + mismatch fixes. No-go: v2's data +
+  mismatch fixes. Fewer than 30 fixes in what would be used: report the count, skip retraining.
+  The 30 is not lowered.
+- **Targeted measure (reported, not a gate):** "mismatch" flags per conversation on the retrained
+  model's dev conversations against v2's.
+- **What it shows:** a loop that chooses what to fix without an answer key, as it would in
+  deployment. On train tasks the answer key could find these mistakes anyway; this is a
+  demonstration of the label-free loop, not a better source of data. An overall gain is credited to
+  the loop as a whole.
+
 **Amended Sat 21 Nov, 23:28 UK, before meta-healing v2 is scored and before Decision 1 runs:
 meta-healing's fixes join retraining, and retraining no longer depends on Decision 1.**
 
