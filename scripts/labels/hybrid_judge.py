@@ -317,7 +317,8 @@ def label(recs: Iterable[Record], val: set[tuple[str, str]]) -> list[dict]:
         passed = bool((r.get("outcome") or {}).get("passed"))
         point, diag, _ = dom.fix_point(r)
         true_turn = point.turn if (not passed and point is not None and point.kind != "classifier") else None
-        found = [f for f in intent_findings(r, rules=[no_yes, mismatch]) if f.get("live")]
+        every = intent_findings(r, rules=[no_yes, mismatch])
+        found = [f for f in every if f.get("live")]
         rows.append(
             {
                 "domain": d,
@@ -335,6 +336,7 @@ def label(recs: Iterable[Record], val: set[tuple[str, str]]) -> list[dict]:
                     "flagged": bool(found),
                     "turn": min((f["turn"] for f in found), default=None),
                     "kind": found[0]["rule"] if found else None,
+                    "errors": sum(not f.get("live") for f in every),
                 },
                 "_view": agent_view_of(r),
                 "_classifier": [f.to_dict() for f in diag.findings],
@@ -399,6 +401,19 @@ def main() -> int:
 
         judge_all(rows, LLM(MODEL, cache_path=CACHE / "hybrid-judge.jsonl", max_tokens=2000), a.workers)
         detectors.append("hybrid")
+    errs = sum(r["checker"]["errors"] for r in rows)
+    if errs:
+        print(f"⚠ {errs} checker errors (an error never flags); e.g. a missing or wrong OPENAI_API_KEY")
+    if (
+        "hybrid" in detectors
+        and rows
+        and all(str(r["hybrid"].get("invalid", "")).startswith("judge error") for r in rows)
+    ):
+        print(
+            f"⛔ every judge call failed, e.g. {rows[0]['hybrid']['invalid']}"
+            ": check OPENAI_API_KEY; nothing saved"
+        )
+        return 1
     rep = score(rows, detectors)
     for det in detectors:
         x = rep[det]["all"]
