@@ -17,9 +17,10 @@ call and the domain policy. It never reads τ²-bench's expected actions or the 
 * ``live=False``: needs more than the moment of the change (later turns, the outcome), or is too
   slow to run on every call. Used by the gate and in reports only; the guard logs it, never blocks.
 
-This is the agreed interface. ``RULES`` holds SEL-88's ``no_yes`` (`reflexive.intent`), the hand-written
-``mismatch`` (`reflexive.mismatch`), then the
+This is the agreed interface. ``RULES`` holds SEL-88's ``no_yes`` (`reflexive.intent`), then the
 meta-healing rules (SEL-91, `reflexive.meta_heal`) a person accepted into ``configs/meta_rules.json``.
+Rules in `OPTIONAL_RULES` (the hand-written ``mismatch``) run only for an arm that asks for them, via
+`checker_with`.
 """
 
 from __future__ import annotations
@@ -88,12 +89,28 @@ from reflexive.intent import no_yes  # noqa: E402
 
 RULES.append(no_yes)
 
-# Hand-written after meta-healing: a change that doesn't match the request or the lookups.
-from reflexive.mismatch import mismatch  # noqa: E402
-
-RULES.append(mismatch)
-
 # SEL-91: the meta-healing rules a person accepted (configs/meta_rules.json), after "no yes".
 from reflexive.meta_heal import meta_rules  # noqa: E402
 
 RULES.extend(meta_rules())
+
+# Hand-written after meta-healing: a change that doesn't match the request or the lookups. Not in
+# RULES: on train it flags about 1 in 5 good retail changes (results/rule-rates-mismatch.metrics.json),
+# above STAGE2.md's 1-in-10 bar, and it calls full GPT-4.1 on every order or reservation change. So
+# the default guard, and re-runs of arms already published, don't change; an arm opts in.
+from reflexive.mismatch import mismatch  # noqa: E402
+
+OPTIONAL_RULES: dict[str, Rule] = {"mismatch": mismatch}
+
+
+def checker_with(*names: str) -> Callable[[Sequence[Message], dict, str], ActionFinding | None]:
+    """`check_action` with `RULES` and, after them, these `OPTIONAL_RULES` (an arm's ``checker``)."""
+    unknown = [n for n in names if n not in OPTIONAL_RULES]
+    if unknown:
+        raise ValueError(f"no optional rule {unknown}; there are {sorted(OPTIONAL_RULES)}")
+    extra = [OPTIONAL_RULES[n] for n in names]
+
+    def checker(conversation: Sequence[Message], call: dict, policy: str) -> ActionFinding | None:
+        return check_action(conversation, call, policy, [*RULES, *extra])
+
+    return checker

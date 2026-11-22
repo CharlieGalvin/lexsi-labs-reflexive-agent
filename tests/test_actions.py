@@ -15,9 +15,8 @@ VIEW = [{"role": "system", "content": "policy"}, {"role": "user", "content": "Ca
 def test_with_no_rules_nothing_is_flagged_and_sel_88s_rule_is_the_default():
     assert check_action(VIEW, CALL, "policy", rules=[]) is None
     from reflexive.intent import no_yes
-    from reflexive.mismatch import mismatch
 
-    assert RULES == [no_yes, mismatch]  # SEL-88, then the hand-written mismatch rule
+    assert RULES == [no_yes]  # SEL-88; the hand-written mismatch rule is opt-in
     f = check_action(VIEW, CALL, "policy")  # a request up front, never described or confirmed
     assert f is not None and (f.rule, f.live) == ("no_yes", True)
 

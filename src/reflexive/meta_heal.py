@@ -49,9 +49,7 @@ MIN_FLAGGED, MIN_SHARE, MAX_PASSES = 2, 0.20, 1  # STAGE2.md's acceptance bar, o
 HOLDOUT_SHARE = 1 / 3
 MAX_CHARS = 1200  # per message or tool result in a transcript
 MAX_POLICY_CHARS = 30_000
-MAX_ANSWER_TOKENS = (
-    4000  # a rule's answer is a few lines and the proposer's ten rules fit; a runaway stops here
-)
+MAX_ANSWER_TOKENS = 4000  # the rule checker's cap: its answer is a few lines; a runaway stops here
 ROOT = Path(__file__).resolve().parents[2]
 RULES_PATH = ROOT / "configs" / "meta_rules.json"  # the checkout's; REFLEXIVE_META_RULES overrides it
 
@@ -177,9 +175,15 @@ class LLM:
     """One pinned model at temperature 0, JSON answers, cached by the exact request (a re-run is free)."""
 
     def __init__(
-        self, model: str, completion: Callable[..., Any] | None = None, cache_path: Path | str | None = None
+        self,
+        model: str,
+        completion: Callable[..., Any] | None = None,
+        cache_path: Path | str | None = None,
+        max_tokens: int | None = None,
     ) -> None:
+        """``max_tokens``: a cap on each answer (the rule checker's); None, as for the proposer, is none."""
         self.model = model
+        self.max_tokens = max_tokens
         self._completion = completion
         self.cache_path = Path(cache_path) if cache_path else None
         self.cache: dict[str, dict] = {}
@@ -209,9 +213,11 @@ class LLM:
             response_format={"type": "json_object"},
             num_retries=2,
             timeout=180,
-            max_tokens=MAX_ANSWER_TOKENS,
+            **({"max_tokens": self.max_tokens} if self.max_tokens else {}),
         )
         self.calls += 1
+        if getattr(resp.choices[0], "finish_reason", None) == "length":
+            raise ValueError(f"the answer was cut off at max_tokens={self.max_tokens}")
         answer = json.loads(resp.choices[0].message.content or "{}")
         if not isinstance(answer, dict):
             raise ValueError(f"the model answered {answer!r}, not a JSON object")
@@ -238,7 +244,9 @@ def default_rule_llm(model: str = "") -> LLM | None:
         return None
     model = model or RULE_MODEL
     if model not in _rule_llms:
-        _rule_llms[model] = LLM(model, cache_path=os.environ.get("REFLEXIVE_META_CACHE") or None)
+        _rule_llms[model] = LLM(
+            model, cache_path=os.environ.get("REFLEXIVE_META_CACHE") or None, max_tokens=MAX_ANSWER_TOKENS
+        )
     return _rule_llms[model]
 
 

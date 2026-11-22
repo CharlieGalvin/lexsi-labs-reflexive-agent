@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import json
 import random
+from types import SimpleNamespace
 
+import pytest
 from _scripts import load_script
 
 from reflexive import meta_heal as mh
-from reflexive.actions import RULES
+from reflexive.actions import OPTIONAL_RULES, RULES, ActionFinding, checker_with
 from reflexive.intent import ALL_WRITE_TOOLS
 from reflexive.mismatch import RULE, TOOLS, mismatch
 
@@ -35,8 +37,8 @@ class Fake:
         return self.answer
 
 
-def test_it_is_registered_after_no_yes_and_is_live_with_its_own_message():
-    assert [r.__name__ for r in RULES][:2] == ["no_yes", "mismatch"]  # ty: ignore[unresolved-attribute]
+def test_it_is_opt_in_not_in_the_default_rules_and_is_live_with_its_own_message():
+    assert mismatch not in RULES and OPTIONAL_RULES["mismatch"] is mismatch
     assert RULE.live and RULE.block_message and RULE.applies_to == "call"
     assert RULE.model == "gpt-4.1-2025-04-14"  # full GPT-4.1, pinned
     assert mh.default_rule_llm() is None  # conftest: judges off
@@ -135,3 +137,102 @@ def test_rule_rates_counts_a_checker_error_as_not_flagged_and_shows_the_worst_ca
         intent, "intent_findings", lambda r, rules=None: [{"live": False, "reason": "Missing credentials"}]
     )
     assert s.main(["--episodes", str(tmp_path)]) == 1  # a setup error still stops the run
+
+
+def test_an_arm_opts_in_with_checker_with(monkeypatch):
+    import reflexive.actions as actions
+
+    hit = ActionFinding("INTENT", "mismatch", "wrong item", live=True)
+    monkeypatch.setitem(actions.OPTIONAL_RULES, "mismatch", lambda *a: hit)
+    monkeypatch.setattr(actions, "RULES", [])
+    assert checker_with()(VIEW, call("cancel_pending_order", order_id="#W1"), "p") is None
+    assert checker_with("mismatch")(VIEW, call("cancel_pending_order", order_id="#W1"), "p") is hit
+    with pytest.raises(ValueError, match="no optional rule"):
+        checker_with("nope")
+
+
+def test_validation_tasks_need_every_domains_file(tmp_path):
+    s = load_script("labels/rule_rates")
+    (tmp_path / "P-retail-val.jsonl").write_text('{"task_id": "7"}\n')
+    assert s.val_tasks(tmp_path) is None  # airline and telecom missing: nothing would be dropped there
+    for d in ("airline", "telecom"):
+        (tmp_path / f"P-{d}-val.jsonl").write_text('{"task_id": "1"}\n')
+    assert s.val_tasks(tmp_path) == {("retail", "7"), ("airline", "1"), ("telecom", "1")}
+
+
+def test_a_catch_counts_only_when_the_original_is_not_flagged():
+    s = load_script("labels/rule_rates")
+    seen = '"item_id": "1111111111" "item_id": "2222222222"'
+    calls = [call("return_delivered_order_items", order_id="#W1", item_ids=["1111111111"]) for _ in range(2)]
+    recs = [
+        {
+            "_arm": "S2",
+            "domain": "retail",
+            "task_id": str(i),
+            "outcome": {"passed": True},
+            "agent_view": [
+                {"role": "system", "content": "P"},
+                {"role": "tool", "content": seen},
+                {"role": "assistant", "content": "", "tool_calls": [c]},
+            ],
+        }
+        for i, c in enumerate(calls)
+    ]
+    hit = ActionFinding("INTENT", "mismatch", "x", live=True)
+    every = s.injected(recs, 2, lambda *a: hit)  # flags everything, originals included
+    assert (every["tried"], every["caught"], every["caught_raw"], every["clean_flagged"]) == (2, 0, 2, 2)
+
+    def only_bad(conversation, c, policy):
+        return hit if len(json.loads(c["function"]["arguments"])["item_ids"]) == 2 else None
+
+    good = s.injected(recs, 2, only_bad)
+    assert (good["caught"], good["caught_raw"], good["clean_flagged"]) == (2, 2, 0)
+
+
+def test_a_flat_call_can_be_corrupted():
+    s = load_script("labels/rule_rates")
+    flat = {"name": "cancel_pending_order", "arguments": json.dumps({"order_id": "#W1234567"})}
+    c, _ = s.corrupt(flat, "#W1234567 #W7654321", random.Random(0))
+    assert json.loads(c["arguments"])["order_id"] == "#W7654321"
+
+
+def test_one_arm_with_two_splits_is_reported_per_split(tmp_path, monkeypatch):
+    import reflexive.intent as intent
+    from reflexive.splits import task_ids
+
+    s = load_script("labels/rule_rates")
+    t = task_ids("retail", "train")[0]
+    rec = {"domain": "retail", "task_id": t, "outcome": {"passed": True}, "messages": [], "agent_view": []}
+    for split in ("trainpool", "train"):
+        (tmp_path / f"S2-retail-{split}.jsonl").write_text(json.dumps(rec) + "\n")
+    for d in ("retail", "airline", "telecom"):
+        (tmp_path / f"P-{d}-val.jsonl").write_text("")
+    monkeypatch.setattr(intent, "intent_findings", lambda r, rules=None: [])
+    out = tmp_path / "o.json"
+    assert s.main(["--episodes", str(tmp_path), "--arms", "S2:trainpool,S2:train", "--json", str(out)]) == 0
+    m = json.loads(out.read_text())["rules"]
+    assert (
+        m["S2:trainpool/no_yes"]["all"]["passes"]["n"] == 1
+        and m["S2:train/no_yes"]["all"]["passes"]["n"] == 1
+    )
+    assert "S2/no_yes" not in m
+
+
+def test_only_the_rule_checker_caps_its_answer():
+    seen = []
+
+    def completion(**kw):
+        seen.append(kw)
+        msg = SimpleNamespace(content='{"violated": false}')
+        return SimpleNamespace(choices=[SimpleNamespace(message=msg, finish_reason="stop")])
+
+    mh.LLM("proposer", completion=completion)([{"role": "user", "content": "a"}])
+    mh.LLM("rule", completion=completion, max_tokens=mh.MAX_ANSWER_TOKENS)([{"role": "user", "content": "b"}])
+    assert "max_tokens" not in seen[0] and seen[1]["max_tokens"] == mh.MAX_ANSWER_TOKENS
+
+    def cut(**kw):
+        msg = SimpleNamespace(content='{"viol')
+        return SimpleNamespace(choices=[SimpleNamespace(message=msg, finish_reason="length")])
+
+    with pytest.raises(ValueError, match="cut off"):
+        mh.LLM("rule", completion=cut, max_tokens=10)([{"role": "user", "content": "c"}])

@@ -15,8 +15,10 @@ have blocked in a conversation that went well: STAGE2.md's bar is 1 in 10).
 
 ``--inject N``: N changes from passing conversations, each corrupted once (an item swapped for
 another item ID the agent saw, an item dropped or added, another order, a flight dropped, a date
-moved, one more bag). The mismatch rule should flag the corrupted call and not the original.
-Injected errors are easier than real ones: a sanity check of the rule, not a headline.
+moved, one more bag). The mismatch rule should flag the corrupted call and not the original:
+``caught`` counts only those; ``caught_raw`` also counts a corrupted call flagged when its original
+was flagged too, which says nothing about the corruption. Injected errors are easier than real
+ones: a sanity check of the rule, not a headline.
 
 Needs OPENAI_API_KEY; every answer is cached (results/cache/), so a re-run is free.
 """
@@ -49,22 +51,25 @@ SETUP_ERROR = re.compile(
 
 
 def val_tasks(episodes: Path) -> set[tuple[str, str]] | None:
+    """The validation tasks of every domain; None unless all three P-*-val.jsonl files are there
+    (a missing one would let that domain's validation tasks through)."""
     out: set[tuple[str, str]] = set()
-    found = False
     for d in DOMAINS:
         f = episodes / f"P-{d}-val.jsonl"
-        if f.exists():
-            found = True
-            for line in f.read_text().splitlines():
-                if line.strip():
-                    try:
-                        out.add((d, str(json.loads(line)["task_id"])))
-                    except (json.JSONDecodeError, KeyError):
-                        continue
-    return out if found else None
+        if not f.exists():
+            return None
+        for line in f.read_text().splitlines():
+            if line.strip():
+                try:
+                    out.add((d, str(json.loads(line)["task_id"])))
+                except (json.JSONDecodeError, KeyError):
+                    continue
+    return out
 
 
-def load(episodes: Path, arm: str, split: str, val: set[tuple[str, str]]) -> tuple[list[dict], int]:
+def load(
+    episodes: Path, arm: str, split: str, val: set[tuple[str, str]], label: str | None = None
+) -> tuple[list[dict], int]:
     recs: dict[tuple, dict] = {}
     dropped = 0
     for d in DOMAINS:
@@ -84,7 +89,7 @@ def load(episodes: Path, arm: str, split: str, val: set[tuple[str, str]]) -> tup
             if (d, t) in val or split_of(d, t) != "train":
                 dropped += 1
                 continue
-            recs[(arm, d, t, r.get("sample", 0))] = {**r, "_arm": arm}
+            recs[(arm, d, t, r.get("sample", 0))] = {**r, "_arm": label or arm}
     return list(recs.values()), dropped
 
 
@@ -109,7 +114,7 @@ def _args(call: dict) -> dict:
 
 def _with(call: dict, args: dict) -> dict:
     c = copy.deepcopy(call)
-    c["function"]["arguments"] = json.dumps(args)
+    (c.get("function") or c)["arguments"] = json.dumps(args)
     return c
 
 
@@ -168,10 +173,10 @@ def injected(recs: list[dict], n: int, rule: Callable[..., Any], seed: int = 0) 
         view = agent_view_of(r)
         for i, m in enumerate(view):
             for c in (m.get("tool_calls") or []) if m.get("role") == "assistant" else []:
-                if (c.get("function") or {}).get("name") in TOOLS:
+                if (c.get("function") or c).get("name") in TOOLS:
                     points.append((r, view, i, c))
     rng.shuffle(points)
-    out = {"tried": 0, "caught": 0, "clean_flagged": 0, "errors": 0, "kinds": {}}
+    out = {"tried": 0, "caught": 0, "caught_raw": 0, "clean_flagged": 0, "errors": 0, "kinds": {}}
     for _r, view, i, c in points:
         if out["tried"] >= n:
             break
@@ -188,9 +193,10 @@ def injected(recs: list[dict], n: int, rule: Callable[..., Any], seed: int = 0) 
         hit = hit if hit is not None and hit.live else None  # an error never flags
         clean = clean if clean is not None and clean.live else None
         k = out["kinds"].setdefault(kind, [0, 0])
-        k[0] += hit is not None
+        k[0] += hit is not None and clean is None
         k[1] += 1
-        out["caught"] += hit is not None
+        out["caught"] += hit is not None and clean is None  # the corruption, not the change, was flagged
+        out["caught_raw"] += hit is not None
         out["clean_flagged"] += clean is not None
     return out
 
@@ -213,15 +219,19 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901 - one report, read
     from reflexive.intent import intent_findings, no_yes
     from reflexive.mismatch import mismatch
 
-    pairs = [tuple(x.split(":", 1)) for x in a.arms.split(",") if x]
+    pairs = list(dict.fromkeys(tuple(x.split(":", 1)) for x in a.arms.split(",") if x))
+    # An arm given with two splits is reported per split, so neither is counted twice.
+    arms = [arm for arm, _ in pairs]
+    labels = [arm if arms.count(arm) == 1 else f"{arm}:{split}" for arm, split in pairs]
     val = val_tasks(a.episodes)
     if val is None and pairs != [("S2", "trainpool")]:
         sys.exit(
-            "⛔ no P-*-val.jsonl found: can't drop the validation tasks, so only S2:trainpool is allowed"
+            "⛔ P-{retail,airline,telecom}-val.jsonl aren't all there: can't drop the validation tasks,"
+            " so only S2:trainpool is allowed"
         )
     recs: list[dict] = []
-    for arm, split in pairs:
-        rs, dropped = load(a.episodes, arm, split, val or set())
+    for (arm, split), label in zip(pairs, labels, strict=True):
+        rs, dropped = load(a.episodes, arm, split, val or set(), label)
         print(
             f"{arm}:{split}: {len(rs)} conversations"
             + (f" ({dropped} validation/non-train dropped)" if dropped else "")
@@ -275,7 +285,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901 - one report, read
             print(f"  - {e[:200]}")
 
     keys = ("failures", "unexplained failures", "passes")
-    for arm, _ in pairs:
+    for arm in labels:
         print(f"\n== {arm}")
         for rule in ("no_yes", "mismatch", "either"):
             print(f"  {rule}")
@@ -302,8 +312,9 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901 - one report, read
         inj = injected(recs, a.inject, mismatch)
         out["injected"] = inj
         print(
-            f"\ninjected errors: caught {share(inj['caught'], inj['tried'])}; "
-            f"the same changes uncorrupted flagged {share(inj['clean_flagged'], inj['tried'])}"
+            f"\ninjected errors: caught {share(inj['caught'], inj['tried'])} (original not flagged);"
+            f" {inj['caught_raw']} flagged in all;"
+            f" the same changes uncorrupted flagged {share(inj['clean_flagged'], inj['tried'])}"
             + (f"; {inj['errors']} checker errors, counted as not flagged" if inj["errors"] else "")
         )
         for kind, (k, n) in sorted(inj["kinds"].items()):
