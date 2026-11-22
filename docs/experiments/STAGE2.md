@@ -214,6 +214,28 @@ list and each rule's live / after-the-fact mark are added below this line in the
 Nothing changes the checker after the tag. If meta-healing isn't ready, the freeze goes ahead with
 the "no yes" rule only, and meta-healing's rules are reported offline as a separate result.
 
+**Frozen Sun 22 Nov, 12:40 UK, in the commit tagged `stage2-checker-frozen`.** The checker for every
+Stage 2 guarded run (Decision 1, the guard-fix collection, the mismatch fixes, the dev gate's fifth
+check, and any guarded test arm):
+
+| Rule | Where | Checks | Model | Mark |
+|---|---|---|---|---|
+| Tool / Arg / Loop | `reflexive.hallucination` | every call | none (deterministic) | after the fact (the loop monitor stays in log mode) |
+| `no_yes` | `reflexive.intent`, default `RULES` | retail and airline changes, telecom `refuel_data` | word match, then `gpt-4.1-mini-2025-04-14` | live |
+| `mismatch` | `reflexive.mismatch`, `OPTIONAL_RULES` | 7 listed retail / airline changes | `gpt-4.1-2025-04-14` | live, own block message |
+
+Runs opt into "mismatch" with `scripts/arms/rollout.py --rules mismatch` (PR #79); each record
+notes `checker_rules`. No meta-healing rule is in the checker: v1 and v2 accepted none, and v2's
+domain-scoped re-score (secondary) also passes none.
+
+Rates measured with this checker (train-pool, 112 conversations; re-run after the review fixes):
+"no yes" 4/57 failures, 3/55 passes (words only: 13/57, 10/55); "mismatch" 14/57, 5/55; either
+15/57, 6/55; injected errors 29/40 caught with the original not flagged (37/40 flagged in all), 8/40
+originals flagged. Held out (224 fresh): "no yes" 4/113, 2/111; "mismatch" 29/113, 7/111; with Tool /
+Arg / Loop, 78/113 failures (69%) and 22/111 passes (20%). Meta-healing v2's domain-scoped re-score:
+the closest, `retail_transfer_to_human_agent_on_policy_limit`, adds 4/14 retail failures and flags
+6/43 retail passes (14%); none meets the bar.
+
 ## The guard (SEL-89)
 
 `reflexive.monitor.ActionGuard`, PR #73. Before a reply is sent to τ²-bench, every state-changing
