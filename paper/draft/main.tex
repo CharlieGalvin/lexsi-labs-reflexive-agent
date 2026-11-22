@@ -209,7 +209,7 @@ To answer RQ3, we ran the whole loop unattended on one H100, starting from base 
 
 \paragraph{Fixing whole conversations was.} With trajectory-level fixes across all 112 training tasks, the adapter cut findings by 87\% and lifted dev success from 6 to 22 of 36 (17 wins against 1 loss, $p=0.0001$). The gate promoted it, and the loop swapped it into the live server with no one involved; the customer simulator cost \$5.89. One caveat keeps this honest: the two cycles differ in more than the grain of the fix, including pool size, deduplication and training steps, and the second drew on SFT v2's pool, which already included extra airline conversations added after the gate had rejected v1. The cycle shows the loop can reproduce SFT v2's promotion on its own; the held-out evidence remains B's 51.5\% on test.
 
-\subsection{What Else We Learned}
+\subsection{Ablations, Negative Results and Error Analysis}
 \label{sec:exp_ablations}
 
 \begin{table*}[t]
