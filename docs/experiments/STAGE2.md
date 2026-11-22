@@ -283,6 +283,32 @@ out: 224 fresh conversations, 113 failures, 111 passes; 35 failures no frozen ru
 Under the amendment of Sat 23:28, with no v2 rule accepted, retraining is as before it: only if
 Decision 1 says go.
 
+**Amended Sun 22 Nov, 12:20 UK, after Chiara's review of PRs #74–#77 and before any re-run, merge
+or freeze.** Her review fixed bugs in all four (25 issues, each with a test). Three affect results
+already recorded, and are handled as follows, decided now:
+
+- **"No yes" is the fixed version.** Five bugs: contractions ("isn't", "don't") and questions ("is
+  that correct?") read as a yes; friendly openings ("Don't worry, go ahead") read as a refusal; a
+  yes not tied to the change it answers; an empty judge answer blocking instead of counting as an
+  error. The frozen checker uses the fixed rule. Its train rates (`just intent-rates`, with and
+  without the judge) and the "no yes" and "either" rows of `just rule-rates` are re-run before the
+  freeze, and replace the earlier numbers; both are reported.
+- **"Mismatch" is opt-in, and opted in for Stage 2's guarded runs.** The rule is unchanged. It is
+  no longer in the default `RULES`, so earlier published arms behave as before; Decision 1, the
+  guard-fix collection and the mismatch fixes run with `checker_with("mismatch")`. It met its
+  pre-registered bar, which is overall (5 of 55 train passes; 7 of 111 held-out passes). Retail
+  alone was 5 of 21; Decision 1's check on wrongly blocked good changes tests exactly that, and is
+  reported per domain. The injected-error count now credits a catch only when the original change
+  is not flagged too (`caught`; the old count is kept as `caught_raw`).
+- **Meta-healing v2's domain-scoped re-score is a secondary analysis and cannot change the
+  verdict.** The review found that rules were scored on every domain, though each is named for one
+  (e.g. `retail_transfer_to_human_agent_on_policy_limit`). The re-score that limits each rule to its
+  own domain is reported beside this morning's result. The primary verdict stays as recorded: no
+  rule accepted. If a rule crosses the bar only under the re-score, that is reported as a
+  sensitivity result and a reason for v3, not an acceptance. Because the fixed "no yes" changes
+  which held-out failures count as caught, the re-score also reports the frozen layers again.
+- **Meta-healing v1 is not re-run.** It used the earlier "no yes"; that is noted beside its result.
+
 **Amended Sun 22 Nov, 10:40 UK, before the freeze and before Decision 1 runs: retraining runs either
 way, on fixes at the "mismatch" rule's findings.** The amendment of Sat 23:28 applies, with the
 frozen "mismatch" rule in place of an accepted meta-healing v2 rule (it is the rule meta-healing v1
