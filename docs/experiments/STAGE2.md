@@ -519,6 +519,31 @@ reaches validation is scored on 8 samples (`--samples 8`; `stage2b_compare.py` d
 rule is unchanged: +2.0, a 95% range above 0, no domain down more than 1.5. S2Q's serving check
 uses the same 8 samples. Decision 1's S2G (15.0, 2 samples) sits inside v2's range of 12 to 19.
 
+**Amended Sun 22 Nov, 17:01 UK, before any candidate is trained or scored: the self-practice loop
+comes first; S2R64 is dropped; the arms are S2E4, S2P1, S2Q, S2D and S2P2.** Stage 2 healed only
+what a detector found (about a quarter of failures; 113 failures → 21 verified fixes, too few to
+retrain). The loop heals what τ²-bench's verifier finds, on every task, from the student's own
+whole conversations: a kind of data no SFT version has had (v2 and v3 are the teacher's
+conversations, v4 single teacher turns). Round 1 (S2P1, SEL-23), fixed now:
+
+- **Practice** (`scripts/heal/practice.py run`, arm S2PR, `configs/sft/arms.s2pr.yaml`): v2 at
+  temperature 0.7 on the 112 train tasks outside validation, 2 attempts each, guard off.
+- **Verify** (`practice.py build`): kept only if τ²-bench passes it, it is clean
+  (`golden.why_not_clean`), and the frozen "no yes" rule flags no change; at most 2 per task.
+  "Mismatch" isn't used as a filter: the training-data audit (below) found at least 9 of its 12 flags
+  on v2's 161 verified training conversations were its own errors. Counts and reasons are reported.
+- **Heal:** a task the student never passes keeps the teacher's conversation already in v2's data.
+- **Retrain** from base with v2's recipe exactly (`configs/train/sft_aya32b_p1.yaml`, 2 epochs), on
+  v2's data plus the kept practice conversations (group `practice`), and score S2P1 on validation
+  at 8 samples (`configs/sft/arms.s2p1.yaml`).
+- **Read:** the rule against v2, as every arm. Also reported: S2P1 against S2E4, which has about as
+  many training steps on v2's data alone, so the difference is the practice data's own effect.
+- **Round 2 (S2P2),** only if it can finish before the test run must start (Mon 22:00 UK):
+  practice with S2P1's model, the same filter, trained with the recipe (v2's or S2E4's) that met the
+  rule with the larger gain, else v2's. The chart is validation success against round.
+- **S2R64 is dropped**, to give the GPU to the loop. **S2Q** runs Monday on whichever pod is free.
+  **S2D** runs only if there is GPU time before Mon 22:00. Neither changes the rule.
+
 **The training-data audit (meta-healing on our own data).** `scripts/data/audit_training_data.py`
 runs the frozen checker ("no yes" and "mismatch") over every state-changing call in v2's training
 conversations. Its counts are reported whatever they show. Flagged conversations are read by two of
