@@ -36,7 +36,7 @@ class Fake:
 
 
 def test_it_is_registered_after_no_yes_and_is_live_with_its_own_message():
-    assert [r.__name__ for r in RULES][:2] == ["no_yes", "mismatch"]
+    assert [r.__name__ for r in RULES][:2] == ["no_yes", "mismatch"]  # ty: ignore[unresolved-attribute]
     assert RULE.live and RULE.block_message and RULE.applies_to == "call"
     assert RULE.model == "gpt-4.1-2025-04-14"  # full GPT-4.1, pinned
     assert mh.default_rule_llm() is None  # conftest: judges off
@@ -112,7 +112,7 @@ def test_rule_rates_counts_a_checker_error_as_not_flagged_and_shows_the_worst_ca
     (tmp_path / "S2-retail-trainpool.jsonl").write_text(json.dumps(rec) + "\n")
 
     def findings(r, rules=None):
-        if rules[0].__name__ == "mismatch":
+        if rules and rules[0].__name__ == "mismatch":  # ty: ignore[unresolved-attribute]
             return [
                 {
                     "turn": 1,
