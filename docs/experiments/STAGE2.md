@@ -581,7 +581,7 @@ simulator's, which more samples reduce. So, fixed now:
 - **Disclosed:** this extension was decided after seeing the 2-sample result (about 1 in 20 short of
   the bar). That is sequential testing, and it makes a false positive somewhat likelier than 5%;
   the paper says so. S2P1 is not extended: it didn't meet the validation rule and hasn't been on test.
-- **Scope:** nothing else runs. Budget past $200 agreed by the team.
+- **Scope:** nothing else runs. About $60–100 of API calls; past the $200 total only with the team's agreement.
 
 **The training-data audit (meta-healing on our own data).** `scripts/data/audit_training_data.py`
 runs the frozen checker ("no yes" and "mismatch") over every state-changing call in v2's training
