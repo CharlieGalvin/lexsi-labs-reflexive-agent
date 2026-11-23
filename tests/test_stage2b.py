@@ -112,3 +112,19 @@ def test_the_audit_refuses_a_task_outside_train():
     t = sorted(task_ids("retail", "test"))[0]
     with pytest.raises(SystemExit):
         aud.audit([{"domain": "retail", "task_id": t, "messages": []}], lambda rec: [])
+
+
+def test_min_sample_keeps_only_the_later_samples():
+    t = tasks("retail", 1)[0]
+    recs = [
+        {
+            "domain": t[0],
+            "task_id": t[1],
+            "sample": s,
+            "termination": "user_stop",
+            "outcome": {"passed": s >= 2},
+        }
+        for s in range(4)
+    ]
+    assert cmp.per_task(recs)[t] == [False, False, True, True]
+    assert cmp.per_task(recs, min_sample=2)[t] == [True, True]

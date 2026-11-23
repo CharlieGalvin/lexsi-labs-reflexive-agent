@@ -564,6 +564,25 @@ hasn't been opened in Stage 2. So, fixed now:
   the pod; if a run is still incomplete after its retries, it stops the pod anyway and the run is
   resumed later. No test conversation is opened until every Stage 2 test number is in.
 
+**Amended Mon 23 Nov, 23:29 UK, after S2E4's 2-sample test result and S2P1's validation result,
+before any further test conversation: a declared test extension for S2E4 against v2.** Results so
+far: S2E4 on test, 2 samples: 59.50% against v2's 51.50% (retail −1.50, airline +2.50, telecom +7.00
+tasks), gain +8.00 points, 95% range −1.00 to +16.50, so no uplift is claimed from it. S2P1 on
+validation: 17.9 against 16.0 (+1.9), short of the rule, so its test was skipped, as fixed. Test at
+2 samples can only confirm gains of about +10 points; the uncertainty is mostly the customer
+simulator's, which more samples reduce. So, fixed now:
+
+- **v2 (S2) and S2E4 each get test samples 2 to 7** (`scripts/pod/extend_test.sh`: same configs,
+  guard off, the same 100 tasks), for 8 each.
+- **The claim** is judged on all 8 samples: an uplift over v2 on test is claimed only if the paired
+  95% bootstrap range over the 100 tasks is above 0. Reported beside it, whatever they show: the
+  2-sample result above, and samples 2 to 7 alone (v2's samples 0 and 1 are Stage 1's run; 2 to 7
+  of both arms are run now with the same code), per domain.
+- **Disclosed:** this extension was decided after seeing the 2-sample result (about 1 in 20 short of
+  the bar). That is sequential testing, and it makes a false positive somewhat likelier than 5%;
+  the paper says so. S2P1 is not extended: it didn't meet the validation rule and hasn't been on test.
+- **Scope:** nothing else runs. Budget past $200 agreed by the team.
+
 **The training-data audit (meta-healing on our own data).** `scripts/data/audit_training_data.py`
 runs the frozen checker ("no yes" and "mismatch") over every state-changing call in v2's training
 conversations. Its counts are reported whatever they show. Flagged conversations are read by two of

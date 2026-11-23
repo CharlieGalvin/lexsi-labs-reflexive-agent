@@ -37,11 +37,12 @@ Record = dict[str, Any]
 Key = tuple[str, str]  # (domain, task id)
 
 
-def per_task(recs: Iterable[Record]) -> dict[Key, list[bool]]:
-    """{(domain, task): [passed, ...]}, one entry per scored conversation (crashes left out)."""
+def per_task(recs: Iterable[Record], min_sample: int = 0) -> dict[Key, list[bool]]:
+    """{(domain, task): [passed, ...]}, one entry per scored conversation (crashes left out), from
+    sample ``min_sample`` on."""
     out: dict[Key, list[bool]] = collections.defaultdict(list)
     for r in latest_records(recs):
-        if not is_broken(r):
+        if not is_broken(r) and r.get("sample", 0) >= min_sample:
             out[(r["domain"], str(r["task_id"]))].append(bool((r.get("outcome") or {}).get("passed")))
     return dict(out)
 
@@ -104,8 +105,10 @@ def main() -> int:
     p.add_argument("--split", default="val")
     p.add_argument("--samples", type=int, default=8)
     p.add_argument("--reps", type=int, default=10000)
+    p.add_argument("--min-sample", type=int, default=0, help="only samples from this one on (a check)")
     a = p.parse_args()
-    res = decide(per_task(load(a.baseline, a.split)), per_task(load(a.candidate, a.split)), a.samples, a.reps)
+    base = per_task(load(a.baseline, a.split), a.min_sample)
+    res = decide(base, per_task(load(a.candidate, a.split), a.min_sample), a.samples, a.reps)
     print(f"{a.candidate} against {a.baseline}, {a.split}, {a.samples} samples, {res['tasks']} tasks")
     for d, v in res["domains"].items():
         print(
@@ -125,7 +128,8 @@ def main() -> int:
     for name, ok in res["checks"].items():
         print(f"  {'✓' if ok else '✗'} {name}")
     print(f"{a.candidate} {'MEETS' if res['meets_rule'] else 'does not meet'} Stage 2b's rule")
-    out = ROOT / "results" / f"stage2b-{a.baseline}-vs-{a.candidate}-{a.split}.json"
+    tag = f"-s{a.samples}" + (f"-from{a.min_sample}" if a.min_sample else "") if a.split != "val" else ""
+    out = ROOT / "results" / f"stage2b-{a.baseline}-vs-{a.candidate}-{a.split}{tag}.json"
     out.write_text(json.dumps(res, indent=1) + "\n")
     print(f"saved {out.relative_to(ROOT)}")
     return 0
