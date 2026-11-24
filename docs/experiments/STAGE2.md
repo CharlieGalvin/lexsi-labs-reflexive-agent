@@ -645,8 +645,10 @@ runs.** Every number below is from the runs' own files (`results/`), read with t
 
 **Not run, and why:** S2R64 (dropped at 17:01, for the loop); S2Q, S2D and round 2 (S2P2) (the
 Mon 22:00 cut-off passed); the dev gate for S2E4 (it isn't a winner of the validation rule; 21:11);
-the declared Stage 2 test arm "v2 + guard" (Decision 1 showed no measurable effect of the guard, S2E4
-is confirmed on test, and the time went to the write-up). All are reported as not run.
+the declared Stage 2 test arms (the "winner" v2 + guard, c1, P and PC: Decision 1 showed no
+measurable effect of the guard, S2E4 is confirmed on test, and the time went to the write-up; Arm A
+and Arm C on test from Stage 1 stand for the base model); retention on S2E4. All are reported as not
+run.
 
 **What the uplift is, and isn't.** It comes from training v2's own data for twice as long, nearly all
 of it in telecom; retail and airline didn't move at 8 samples (the 2-sample airline gain was mostly
