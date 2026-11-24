@@ -9,8 +9,11 @@
 #   VALDIR=/workspace/katie/lexsi-labs-reflexive-agent/results/episodes/arms bash scripts/pod/night_a.sh
 # RETENTION=0 skips retention (run elsewhere); ARM_P=0 skips Arm P on test.
 set -u
-cd "$(dirname "$0")/../.."
+cd "$(dirname "$(readlink -f "$0")")/../.."
 REPO=$PWD
+# A new tmux window can start without the repo's environment: use it explicitly.
+# shellcheck disable=SC1091
+source "$REPO/.venv/bin/activate"
 OLD=/workspace/charlie/reagent
 RETENTION=${RETENTION:-1}
 ARM_P=${ARM_P:-1}
@@ -30,6 +33,8 @@ stop_server() {
   done
 }
 [ -n "${OPENAI_API_KEY:-}" ] || { say "⛔ OPENAI_API_KEY is empty"; exit 1; }
+python -c "import reflexive, tau2" 2>> "$LOG/queue.log" || { say "⛔ python can't import reflexive/tau2: $(command -v python)"; exit 1; }
+say "python: $(command -v python)"
 
 # The conversations scored in the frozen folder (v2 and S2E4 on validation, v2's train pool).
 for f in "$OLD"/results/episodes/arms/S2-*-val.jsonl "$OLD"/results/episodes/arms/S2E4-*-val.jsonl \

@@ -4,8 +4,11 @@
 # Every step logs to results/night-b/<step>.log.
 #   bash scripts/pod/night_b.sh
 set -u
-cd "$(dirname "$0")/../.."
+cd "$(dirname "$(readlink -f "$0")")/../.."
 REPO=$PWD
+# A new tmux window can start without the repo's environment: use it explicitly.
+# shellcheck disable=SC1091
+source "$REPO/.venv/bin/activate"
 LOG=results/night-b
 mkdir -p "$LOG"
 say() { echo "$(date +%H:%M:%S) $*" | tee -a "$LOG/queue.log"; }
@@ -14,6 +17,8 @@ ready() {
   return 1
 }
 [ -n "${OPENAI_API_KEY:-}" ] || { say "⛔ OPENAI_API_KEY is empty"; exit 1; }
+python -c "import reflexive, tau2" 2>> "$LOG/queue.log" || { say "⛔ python can't import reflexive/tau2: $(command -v python)"; exit 1; }
+say "python: $(command -v python)"
 pkill -f "vllm serve"; sleep 20
 
 if [ ! -f runs/sft-aya32b-p1-e4/adapter_config.json ]; then
