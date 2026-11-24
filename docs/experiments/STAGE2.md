@@ -681,7 +681,7 @@ any Stage 2b result above; each is reported whatever it shows.
    metrics hold** if its mean is no more than 1.0 below S2E4's 18.50 (16-bit, 32K). Also reported:
    conversations ending on the context limit, GPU memory in use, and latency.
 3. **Arm P on test (the organisers' "Cohere's model on GPU").** Base Aya on our vLLM server
-   (`configs/sft/arms.pod.yaml`), test, 100 × 2, against Arm A (the same model through Cohere's API,
+   (`configs/sft/arms.base.yaml`, arm P: the local server, as P's validation runs used; amended Tue 21:55 from `arms.pod.yaml`, which reaches the pod through its public endpoint with a key and failed on every conversation before any was scored), test, 100 × 2, against Arm A (the same model through Cohere's API,
    Stage 1's test run), paired. Descriptive: no claim either way rests on it.
 4. **Retention on S2E4** (`configs/retention.yaml`, now with `sft2e4`), with the rule as fixed for
    SEL-84: training longer "costs nothing" on a benchmark unless the paired 95% interval of the

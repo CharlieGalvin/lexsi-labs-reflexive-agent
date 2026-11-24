@@ -61,7 +61,7 @@ if ready sft2e4; then
     --from "$VALDIR" > "$LOG/s2e4-trainpool.log" 2>&1 &
   TRAINPOOL=$!
   if [ "$ARM_P" = 1 ]; then
-    POD_STUDENT_URL=http://localhost:8000/v1 python scripts/pod/overnight.py P configs/sft/arms.pod.yaml \
+    POD_STUDENT_URL=http://localhost:8000/v1 python scripts/pod/overnight.py P configs/sft/arms.base.yaml \
       --split test --samples 2 --retries 2 --wait 300 > "$LOG/p-test.log" 2>&1
   fi
   wait "$TRAINPOOL"
