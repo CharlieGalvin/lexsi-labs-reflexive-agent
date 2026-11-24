@@ -4,6 +4,8 @@
     python scripts/labels/hybrid_judge.py --split trainpool          # the development run (format only)
     python scripts/labels/hybrid_judge.py --split fresh              # the held-out run, once
     python scripts/labels/hybrid_judge.py --split fresh --no-judge   # the two baselines only (free)
+    python scripts/labels/hybrid_judge.py --arm S2E4 --split val --include-val --failures-only
+        # Stage 2c: which kinds of error an arm's failed validation conversations show (descriptive)
 
 Three detectors, scored against the answer key on v2's train-task conversations
 (``results/episodes/arms/S2-<domain>-<split>.jsonl``):
@@ -37,6 +39,7 @@ messages of it. Writes ``results/judge/hybrid-<split>.jsonl`` (one line per conv
 from __future__ import annotations
 
 import argparse
+import collections
 import concurrent.futures as cf
 import importlib.util
 import json
@@ -306,6 +309,17 @@ def score(rows: Sequence[dict], detectors: Sequence[str]) -> dict:
     return out
 
 
+def kinds(rows: Sequence[dict], detectors: Sequence[str]) -> dict[str, dict[str, int]]:
+    """The error kinds among failures: the answer key's, and each LLM detector's among its flags."""
+    fails = [r for r in rows if not r["passed"]]
+    out = {"answer_key": dict(collections.Counter(str(r["true_kind"]) for r in fails))}
+    if "hybrid" in detectors:
+        out["hybrid"] = dict(
+            collections.Counter(str(r["hybrid"]["kind"]) for r in fails if r["hybrid"]["flagged"])
+        )
+    return out
+
+
 def label(recs: Iterable[Record], val: set[tuple[str, str]]) -> list[dict]:
     """Every conversation with its answer key and the two baselines' verdicts (no API calls but the
     checker's, which is cached)."""
@@ -382,6 +396,9 @@ def main() -> int:
     p.add_argument("--from", dest="source", type=Path, default=ARMS, help="where P-<domain>-val.jsonl are")
     p.add_argument("--no-judge", action="store_true", help="the baselines only")
     p.add_argument("--workers", type=int, default=6)
+    p.add_argument("--arm", default="S2", help="whose conversations: <arm>-<domain>-<split>.jsonl")
+    p.add_argument("--include-val", action="store_true", help="keep validation tasks (Stage 2c's breakdown)")
+    p.add_argument("--failures-only", action="store_true", help="judge only the failed conversations")
     a = p.parse_args()
     os.environ["REFLEXIVE_INTENT_JUDGE"] = "on"
     os.environ.setdefault("REFLEXIVE_JUDGE_CACHE", str(CACHE / "intent-judge.jsonl"))
@@ -392,14 +409,18 @@ def main() -> int:
         if not f.exists():
             raise SystemExit(f"⛔ no {f}: pass --from with the folder of P-*-val.jsonl")
         val |= {(d, str(r["task_id"])) for r in read_jsonl(f, partial_last_ok=True)}
+    if a.include_val:
+        val = set()
     recs: list[Record] = []
     for d in DOMAINS:
-        f = ARMS / f"S2-{d}-{a.split}.jsonl"
+        f = ARMS / f"{a.arm}-{d}-{a.split}.jsonl"
         if f.exists():
             recs += read_jsonl(f, partial_last_ok=True)
     if not recs:
-        raise SystemExit(f"⛔ no S2-<domain>-{a.split}.jsonl in {ARMS}")
+        raise SystemExit(f"⛔ no {a.arm}-<domain>-{a.split}.jsonl in {ARMS}")
     rows = label(recs, val)
+    if a.failures_only:
+        rows = [r for r in rows if not r["passed"]]
     for row in rows:
         row["rules+checker"] = combine(row)
     detectors = ["rules", "checker", "rules+checker"]
@@ -422,6 +443,7 @@ def main() -> int:
         )
         return 1
     rep = score(rows, detectors)
+    rep["kinds"] = kinds(rows, detectors)
     for det in detectors:
         x = rep[det]["all"]
         f, pz, at, near = x["failures_flagged"], x["passes_flagged"], x["at_true_turn"], x["within_near"]
@@ -431,12 +453,17 @@ def main() -> int:
             f" | at the true turn {at[0]}/{at[1]}, within {NEAR} {near[0]}/{near[1]}"
             + (f" | invalid {x['invalid']}" if x["invalid"] else "")
         )
+    if "hybrid" in detectors:
+        print(f"hybrid's error kinds, flagged {a.arm} failures: {rep['kinds']['hybrid']}")
+    print(f"answer key's kinds, {a.arm} failures: {rep['kinds']['answer_key']}")
+    stem = f"hybrid-{a.split}" if a.arm == "S2" and not a.include_val else f"hybrid-{a.arm}-{a.split}"
+    stem += "-failures" if a.failures_only else ""
     OUT.mkdir(parents=True, exist_ok=True)
-    (OUT / f"hybrid-{a.split}.jsonl").write_text(
+    (OUT / f"{stem}.jsonl").write_text(
         "".join(json.dumps({k: v for k, v in r.items() if not k.startswith("_")}) + "\n" for r in rows)
     )
-    (OUT / f"hybrid-{a.split}.json").write_text(json.dumps(rep, indent=1) + "\n")
-    print(f"saved results/judge/hybrid-{a.split}.json and .jsonl")
+    (OUT / f"{stem}.json").write_text(json.dumps(rep, indent=1) + "\n")
+    print(f"saved results/judge/{stem}.json and .jsonl")
     return 0
 
 

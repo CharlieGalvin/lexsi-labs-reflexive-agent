@@ -123,3 +123,18 @@ def test_a_quote_from_the_computed_facts_counts_and_a_paraphrase_does_not():
         {"error": True, "turn": 11, "evidence": "The agent never cancelled HSR97W properly"}, VIEW, computed
     )
     assert para["invalid"] == "evidence not in the conversation"
+
+
+def test_kinds_count_the_answer_keys_and_the_judges_flags_among_failures():
+    rows = [
+        {
+            "passed": False,
+            "true_kind": "unexpected_change",
+            "hybrid": {"flagged": True, "kind": "wrong_arguments"},
+        },
+        {"passed": False, "true_kind": "change_never_made", "hybrid": {"flagged": False, "kind": None}},
+        {"passed": True, "true_kind": None, "hybrid": {"flagged": True, "kind": "stopped_short"}},
+    ]
+    k = hj.kinds(rows, ["rules", "hybrid"])
+    assert k["answer_key"] == {"unexpected_change": 1, "change_never_made": 1}
+    assert k["hybrid"] == {"wrong_arguments": 1}

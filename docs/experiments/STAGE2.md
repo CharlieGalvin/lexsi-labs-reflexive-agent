@@ -663,6 +663,39 @@ It **passes** if S2E4's "no yes" findings per conversation, averaged per task th
 tasks, don't rise against v2's (paired change ≤ 0); the paired 95% range, per-domain counts and
 findings per change are reported beside it. "Mismatch" isn't run (the audit; cost). Run once.
 
+## Stage 2c: after the extension to Sat 28 Nov
+
+**Amended Tue 24 Nov, 17:50 UK, before any of these runs.** The deadline moved to Sat 28 Nov, AoE, so
+Stage 2b's closed scope reopens for six runs, fixed now. Nothing else runs. No result below changes
+any Stage 2b result above; each is reported whatever it shows.
+
+1. **SEL-121, does self-practice add to training longer?** S2P1E4: round 1's data
+   (`data/train/sft-p1.jsonl`: v2's 146 + 100 verified practice conversations) with S2E4's recipe,
+   4 epochs (`configs/train/sft_aya32b_p1_e4.yaml`, `configs/sft/arms.s2p1e4.yaml`). Scored on
+   validation and on test, 8 samples each; **the test run happens whatever validation shows.** The
+   **primary comparison is S2P1E4 against S2E4 on test**, paired over the 100 tasks, using S2E4's
+   8-sample test run: self-practice is claimed to add to training longer only if the 95% range is
+   above 0. Reported beside it: against v2 on test and on validation, per domain.
+2. **The quantisation and context check (SEL-120, the organisers' point).** S2E4Q: S2E4 served with
+   FP8 weights and a 64K context (`configs/sft/arms.s2e4q.yaml`), validation, 8 samples. **The
+   metrics hold** if its mean is no more than 1.0 below S2E4's 18.50 (16-bit, 32K). Also reported:
+   conversations ending on the context limit, GPU memory in use, and latency.
+3. **Arm P on test (the organisers' "Cohere's model on GPU").** Base Aya on our vLLM server
+   (`configs/sft/arms.pod.yaml`), test, 100 × 2, against Arm A (the same model through Cohere's API,
+   Stage 1's test run), paired. Descriptive: no claim either way rests on it.
+4. **Retention on S2E4** (`configs/retention.yaml`, now with `sft2e4`), with the rule as fixed for
+   SEL-84: training longer "costs nothing" on a benchmark unless the paired 95% interval of the
+   difference from base, over the same items, lies entirely below zero.
+5. **S2E4 on the train tasks** outside validation, 1 sample at temperature 0, against v2's 55 of
+   112: the direct test of the under-training diagnosis. Descriptive.
+6. **What kinds of failure training longer fixed.** The hybrid judge, as frozen, on v2's and S2E4's
+   failed validation conversations (8 samples each), with the answer key's kinds. Descriptive: the
+   kinds per arm are reported, and no claim rests on them.
+
+Plus the consent check, fixed at 09:13 and not yet run. Pods: 2, 3, 4, 5, 6 and the consent check on
+pod A (`scripts/pod/night_a.sh`), 1 on pod B (`scripts/pod/night_b.sh`); each stops its pod.
+Budget: about $110 to $140 of API calls and $45 of GPU, past the $200 total with the team's agreement.
+
 ## Launched before this file
 
 - Retention, base vs v2 (SEL-84): rule fixed in `configs/retention.yaml` before the result.
