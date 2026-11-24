@@ -418,6 +418,8 @@ def main() -> int:
             recs += read_jsonl(f, partial_last_ok=True)
     if not recs:
         raise SystemExit(f"⛔ no {a.arm}-<domain>-{a.split}.jsonl in {ARMS}")
+    if a.failures_only:  # before labelling, so the checker's baseline isn't paid for on passes
+        recs = [r for r in latest_records(recs) if not (r.get("outcome") or {}).get("passed")]
     rows = label(recs, val)
     if a.failures_only:
         rows = [r for r in rows if not r["passed"]]
