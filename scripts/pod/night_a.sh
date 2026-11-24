@@ -7,10 +7,13 @@
 #   FP8, 64K, serving S2E4: S2E4Q on validation, 8 samples, and its comparison with S2E4.
 # Every step logs to results/night-a/<step>.log; a failed step is logged and the queue moves on.
 #   VALDIR=/workspace/katie/lexsi-labs-reflexive-agent/results/episodes/arms bash scripts/pod/night_a.sh
+# RETENTION=0 skips retention (run elsewhere); ARM_P=0 skips Arm P on test.
 set -u
 cd "$(dirname "$0")/../.."
 REPO=$PWD
 OLD=/workspace/charlie/reagent
+RETENTION=${RETENTION:-1}
+ARM_P=${ARM_P:-1}
 VALDIR=${VALDIR:-/workspace/katie/lexsi-labs-reflexive-agent/results/episodes/arms}
 LOG=results/night-a
 mkdir -p "$LOG" results/episodes/arms
@@ -52,15 +55,18 @@ if ready sft2e4; then
   python scripts/heal/practice.py run --arm S2E4 --config configs/sft/arms.s2e4.yaml --samples 1 \
     --from "$VALDIR" > "$LOG/s2e4-trainpool.log" 2>&1 &
   TRAINPOOL=$!
-  POD_STUDENT_URL=http://localhost:8000/v1 python scripts/pod/overnight.py P configs/sft/arms.pod.yaml \
-    --split test --samples 2 --retries 2 --wait 300 > "$LOG/p-test.log" 2>&1 &
-  PTEST=$!
-  wait "$TRAINPOOL" "$PTEST"
-  python - <<'PY' 2>/dev/null || pip install -q "auditkit[lmeval]" "lm-eval[api,ifeval]" > "$LOG/retention-install.log" 2>&1
+  if [ "$ARM_P" = 1 ]; then
+    POD_STUDENT_URL=http://localhost:8000/v1 python scripts/pod/overnight.py P configs/sft/arms.pod.yaml \
+      --split test --samples 2 --retries 2 --wait 300 > "$LOG/p-test.log" 2>&1
+  fi
+  wait "$TRAINPOOL"
+  if [ "$RETENTION" = 1 ]; then
+    python - <<'PY' 2>/dev/null || pip install -q "auditkit[lmeval]" "lm-eval[api,ifeval]" > "$LOG/retention-install.log" 2>&1
 import auditkit.lmeval_engine, lm_eval  # noqa
 PY
-  say "retention on S2E4"
-  python scripts/retention/run.py sft2e4 > "$LOG/retention.log" 2>&1 || say "retention failed: see $LOG/retention.log"
+    say "retention on S2E4"
+    python scripts/retention/run.py sft2e4 > "$LOG/retention.log" 2>&1 || say "retention failed: see $LOG/retention.log"
+  fi
 else
   say "⛔ the 16-bit server didn't come up: see $LOG/serve-bf16.log"
 fi
