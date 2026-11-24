@@ -623,6 +623,44 @@ validation conversations against v2's (the targeted measure); training and held-
 so a winner's validation gain is optimistic. Dev (Decision 2) and test are the held-out checks.
 Budget as above ($200 in total for Stage 2 and 2b).
 
+### Stage 2b's results
+
+**Amended Tue 24 Nov, 09:13 UK: the results, as they came in, and the consent check, fixed before it
+runs.** Every number below is from the runs' own files (`results/`), read with the scripts named.
+
+| What | Result | Read with |
+|---|---|---|
+| v2 on validation, 8 samples | **16.0** of 30 (samples 16, 18, 19, 12, 14, 17, 16, 16) | `samples.py` |
+| Decision 1 (S2G, 2 samples) | 15.0: no-go (above) | `samples.py`, `guard_report.py` |
+| S2E4, validation, 8 samples | 18.50 vs 16.00, **+2.50** (95% −0.75 to +5.88): does not meet the rule | `stage2b_compare.py` |
+| S2E4, test, 2 samples | 59.50% vs 51.50%, +8.00 (95% −1.00 to +16.50): no uplift claimed | `stage2b_compare.py --split test --samples 2` |
+| **S2E4, test, 8 samples** | **60.00% vs 50.12%, +9.88 points (95% +3.88 to +16.00): uplift claimed**, by the 23:29 amendment | `stage2b_compare.py --split test --samples 8` |
+| S2E4, test, samples 2 to 7 only | 60.17% vs 49.67%, +10.50 (95% +4.00 to +17.00) | `--samples 6 --min-sample 2` |
+| S2E4 by domain, test, 8 samples | retail 22.38 vs 22.38 (0.00); airline 7.62 vs 7.00 (+0.62); telecom 30.00 vs 20.75 (**+9.25**) of 40/20/40 | same |
+| Round 1 practice (S2PR) | 224 conversations, 108 passed; 100 kept (2 flagged by "no yes", 6 not clean); 74 of 112 train tasks passed at least once | `practice.py build` |
+| S2P1, validation, 8 samples | 17.9 vs 16.0, **+1.9**: short of +2.0, so not on test (skipped by `overnight.py --if-meets`) | `samples.py`, `stage2b_compare.py` |
+| Training-data audit (v2's 161 conversations) | 16 flagged: 12 "mismatch" (at least 9 the checker's own errors: 6 judged one call of a multi-call change as the whole, 2 verdicts against their own reasoning, 1 price misread; 3 undetermined), 4 "no yes" (telecom refuels the customer had asked for, with no explicit yes after the agent's confirmation). None removed | `audit_training_data.py` |
+| Hybrid judge, held out (224 fresh) | failures flagged 42% (48/113), passes flagged 9% (10/111), at the true turn 11 of 44; rules 56% / 14% / 0 of 52; checker 27% / 8% / 15 of 28; rules + checker 69% / 20% / 15 of 67. **Bar not met**; 18 answers invalid (no exact quote); the one plumbing fix changed nothing | `hybrid_judge.py --split fresh` |
+| S2E4 training | 148 steps, 56 min; held-out loss 0.854 → 0.351 (lowest 0.341 near epoch 2; v2 ended at 0.368) | `run_summary.json` |
+
+**Not run, and why:** S2R64 (dropped at 17:01, for the loop); S2Q, S2D and round 2 (S2P2) (the
+Mon 22:00 cut-off passed); the dev gate for S2E4 (it isn't a winner of the validation rule; 21:11);
+the declared Stage 2 test arm "v2 + guard" (Decision 1 showed no measurable effect of the guard, S2E4
+is confirmed on test, and the time went to the write-up). All are reported as not run.
+
+**What the uplift is, and isn't.** It comes from training v2's own data for twice as long, nearly all
+of it in telecom; retail and airline didn't move at 8 samples (the 2-sample airline gain was mostly
+noise). S2E4 went to test as a declared arm that didn't meet the validation rule, and the extension
+to 8 samples was decided after the borderline 2-sample result: both are disclosed, and make the
+nominal 5% error rate somewhat optimistic. One model, one benchmark, 100 test tasks.
+
+**The consent check, fixed now, before it runs** (the dev gate's fifth check, SEL-97, applied to
+test, where S2E4 is the one confirmed candidate): `scripts/arms/consent_check.py S2 S2E4 --split
+test` runs the frozen "no yes" rule over every scored test conversation of both arms (8 samples).
+It **passes** if S2E4's "no yes" findings per conversation, averaged per task then over the 100
+tasks, don't rise against v2's (paired change ≤ 0); the paired 95% range, per-domain counts and
+findings per change are reported beside it. "Mismatch" isn't run (the audit; cost). Run once.
+
 ## Launched before this file
 
 - Retention, base vs v2 (SEL-84): rule fixed in `configs/retention.yaml` before the result.
