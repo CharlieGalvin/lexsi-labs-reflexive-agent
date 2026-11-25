@@ -208,6 +208,42 @@ tasks than on the training tasks themselves, so training longer improved how the
 generalises, not just what it remembers. What it fixed, mostly, was wrong changes: failed
 validation conversations with an unexpected change fell from 65 to 52.
 
+Here is one test task, before and after. The customer wants to exchange a desk lamp, then changes
+her mind and asks to return a water bottle instead. τ²-bench's policy asks the agent to confirm the
+details of any change and get an explicit yes before making it.
+
+**Healed (v2).** The agent makes the exchange the moment the customer names a lamp. When she
+changes her mind, the return she actually wants is no longer possible:
+
+```text
+Customer: Okay, so just to confirm, I'd like to exchange the desk lamp for the silver, low,
+          battery one (item 7453605304). Let's just do the lamp for now.
+Agent:    exchange_delivered_order_items(order_id="#W6390527", item_ids=["8384507844"],
+                                         new_item_ids=["7453605304"], ...)
+Customer: Actually, instead of exchanging, I'd rather just return the water bottle.
+Agent:    return_delivered_order_items(order_id="#W6390527", item_ids=["8538875209"], ...)
+Tools:    Error: Non-delivered order cannot be returned
+```
+
+**Trained longer.** The same moment, but the agent sets out the change and asks first:
+
+```text
+Customer: Okay, so just to confirm, I'd like to exchange the desk lamp for the battery-powered,
+          low brightness, silver one.
+Agent:    Price difference: you'll owe $12.07. A couple of things to confirm: 1. Is the desk
+          lamp the only item you want to exchange from this order? 2. Which payment method ...?
+Customer: Hmm, actually, let's just hold off on the exchange for now. Instead, I'd like to
+          return the water bottle.
+Agent:    Item to return: Water Bottle ... Refund: $45.13 to your PayPal account.
+          Shall I proceed with this return?
+Customer: Yeah, that sounds good.
+Agent:    return_delivered_order_items(order_id="#W6390527", item_ids=["8538875209"], ...)
+```
+
+v2 failed this task in all 8 of its runs; the final model passed 6 of 8. It's the consent result
+below, seen in one conversation. (Replies shortened; the customer is simulated, so her words
+differ slightly between runs.)
+
 We're open about how this result was protected. On validation the gain (+2.5 of 30) had a range
 that included zero, so it went to test as a declared extra arm, labelled as such. And after a
 borderline first test at 2 runs per task (+8.0, range −1.0 to +16.5) we extended both models to 8:
