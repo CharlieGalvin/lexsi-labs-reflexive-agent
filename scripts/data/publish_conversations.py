@@ -53,6 +53,7 @@ ARMS = {
     "S2E4": "SFT v2's data trained for 4 epochs (the final model)",
     "S2E4Q": "S2E4 served with FP8 weights and a 64K context",
     "S2E4S1": "S2E4's recipe trained again with seed 1",
+    "S2PR": "SFT v2 practising on train tasks at temperature 0.7: the source of S2P1's practice data",
     "S2P1": "SFT v2's data plus 100 of its own verified practice conversations, 2 epochs",
     "S2P1E4": "S2P1's data, 4 epochs",
 }
