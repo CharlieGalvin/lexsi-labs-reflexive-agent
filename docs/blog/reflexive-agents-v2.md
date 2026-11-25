@@ -162,31 +162,23 @@ detector find decision errors, and the turn where they happen?**
 
 ### Detectors can find failures, but not where to fix them
 
-We built three: the loop proposing its own new rules from its failure logs (none survived
-held-out conversations), a hand-written consent and mismatch checker (did the customer say yes
-first, and does the change match the request and the lookups?), and, as the organisers
-suggested, a **hybrid judge**: an LLM reading the whole conversation, with code giving it the facts
-LLMs get wrong (the changes made, prices, the classifier's findings).
-
-On train tasks, τ²-bench's answer key says which conversations failed and where each first went
-wrong, so we could score every detector against it. On 224 held-out conversations:
+We built three detectors: the Part 1 rules; a consent checker (did the customer say yes, and does
+the change match what they asked for?); and, as the organisers suggested, a **hybrid judge**: an
+LLM that reads the whole conversation, with code supplying the facts LLMs get wrong. On train
+tasks, τ²-bench's answer key says which conversations failed and the turn where each went wrong,
+so we scored all three against it on 224 held-out conversations:
 
 | Detector | Failures caught | Successes wrongly flagged | Flags on the turn it went wrong |
 |---|---:|---:|---:|
 | Rules (the Part 1 classifier) | 56% | 14% | 0 of 52 |
-| Consent and mismatch checker | 27% | 8% | 15 of 28 |
-| Rules + checker | 69% | 20% | 15 of 67 |
+| Consent checker | 27% | 8% | 15 of 28 |
 | Hybrid judge | 42% | 9% | 11 of 44 |
 
-**No detector did both things the loop needs**: catch most failures, and point to the turn where
-they went wrong. The rules catch symptoms early in the conversation; the checker usually finds the
-right turn but catches only one failure in four; the judge sits between them. A teammate who
-didn't build the checker ran it again on the dev and validation conversations: it flagged 6 of the
-37 decision failures.
-
-Acting on the detectors didn't help either. Used as a live guard before each change, the checker
-blocked 5 replies in 2 of 60 validation conversations and didn't move the score. Healing from the
-turns it flagged gave 21 verified conversations: too few to retrain on.
+**None did both things the loop needs: catch most failures, and point to the turn.** The rules
+catch the most, but never at the right turn; the checker usually finds the turn, but catches only
+a quarter of the failures. Acting on them didn't help either. As a live guard, the checker didn't
+move the score, and healing at the turns it flagged gave 21 verified conversations, too few to
+retrain on. Letting the loop write its own checker rules produced none that held up.
 
 ### First, measure properly
 
@@ -305,10 +297,9 @@ keys:
 
 ```bash
 git clone https://github.com/CharlieGalvin/lexsi-labs-reflexive-agent && cd lexsi-labs-reflexive-agent
-just reproduce            # Part 1's experiments
-python scripts/arms/stage2b_compare.py S2 S2E4 --split test --samples 8   # the +9.9
+just reproduce            # Part 1's experiments, from the repo
+just reproduce-stage2     # Part 2's: downloads the conversations from Hugging Face, recomputes every comparison
 ```
-<!-- TODO: add Part 2 to `just reproduce`, so it checks this post's numbers too. -->
 
 ### Acknowledgements
 
