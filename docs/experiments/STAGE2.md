@@ -696,6 +696,31 @@ Plus the consent check, fixed at 09:13 and not yet run. Pods: 2, 3, 4, 5, 6 and 
 pod A (`scripts/pod/night_a.sh`), 1 on pod B (`scripts/pod/night_b.sh`); each stops its pod.
 Budget: about $110 to $140 of API calls and $45 of GPU, past the $200 total with the team's agreement.
 
+### Stage 2c's results
+
+**Amended Wed 25 Nov, 08:57 UK: the results of Stage 2c's runs, all complete** (pod A's queue ended
+23:18, pod B's 03:16; each stopped its pod). Read with the scripts named; every run is reported.
+
+| Run | Result | Verdict by the rule fixed at 17:50 |
+|---|---|---|
+| **1. S2P1E4 against S2E4, test, 8 samples** (primary) | 58.88% vs 60.00%, **−1.12** (95% −6.62 to +4.38); retail +1.38, airline +0.38, telecom −2.88 | **Self-practice adds nothing measurable to training longer** (range not above 0) |
+| S2P1E4 against v2, test, 8 samples | 58.88% vs 50.12%, **+8.75** (95% +3.62 to +13.88); retail +1.38, airline +1.00, telecom +6.38 | Reported beside it |
+| S2P1E4 against v2, validation, 8 samples | 17.88 vs 16.00, +1.88 (95% −0.62 to +4.75) | Reported beside it |
+| **2. S2E4Q (FP8, 64K) against S2E4 (16-bit, 32K), validation, 8 samples** | 18.50 vs 18.50, **+0.00** (95% −2.25 to +2.25); retail +1.12, airline −0.12, telecom −1.00. Model weights in GPU memory: **32.23 GiB** (FP8) vs **60.35 GiB** (16-bit), from vLLM's startup logs | **The metrics hold** (not more than 1.0 below) |
+| **3. Arm P (base Aya, our server) against Arm A (Cohere's API), test, 2 samples** | 11.50% vs 14.50%, −3.00 (95% −8.00 to +1.50); retail 0.00, airline +0.50, telecom −3.50 | Descriptive: the same within noise |
+| 4. Retention on S2E4 | not run yet (SEL-107) | — |
+| **5. S2E4 on the train tasks**, 1 sample | **60** of 112 vs v2's 55 (retail 19 vs 21, airline 11 vs 8, telecom 30 vs 26) | Descriptive |
+| **6. Failure kinds, validation, 8 samples** | answer key: v2 112 failures (65 an unexpected change, 35 a change never made, 12 other) vs S2E4 92 (52, 32, 8); the hybrid judge's flagged kinds, v2 vs S2E4: wrong arguments 13 vs 6, stopped short 9 vs 3, wrong information 6 vs 8, against policy 4 vs 5, missed action 4 vs 0, unconfirmed change 2 vs 2, unrequested change 1 vs 0 | Descriptive |
+| **Consent check** (fixed 09:13, Tue) | S2E4 0.010 "no yes" findings per conversation (6 of 800 conversations) vs v2's 0.152; **−0.142** (95% −0.310 to −0.035) | **Does not rise**: it falls |
+
+**Read together:** the uplift over v2 comes from training longer, and holds with either data (S2E4
++9.88, S2P1E4 +8.75 on test, both ranges above 0); adding the model's own verified practice to the
+teacher's data changes nothing measurable. The gain's shape is the same on train, validation and test
+tasks (telecom up, retail flat), it comes mostly from fewer wrong changes, and the better model makes
+fewer changes without the customer's yes, not more. Serving it in FP8 halves the weights' memory and
+doubles the context without changing its score. Arm P ran with `configs/sft/arms.base.yaml` (amended
+Tue 21:55); its telecom drop against the API's run is within noise and not investigated further.
+
 ## Launched before this file
 
 - Retention, base vs v2 (SEL-84): rule fixed in `configs/retention.yaml` before the result.
