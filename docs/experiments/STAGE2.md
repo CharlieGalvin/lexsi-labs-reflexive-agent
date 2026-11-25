@@ -248,6 +248,27 @@ stays where it is; every Stage 2 guarded run uses `stage2-checker-frozen-2`, whi
 `S2G` arm (PR #81: v2 with the guard, its own key so its records never mix with v2's). A judge-only "no yes"
 (the LLM decides every time, the word match only recorded) is noted as future work.
 
+**Result, recorded Wed 25 Nov, 11:25 UK: the frozen checker against τ²-bench's verdicts on v2's
+dev and validation conversations (SEL-98, PR #90).** Run once by Katie, who did not build the
+checker, with `stage2-checker-frozen-2` (Tool / Arg / Loop + "no yes" + "mismatch"), each change
+checked as the guard would have checked it live (`scripts/labels/checker_vs_verdicts.py`,
+`results/checker-vs-verdicts-dev-val.metrics.json`). 132 conversations, never test: 55 failed,
+77 passed; 37 of the failures have no Tool / Arg / Loop finding, as expected. No rule errors.
+
+| Dev + validation, SFT v2 | Flagged | Wilson 95% | SEL-98 target |
+|---|---|---|---|
+| The 37, by the made-up-intent rules | 6/37 (16%) | 8–31% | at least half: **not met** |
+| Passes, by the made-up-intent rules | 2/77 (3%) | 1–9% | at most 1 in 10: met |
+| Passes, by the whole checker | 9/77 (12%) | 6–21% | |
+| Failures, by the made-up-intent rules | 10/55 (18%) | 10–30% | |
+| Failures, by the whole checker | 24/55 (44%) | 31–57% | |
+
+By domain, the 37 flagged: retail 5/21, airline 1/8, telecom 0/8. Findings by rule: "mismatch" 32,
+"no yes" 2. The rules are precise but rare: they seldom flag a pass and miss most of the decision
+failures they were built for, as on the held-out train-task conversations. Caveat: the intervals
+treat conversations as independent, though several come from the same task, so they are somewhat
+narrower than a task-clustered bootstrap would give. Reported as is; the checker is not changed.
+
 ## The guard (SEL-89)
 
 `reflexive.monitor.ActionGuard`, PR #73. Before a reply is sent to τ²-bench, every state-changing
