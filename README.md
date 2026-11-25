@@ -16,7 +16,7 @@ teacher's verified fix, and keeps the update only if it passes a gate.*
 [![Model on HF](https://img.shields.io/badge/🤗_Model-sft--aya32b--v2--e4-ffcc4d?style=flat-square)](https://huggingface.co/reagent-lexsi/sft-aya32b-v2-e4)
 [![Dataset on HF](https://img.shields.io/badge/🤗_Dataset-tau2--golden--trajectories-ffcc4d?style=flat-square)](https://huggingface.co/datasets/reagent-lexsi/tau2-golden-trajectories)
 [![Every conversation on HF](https://img.shields.io/badge/🤗_Every_conversation-reagent--tau2--conversations-ffcc4d?style=flat-square)](https://huggingface.co/datasets/reagent-lexsi/reagent-tau2-conversations)
-[![Blog post](https://img.shields.io/badge/🤗_Read-the_blog_post-ff6b35?style=flat-square)](https://huggingface.co/blog/cg3849/reflexive-agents)
+[![Blog post](https://img.shields.io/badge/🤗_Read-the_blog_post-ff6b35?style=flat-square)](https://huggingface.co/blog/cg3849/reflexive-agents-full-story)
 [![Play Spot the hallucination](https://img.shields.io/badge/🔎_Play-Spot_the_hallucination-7c5cd6?style=flat-square)](https://huggingface.co/spaces/reagent-lexsi/spot-the-hallucination)
 
 [Abstract](#abstract) • [Overview](#overview) • [Research questions](#research-questions-and-rules-set-in-advance) • [Results](#results) • [How it works](#how-it-works) • [Lexsi Labs kits](#lexsi-labs-kits-used) • [Data and metrics](#data-splits-and-metrics) • [Training setup](#training-setup) • [Experiments](#experiments) • [Ablations](#ablations) • [Get started](#get-started) • [Models and data](#models-and-data) • [Related work](#related-work) • [Threat model](#threat-model) • [Limitations](#limitations) • [Discussion](#discussion-and-implications) • [Future work](#with-more-credits-future-work) • [Appendix](#appendix-prompts-and-judging-rules) • [Declaration](#declaration-of-work-done-outside-the-hackathon)
@@ -57,7 +57,7 @@ Alignment Hackathon (Track 3: Agentic Fine-tuning) on the Lexsi Labs stack.
 > - **Look at:** [Results](#results), [Threat model](#threat-model), the
 >   [model](https://huggingface.co/reagent-lexsi/sft-aya32b-v2-e4),
 >   [every conversation](https://huggingface.co/datasets/reagent-lexsi/reagent-tau2-conversations),
->   [article](https://huggingface.co/blog/cg3849/reflexive-agents) and
+>   [article](https://huggingface.co/blog/cg3849/reflexive-agents-full-story) and
 >   [demo](https://huggingface.co/spaces/reagent-lexsi/spot-the-hallucination).
 
 ## Abstract
@@ -753,7 +753,7 @@ Be careful not to hallucinate:
 
 ## Resources
 
-- **[Blog post on Hugging Face](https://huggingface.co/blog/cg3849/reflexive-agents):** the project, told end to end ([source](docs/blog/reflexive-agents.md)).
+- **[Blog post on Hugging Face](https://huggingface.co/blog/cg3849/reflexive-agents-full-story):** the whole project, told end to end ([source](docs/blog/reflexive-agents-v2.md)). The [first post](https://huggingface.co/blog/cg3849/reflexive-agents) covers Stage 1 ([source](docs/blog/reflexive-agents.md)).
 - **[Spot the hallucination](https://huggingface.co/spaces/reagent-lexsi/spot-the-hallucination):** a three-round game with real agent moments from our test runs. Is the agent bluffing?
 - **[Experiments, in order](docs/experiments/README.md)** and **[every run](docs/EXPERIMENTS.md)**.
 - **[τ²-bench](https://github.com/sierra-research/tau2-bench)** and the Lexsi Labs kits we used:
