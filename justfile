@@ -353,3 +353,7 @@ retention-run label *args:
 # Did healing cost anything? Two models' retention runs, item by item, with paired 95% intervals (no GPU)
 retention-compare first second *args:
     python scripts/retention/compare.py {{first}} {{second}} {{args}}
+
+# SEL-98: the frozen checker against τ²-bench verdicts on SFT v2 dev + validation (needs OPENAI_API_KEY)
+checker-vs-verdicts *args:
+    python scripts/labels/checker_vs_verdicts.py {{args}}

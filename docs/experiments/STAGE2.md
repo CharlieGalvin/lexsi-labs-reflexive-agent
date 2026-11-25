@@ -248,6 +248,27 @@ stays where it is; every Stage 2 guarded run uses `stage2-checker-frozen-2`, whi
 `S2G` arm (PR #81: v2 with the guard, its own key so its records never mix with v2's). A judge-only "no yes"
 (the LLM decides every time, the word match only recorded) is noted as future work.
 
+**Result, recorded Wed 25 Nov, 11:25 UK: the frozen checker against τ²-bench's verdicts on v2's
+dev and validation conversations (SEL-98, PR #90).** Run once by Katie, who did not build the
+checker, with `stage2-checker-frozen-2` (Tool / Arg / Loop + "no yes" + "mismatch"), each change
+checked as the guard would have checked it live (`scripts/labels/checker_vs_verdicts.py`,
+`results/checker-vs-verdicts-dev-val.metrics.json`). 132 conversations, never test: 55 failed,
+77 passed; 37 of the failures have no Tool / Arg / Loop finding, as expected. No rule errors.
+
+| Dev + validation, SFT v2 | Flagged | Wilson 95% | SEL-98 target |
+|---|---|---|---|
+| The 37, by the made-up-intent rules | 6/37 (16%) | 8–31% | at least half: **not met** |
+| Passes, by the made-up-intent rules | 2/77 (3%) | 1–9% | at most 1 in 10: met |
+| Passes, by the whole checker | 9/77 (12%) | 6–21% | |
+| Failures, by the made-up-intent rules | 10/55 (18%) | 10–30% | |
+| Failures, by the whole checker | 24/55 (44%) | 31–57% | |
+
+By domain, the 37 flagged: retail 5/21, airline 1/8, telecom 0/8. Findings by rule: "mismatch" 32,
+"no yes" 2. The rules are precise but rare: they seldom flag a pass and miss most of the decision
+failures they were built for, as on the held-out train-task conversations. Caveat: the intervals
+treat conversations as independent, though several come from the same task, so they are somewhat
+narrower than a task-clustered bootstrap would give. Reported as is; the checker is not changed.
+
 ## The guard (SEL-89)
 
 `reflexive.monitor.ActionGuard`, PR #73. Before a reply is sent to τ²-bench, every state-changing
@@ -280,6 +301,18 @@ Also reported: blocks per conversation, overrides, extra turns, conversations wh
 error switched the guard off, and how often the customer refused or went off-script.
 **No-go:** skip retraining; v2 + guard goes to Decision 2. (Amended Sat 21 Nov 23:28, see
 Retraining: with an accepted meta-healing rule, a no-go retrains on meta-healing's fixes only.)
+
+**Amended Sun 22 Nov, 15:36 UK, after Decision 1's run finished and before any of its blocks were
+read: what counts as a wrongly blocked good change.** The third condition had no written
+definition. Fixed now: a reply the guard blocked with a call that matches one of the task's
+expected agent actions by τ²-bench's own rule (`same_call`, as the fix step matches them).
+τ²-bench expects that change, so blocking it was wrong. The condition counts passing conversations
+with at least one, out of all passing conversations: overall for the bar (at most 1 in 10), and per
+domain. Crashed conversations are left out. A block of a change τ²-bench doesn't expect isn't
+counted as wrong, even in a passing conversation: the bar is about good changes stopped; the extra
+turns blocks cost are reported beside it. `scripts/arms/guard_report.py` computes it, with the costs
+listed above (blocks, overrides, re-asks, guard switched off by a checker error, judge errors).
+Conditions 1 and 2 are read from `scripts/arms/samples.py S2 S2G --split val`, as v2's 17.0 was.
 
 ## Retraining (SEL-100, SEL-102, SEL-103)
 
@@ -336,6 +369,26 @@ the prompt only, fixed 39 of the 43 (4 refused after 3 attempts), from 23 distin
   drop in success; the fifth check) covers it; average conversation length is reported too. The
   targeted measure, "mismatch" flags on the retrained model's dev conversations against v2's, is
   the test of whether the caution was learned.
+
+**Amended Sun 22 Nov, 14:10 UK, before Decision 1 runs and before any retraining: the mismatch fixes
+are checked over the whole conversation, with a fixed fallback; Stage 2's scope is closed.**
+SFT v4 (9 Nov) added 29 single-turn fixes of the same kind ("confirm, re-check or hold back") and
+scored 17.0 on validation, exactly v2's; its write-up's next step is to check the turns that follow.
+The 39 single-turn mismatch fixes are the same kind. So, decided now:
+
+- **Full-conversation fixes (primary).** From each of the 43 fix points, the conversation up to the
+  fixed turn plus the teacher's accepted fixed turn is continued by the teacher (GLM-5.3-Flash) with
+  the same customer (GPT-4.1) to its end, in τ²-bench from that message history. One continuation
+  per fix point. Kept only if τ²-bench passes the whole conversation and it is clean
+  (`golden.why_not_clean`). Trained on the fixed turn and every agent turn after it, never on the
+  student's earlier turns. Group `mismatch`, replacing the single-turn fixes.
+- **Fallback, fixed now:** if the continuation tooling isn't working by Sun 22 Nov 20:00 UK, the
+  39 single-turn fixes are used as planned. No other variant is tried.
+- **Unchanged:** at least 30 fixes used, or no retraining (guard fixes count on a Decision 1 go);
+  v2's recipe; the dev gate; the targeted measure; test once.
+- **Scope closed.** No further rules, checker changes, meta-healing rounds or data variants this
+  week. Judge-only "no yes", a "claimed but not done" rule, meta-healing v3 and a second loop turn
+  are next steps, reported as such, and considered only if the extension is confirmed.
 
 **Amended Sun 22 Nov, 12:18 UK, after Chiara's review of PRs #74–#77 and before any re-run, merge
 or freeze.** Her review fixed bugs in all four (25 issues, each with a test). Three affect results
