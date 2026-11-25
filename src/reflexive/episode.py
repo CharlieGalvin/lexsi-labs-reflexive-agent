@@ -168,7 +168,12 @@ class Tau2Episode:
         seed: int | None = None,
         hints: str = "none",
         prompt_variant: str = "default",
+        history: list[dict] | None = None,
     ) -> None:
+        """``history``: start from these messages already exchanged (a saved conversation's
+        OpenAI-style ``messages``, cut where the agent is next to speak). τ²-bench replays their
+        tool calls to rebuild the database, then the conversation carries on from there. Train
+        tasks only, as for hints: it's for making training data (the full-conversation fixes)."""
         from reflexive.llm import default_model, register_openrouter_prices
 
         if hints not in HINTS:
@@ -185,6 +190,9 @@ class Tau2Episode:
         self.count_tokens = count_tokens
         scorer(domain, language).task(task_id)  # fail fast on an unknown task id
         self.hints = hints
+        self.history = history
+        if history is not None and task_id not in _split(domain, "train"):
+            raise ValueError(f"a history is only allowed on train-split tasks ({domain} {task_id!r})")
         if hints != "none" and task_id not in _split(domain, "train"):
             # Hints come from the task's answer key: allowed only for producing training data,
             # never for anything that is evaluated (test split, the four arms).
@@ -228,6 +236,8 @@ class Tau2Episode:
             language=self.language,
         )
         self._env = env
+        if self.history is not None:
+            self._start_from_history(env)
         self.started = time.time()
         env.reset(seed=self.seed)
         tools = [t for t in env._get_tools() if t.name != "done"]
@@ -235,6 +245,24 @@ class Tau2Episode:
         self.policy = env._agent.domain_policy  # includes τ²-bench's language guidance
         self.write_tools = write_tool_names(env._orchestrator.environment.tools, [t.name for t in tools])
         return self._sync()
+
+    def _start_from_history(self, env: Any) -> None:
+        """Give τ²-bench's task this conversation's ``history`` as its message history."""
+        from tau2.data_model.tasks import InitialState
+
+        from reflexive.outcome import from_openai
+
+        msgs = from_openai(self.history or [])
+        if not msgs or msgs[-1].role == "assistant":
+            raise ValueError("a history must end where the agent speaks next: a customer or tool message")
+        task = env._get_task().model_copy(deep=True)
+        init = task.initial_state
+        task.initial_state = InitialState(
+            initialization_data=init.initialization_data if init else None,
+            initialization_actions=init.initialization_actions if init else None,
+            message_history=msgs,
+        )
+        env._task = task
 
     def step(self, reply: dict) -> list[dict]:
         """Send one agent turn. Returns what happened next: tool results and/or customer replies."""
