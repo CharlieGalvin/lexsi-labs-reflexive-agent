@@ -232,6 +232,78 @@ def monitor() -> tuple[list[str], str, bool]:
     return lines, f"It flagged all {looped} that looped, and none that passed.", ok
 
 
+# ---- 6. Stage 2: the final model on test, and what it keeps (SEL-106, SEL-107) ----------------
+
+S2_VS = {
+    "S2E4": "arm-S2-test-vs-arm-S2E4-test.compare.metrics.json",
+    "S2P1E4": "arm-S2-test-vs-arm-S2P1E4-test.compare.metrics.json",
+}
+P_VS_S2E4 = "arm-P-test-vs-arm-S2E4-test.compare.metrics.json"
+RETENTION = {
+    "S2E4 vs base": "retention-base-vs-sft2e4.metrics.json",
+    "FP8 vs 16-bit": "retention-sft2e4-vs-sft2e4q.metrics.json",
+}
+BENCHMARKS = {
+    "Instruction following (IFEval)": "IFEval",
+    "Maths (GSM8K)": "GSM8K",
+    "General knowledge (Global-MMLU-Lite)": "Global-MMLU-Lite",
+}
+
+
+def stage2() -> tuple[list[str], str, bool]:
+    for arm in ("S2E4", "S2P1E4", "P"):  # the summaries and the compares must be the same runs
+        s = cn.load(f"arm-{arm}-test.eval.metrics.json")["overall"]["success_rate"]
+        r = cn.row(P_VS_S2E4 if arm == "P" else S2_VS[arm], "success_rate")
+        c = r["a" if arm == "P" else "b"]  # the eval file rounds to 4 decimals
+        assert abs(s - c) < 1e-4, f"{arm}: eval {s} ≠ compare {c}: not the same runs"
+    v2 = cn.row(S2_VS["S2E4"], "success_rate")
+    rows = [["SFT v2 (8 samples)", pct(v2["a"]), "—"]]
+    for arm, label in [("S2E4", "S2E4: v2's data, 4 epochs"), ("S2P1E4", "S2P1E4: + practice, 4 epochs")]:
+        r = cn.row(S2_VS[arm], "success_rate")
+        rows.append([label, pct(r["b"]), diff(r)])
+    p = cn.row(P_VS_S2E4, "success_rate")
+    lines = ["Step 1: the declared test, 100 unseen tasks × 8 samples, success", ""]
+    lines += table(["Student", "Success", "− v2 (95% range)"], rows)
+    lines += ["", f"S2E4 against the base model on our server (P, {pct(p['a'])}): {diff(p)}", ""]
+    rows = []
+    for metric, label in [
+        ("hallucination_rate", "Tool or Arg failure"),
+        ("loop_rate", "Loop"),
+        ("redundant_call_rate", "Redundant calls"),
+    ]:
+        r = cn.row(S2_VS["S2E4"], metric)
+        rows.append([label, pct(r["a"]), pct(r["b"]), diff(r)])
+    lines += table(["Test split", "v2", "S2E4", "S2E4 − v2 (95% range)"], rows)
+    lines += ["", "Step 2: retention, paired on the same items (a drop: the whole range below zero)", ""]
+    rows, drops = [], 0
+    for pair, f in RETENTION.items():
+        b = cn.load(f)["benchmarks"]
+        for name, short in BENCHMARKS.items():
+            x = b[name]
+            lo, hi = x["diff_ci95"]
+            drops += hi < 0
+            rows.append(
+                [
+                    f"{pair}: {short}",
+                    f"{cn.signed(x['diff'] * 100)} pts ({cn.signed(lo * 100)} to {cn.signed(hi * 100)})",
+                    x["verdict"],
+                ]
+            )
+    lines += table(["Benchmark", "Difference (95% range)", "Verdict"], rows)
+    r = cn.row(S2_VS["S2E4"], "success_rate")
+    ok = r["diff_ci95"][0] > 0 and drops == 0
+    return (
+        lines,
+        (
+            f"S2E4 beats v2 by {r['diff_b_minus_a'] * 100:.1f} points, the whole 95% range above zero, "
+            f"and loses no general skill, in 16-bit or FP8."
+            if ok
+            else "S2E4 doesn't clearly beat v2, or retention shows a drop: see the tables."
+        ),
+        ok,
+    )
+
+
 EXPERIMENTS = [
     Experiment(
         "The baseline: how often does an untuned agent hallucinate?",
@@ -306,6 +378,28 @@ EXPERIMENTS = [
             "  --metrics results/monitor-no-progress-replay.metrics.json",
         ],
         needs="only Arm A's saved conversations, which aren't in git; no GPU or keys",
+    ),
+    Experiment(
+        "Stage 2: the final model on test, and what it keeps",
+        "Does training v2's data for longer beat v2 on unseen tasks, without losing general skills?",
+        "v2's data trained for 4 epochs (S2E4), and the same plus 100 verified practice conversations\n"
+        "(S2P1E4), each run on the 100 test tasks × 8 samples and re-scored by the oracle (judges on),\n"
+        "paired against v2's own 8 samples. Retention: IFEval, GSM8K and Global-MMLU-Lite, S2E4 against\n"
+        "the base model, and S2E4 served in FP8 against 16-bit.",
+        stage2,
+        [
+            "results/arm-{S2E4,S2P1E4,P}-test.eval.metrics.json",
+            "results/arm-{S2,P}-test-vs-arm-*-test.compare.metrics.json",
+            *(f"results/{f}" for f in RETENTION.values()),
+        ],
+        [
+            "just rollout S2E4 <domain> --split test --samples 8      # GPU; see docs/experiments/STAGE2.md",
+            "just arm-eval results/episodes/arms/S2E4-*-test.jsonl --judges on \\",
+            "  --json results/eval-S2E4-test.json",
+            "just arm-compare arm-S2-test.jsonl arm-S2E4-test.jsonl   # each arm's three domains joined",
+            "just retention-run sft2e4 && just retention-compare base sft2e4                  # GPU",
+            "just retention-run sft2e4q && just retention-compare sft2e4 sft2e4q              # FP8 server",
+        ],
     ),
 ]
 
