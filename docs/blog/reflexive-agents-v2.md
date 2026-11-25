@@ -249,6 +249,17 @@ that included zero, so it went to test as a declared extra arm, labelled as such
 borderline first test at 2 runs per task (+8.0, range −1.0 to +16.5) we extended both models to 8:
 a decision made after seeing a result. The 6 new runs alone give +10.5 (+4.0 to +17.0).
 
+**An independent check, and a cleaner agent.** AuditKIT's outcome oracle re-scored all 1,600 test
+conversations of v2 and the final model from scratch, and reached exactly the totals τ²-bench
+recorded (401 and 480 of 800). Its agent metrics show the final model is also tidier:
+
+| Test, 800 conversations each (AuditKIT) | Healed (v2) | Trained longer |
+|---|---:|---:|
+| Tool-call validity | 98.3% | 99.9% |
+| Redundant tool calls | 16.2% | 7.2% |
+| Conversations without a loop (AuditKIT's detector, which also counts repeated goodbyes) | 37% | 57% |
+| Seconds per conversation | 64.1 | 56.4 |
+
 ### Does the agent's own practice add anything? No
 
 We also tried the purest form of self-healing: let the healed agent attempt each train task twice,
@@ -340,7 +351,8 @@ just reproduce-stage2     # Part 2's: downloads the conversations from Hugging F
 ### Acknowledgements
 
 Thanks to **Lexsi Labs** for the hackathon and the stack. AgentTune's `lexsi_provenance.json`
-recorded the lineage of every adapter we published; its `FailureDetector` sees only tool calls, so
+recorded the lineage of every adapter we published, Stage 2's included; AuditKIT's oracle and agent
+metrics re-scored both stages' test runs; its `FailureDetector` sees only tool calls, so
 we added a turn-level loop monitor. AuditKIT's outcome oracle agreed with τ²-bench's own verdicts on
 all 600 test conversations; its loop detector counts near-identical replies, such as repeated
 goodbyes, as loops, so we relied on our own classifier there.

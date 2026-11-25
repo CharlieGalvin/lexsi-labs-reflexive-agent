@@ -215,6 +215,11 @@ per task**, paired task by task. Re-measured this way, the healed model scores 5
   95% −0.75 to +5.88) didn't meet our validation rule, so S2E4 went to test as a declared arm; and its
   test was extended from 2 to 8 samples after a borderline first result (the 6 new samples alone:
   +10.5, 95% +4.0 to +17.0).
+- **AuditKIT confirms it, and the agent is cleaner.** AuditKIT's outcome oracle re-scored all 1,600
+  test conversations of v2 and S2E4 and reached exactly τ²-bench's totals (401 and 480 of 800). Its
+  agent metrics, v2 → S2E4: tool-call validity 98.3% → 99.9%, redundant tool calls 16.2% → 7.2%,
+  loop-free conversations 37% → 57% (AuditKIT's detector, which also counts repeated replies),
+  seconds per conversation 64.1 → 56.4 ([outputs](https://huggingface.co/datasets/reagent-lexsi/reagent-stage2-artifacts/tree/main/analysis/auditkit)).
 - **The model's own practice adds nothing:** S2P1E4 against S2E4 is −1.1 points (95% −6.6 to +4.4).
 - **Safer:** changes made without the customer's explicit yes fell from 0.152 to 0.010 per
   conversation (−0.142, 95% −0.310 to −0.035): 6 of S2E4's 800 test conversations had one.
@@ -273,6 +278,9 @@ arms only).
   conversations.
 - **Agent metrics** (`src/reflexive/evaluate.py`): `ToolCallValidity`, `RedundantToolCalls` and
   `AgentLoopDetection` on every conversation, reported next to our own classifier.
+- **Stage 2:** the oracle and the agent metrics re-scored the 1,600 test conversations of v2 and
+  the final model (the same totals as τ²-bench); every Stage 2 adapter carries AgentTune's
+  `lexsi_provenance.json`.
 
 **How they connect:**
 
