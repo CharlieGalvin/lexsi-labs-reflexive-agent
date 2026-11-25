@@ -1,0 +1,26 @@
+# Arm S2PR: SFT v2 practising (Stage 2b, the self-practice loop, round 1; SEL-23).
+# The same model and server as S2 (adapter "sft2"), sampled at temperature 0.7 so its attempts
+# differ. Run only on the train tasks outside validation, by scripts/heal/practice.py:
+#   python scripts/heal/practice.py run --from $VALDIR
+# Never on validation, dev or test: practice.py refuses them.
+
+student:
+  name: aya32-sft-r16-v2-practice
+  model: sft2
+  api_base: http://localhost:8000/v1
+  api_key_env: null
+  mode: prompted          # the data contract (SEL-35): don't change these two
+  style: cohere
+  temperature: 0.7        # the one change from arms.sft2.yaml: varied attempts to learn from
+  max_tokens: 1024
+  max_context: 32768      # = serve.sh MAX_LEN
+  reserve: 4096
+  rpm: 0
+
+customer: null            # GPT-4.1, as for every arm
+
+arms:
+  S2PR:
+    name: sft-v2-practice
+    description: "SFT v2 at temperature 0.7 on the train tasks outside validation: round 1's practice (Stage 2b)"
+    prompt_variant: default

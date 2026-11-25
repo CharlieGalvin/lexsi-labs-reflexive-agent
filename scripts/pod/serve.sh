@@ -8,6 +8,7 @@
 #   ADAPTER= EXTRA_ADAPTERS="sft2=runs/sft-aya32b-r16-v2" bash scripts/pod/serve.sh   # v2 only
 #   EXTRA_ADAPTERS="sft2=runs/sft-aya32b-r16-v2" bash scripts/pod/serve.sh   # v1 as "sft" + v2 as "sft2"
 #   ADAPTER= RUNTIME_LORA=1 bash scripts/pod/serve.sh  # heal cycles: adapters loaded while serving
+#   QUANTIZATION=fp8 MAX_LEN=65536 ... bash scripts/pod/serve.sh   # FP8 weights, 64K context (Stage 2b, arm S2Q)
 #   VLLM_API_KEY=... (read by vLLM itself): require a key, when the port is public (configs/sft/arms.pod.yaml)
 #
 # Then, in another terminal on the pod, the rollouts (configs/sft/: P = base, S = adapter):
@@ -26,6 +27,10 @@ EXTRA_ADAPTERS="${EXTRA_ADAPTERS-}"   # more adapters on the same server: "name=
 MAX_LEN="${MAX_LEN:-32768}"
 PORT="${PORT:-8000}"
 GPU_UTIL="${GPU_UTIL:-0.95}"  # 0.92 left 4.9 GiB of KV cache: under one 32K conversation
+# Stage 2b (the organisers' suggestion): "fp8" quantises the 16-bit weights to 8 bits as they load
+# (~32 GiB instead of ~60), which leaves room for a 64K context (MAX_LEN=65536) on an 80 GB card.
+# The adapters stay 16-bit. Empty (the default) serves bfloat16, as every Stage 1 and Stage 2 arm.
+QUANTIZATION="${QUANTIZATION-}"
 WORKSPACE="${WORKSPACE:-/workspace}"
 VLLM="${VLLM:-$WORKSPACE/vllm-env/bin/vllm}"
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -101,4 +106,5 @@ exec "$VLLM" serve "$MODEL" \
   --generation-config vllm \
   --chat-template "$TEMPLATE" \
   --hf-overrides "{\"max_position_embeddings\": $MAX_LEN}" \
+  ${QUANTIZATION:+--quantization "$QUANTIZATION"} \
   "${lora[@]}"

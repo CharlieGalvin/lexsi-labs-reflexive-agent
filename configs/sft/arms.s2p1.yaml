@@ -1,0 +1,27 @@
+# Arm S2P1: round 1 of the self-practice loop (Stage 2b, SEL-23): v2's data + v2's own verified practice, v2's recipe.
+# Serve on the pod:  ADAPTER= EXTRA_ADAPTERS="sft2=runs/sft-aya32b-r16-v2 sft2p1=runs/sft-aya32b-p1" bash scripts/pod/serve.sh
+# Validation, 8 samples (STAGE2.md, Stage 2b):
+#   python scripts/arms/val_rollout.py S2P1 configs/sft/arms.s2p1.yaml --from $VALDIR --samples 8 --actions off
+# Same harness, prompt, decoding and customer as arms.sft2.yaml; only what the line above says differs.
+# Never on test unless the team declares it (Stage 2b's rule).
+
+student:
+  name: aya32-sft-p1
+  model: sft2p1
+  api_base: http://localhost:8000/v1
+  api_key_env: null
+  mode: prompted          # the data contract (SEL-35): don't change these two
+  style: cohere
+  temperature: 0.0
+  max_tokens: 1024
+  max_context: 32768      # = serve.sh MAX_LEN
+  reserve: 4096
+  rpm: 0
+
+customer: null            # GPT-4.1, as for every arm
+
+arms:
+  S2P1:
+    name: sft-p1
+    description: "Round 1 of the self-practice loop: v2's data + v2's own verified practice passes, v2's recipe (Stage 2b)"
+    prompt_variant: default

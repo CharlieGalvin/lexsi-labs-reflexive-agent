@@ -1,0 +1,27 @@
+# Arm S2P1E4: round 1's data (v2's + v2's own verified practice) trained 4 epochs (Stage 2c, SEL-121).
+# Serve on the pod:  ADAPTER= EXTRA_ADAPTERS="sft2p1e4=runs/sft-aya32b-p1-e4" bash scripts/pod/serve.sh
+# Validation, 8 samples (STAGE2.md, Stage 2b):
+#   python scripts/arms/val_rollout.py S2P1E4 configs/sft/arms.s2p1e4.yaml --from $VALDIR --samples 8 --actions off
+# Same harness, prompt, decoding and customer as arms.sft2.yaml; only what the line above says differs.
+# Never on test unless the team declares it (Stage 2b's rule).
+
+student:
+  name: aya32-sft-p1-e4
+  model: sft2p1e4
+  api_base: http://localhost:8000/v1
+  api_key_env: null
+  mode: prompted          # the data contract (SEL-35): don't change these two
+  style: cohere
+  temperature: 0.0
+  max_tokens: 1024
+  max_context: 32768      # = serve.sh MAX_LEN
+  reserve: 4096
+  rpm: 0
+
+customer: null            # GPT-4.1, as for every arm
+
+arms:
+  S2P1E4:
+    name: sft-p1-e4
+    description: "Round 1's data trained 4 epochs (Stage 2c, SEL-121)"
+    prompt_variant: default

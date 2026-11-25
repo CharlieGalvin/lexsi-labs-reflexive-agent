@@ -1,0 +1,36 @@
+# Stage 2b, step 1a (STAGE2.md, amended Sun 22 Nov): SFT v2's data and recipe, trained longer
+# (4 epochs, about 148 steps, against v2's 2 epochs and 74). Nothing else changes.
+# Why: v2 passes only 55 of the 112 train tasks it trained on; SL (more steps, same data) beat v1;
+# v2's held-out loss was still falling. Train on the pod:  just sft-train configs/train/sft_aya32b_v2_e4.yaml --push
+
+name: sft-aya32b-v2-e4
+model: CohereLabs/aya-expanse-32b
+data: data/train/sft-v2.jsonl          # v1's sft-all examples + group "extra"
+train_group: [healable, extra]
+eval_group: solved_by_aya             # the same 15 held-out examples as v1 (no extras for them)
+max_len: 16384
+
+lora:
+  r: 16
+  alpha: 32
+  dropout: 0.05
+  target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+
+quantization:
+  load_in_4bit: true
+  quant_type: nf4
+  double_quant: true
+
+trainer:
+  num_train_epochs: 4
+  learning_rate: 1.0e-4
+  lr_scheduler_type: cosine
+  warmup_ratio: 0.05
+  per_device_train_batch_size: 1
+  gradient_accumulation_steps: 4
+  max_grad_norm: 1.0
+  weight_decay: 0.0
+  optim: paged_adamw_8bit
+  logging_steps: 1
+  eval_steps: 7
+  seed: 0

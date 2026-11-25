@@ -1,0 +1,24 @@
+# Arm S2E4S1: S2E4's recipe trained again with seed 1 (Stage 2d, STAGE2.md amended Wed 25 Nov).
+# Declared for test, 100 tasks x 8 samples, run once:  bash scripts/pod/night_seed.sh
+# Same harness, prompt, decoding and customer as arms.s2e4.yaml; only the adapter differs.
+
+student:
+  name: aya32-sft-v2-e4-s1
+  model: sft2e4s1
+  api_base: http://localhost:8000/v1
+  api_key_env: null
+  mode: prompted          # the data contract (SEL-35): don't change these two
+  style: cohere
+  temperature: 0.0
+  max_tokens: 1024
+  max_context: 32768      # = serve.sh MAX_LEN
+  reserve: 4096
+  rpm: 0
+
+customer: null            # GPT-4.1, as for every arm
+
+arms:
+  S2E4S1:
+    name: sft-v2-e4-s1
+    description: "S2E4's recipe, seed 1 (Stage 2d)"
+    prompt_variant: default
