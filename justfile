@@ -82,6 +82,10 @@ golden *args:
 golden-publish *args:
     python scripts/data/publish_golden.py {{args}}
 
+# Every arm's saved conversations → one HF dataset (SEL-110): --dry-run first; --arms to send some
+conversations-publish *args:
+    python scripts/data/publish_conversations.py {{args}}
+
 # Build the hard subset from Arm A's train runs and golden v1 → data/golden/hard/ (SEL-7; no API calls)
 hard-subset *args:
     python scripts/data/build_hard_subset.py {{args}}
