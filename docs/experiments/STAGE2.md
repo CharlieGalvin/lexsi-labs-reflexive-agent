@@ -436,6 +436,12 @@ Healing "costs nothing" on a benchmark unless the paired 95% interval of the dif
 same items lies entirely below zero. Drops and rises are both reported. Base vs v2: done
 (`results/retention-base-vs-sft2.metrics.json`). Winner: run Sun night with the test arms.
 
+**Amended Wed 25 Nov, 16:55 UK, before the run: FP8 retention.** S2E4Q (S2E4's adapter served with
+`QUANTIZATION=fp8`, labelled `sft2e4q` in `configs/retention.yaml`) against S2E4 in 16-bit, on the
+same benchmarks, items, temperature and server settings, with the same rule: FP8 "costs nothing"
+on a benchmark unless the paired 95% interval of the difference from S2E4 lies entirely below
+zero. Reported whatever it shows.
+
 ## ROI reference (SEL-86)
 
 GPT-4.1 as the agent (`configs/arms.gpt41.yaml`), test 100 × 2, a reference, not a candidate: it
