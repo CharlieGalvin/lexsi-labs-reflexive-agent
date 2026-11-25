@@ -248,6 +248,27 @@ stays where it is; every Stage 2 guarded run uses `stage2-checker-frozen-2`, whi
 `S2G` arm (PR #81: v2 with the guard, its own key so its records never mix with v2's). A judge-only "no yes"
 (the LLM decides every time, the word match only recorded) is noted as future work.
 
+**Result, recorded Wed 25 Nov, 11:25 UK: the frozen checker against τ²-bench's verdicts on v2's
+dev and validation conversations (SEL-98, PR #90).** Run once by Katie, who did not build the
+checker, with `stage2-checker-frozen-2` (Tool / Arg / Loop + "no yes" + "mismatch"), each change
+checked as the guard would have checked it live (`scripts/labels/checker_vs_verdicts.py`,
+`results/checker-vs-verdicts-dev-val.metrics.json`). 132 conversations, never test: 55 failed,
+77 passed; 37 of the failures have no Tool / Arg / Loop finding, as expected. No rule errors.
+
+| Dev + validation, SFT v2 | Flagged | Wilson 95% | SEL-98 target |
+|---|---|---|---|
+| The 37, by the made-up-intent rules | 6/37 (16%) | 8–31% | at least half: **not met** |
+| Passes, by the made-up-intent rules | 2/77 (3%) | 1–9% | at most 1 in 10: met |
+| Passes, by the whole checker | 9/77 (12%) | 6–21% | |
+| Failures, by the made-up-intent rules | 10/55 (18%) | 10–30% | |
+| Failures, by the whole checker | 24/55 (44%) | 31–57% | |
+
+By domain, the 37 flagged: retail 5/21, airline 1/8, telecom 0/8. Findings by rule: "mismatch" 32,
+"no yes" 2. The rules are precise but rare: they seldom flag a pass and miss most of the decision
+failures they were built for, as on the held-out train-task conversations. Caveat: the intervals
+treat conversations as independent, though several come from the same task, so they are somewhat
+narrower than a task-clustered bootstrap would give. Reported as is; the checker is not changed.
+
 ## The guard (SEL-89)
 
 `reflexive.monitor.ActionGuard`, PR #73. Before a reply is sent to τ²-bench, every state-changing
@@ -316,6 +337,26 @@ out: 224 fresh conversations, 113 failures, 111 passes; 35 failures no frozen ru
 
 Under the amendment of Sat 23:28, with no v2 rule accepted, retraining is as before it: only if
 Decision 1 says go.
+
+**Mismatch fixes, Sun 22 Nov 13:35 UK (SEL-117, `onpolicy_fixes.py --points mismatch`, #82): 39
+fixes, so retraining runs whatever Decision 1 says.** Over v2's 112 train-pool and 224 fresh train
+conversations, "mismatch" flagged a change in 43 failed and 12 passed ones (no checker errors); the
+12 in passes get no fix, as pre-registered. GLM-5.3-Flash, told what was flagged in its own copy of
+the prompt only, fixed 39 of the 43 (4 refused after 3 attempts), from 23 distinct tasks.
+
+- **What the fixes are:** 27 ask or explain with no change (many correct the agent's own earlier
+  mistake before acting: a wrong item's specs, a price per passenger, a misstated policy), 9 look
+  something up first, 3 make the expected change. The answer key verified every change; a turn with
+  no change passes that check, as in Stage 1. So the fixes teach the guard's caution, *check before
+  acting*, more than the correct action. Only the fixed turn is verified, not the rest of the
+  conversation.
+- A check for fixes that say a change was made without making it found none among the 39. Neither
+  `check_fix` nor any rule reads what a turn says, only its calls: "claimed but not done" is not in
+  the taxonomy, and is a next rule to build.
+- **What to watch:** the retrained model asking or stalling where it should act. The dev gate (no
+  drop in success; the fifth check) covers it; average conversation length is reported too. The
+  targeted measure, "mismatch" flags on the retrained model's dev conversations against v2's, is
+  the test of whether the caution was learned.
 
 **Amended Sun 22 Nov, 14:10 UK, before Decision 1 runs and before any retraining: the mismatch fixes
 are checked over the whole conversation, with a fixed fallback; Stage 2's scope is closed.**

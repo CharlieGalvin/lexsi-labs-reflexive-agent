@@ -196,7 +196,7 @@ def main() -> int:
         0.025,
         0.025,
         "τ²-bench test split, 100 tasks × 2 samples, Aya Expanse 32B. Success oracle-verified; "
-        "lines show 95% bootstrap ranges over tasks. Hallucination: Chiara's Tool / Arg classifier.",
+        "lines show 95% bootstrap ranges over tasks. Hallucination: our Tool / Arg classifier.",
         fontsize=7.5,
         color=INK_2,
     )
