@@ -201,9 +201,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     a = p.parse_args(argv)
 
-    paths = sorted(f for f in a.src.glob("*.jsonl") if NAME.match(f.name))
-    if a.arms:
-        paths = [f for f in paths if NAME.match(f.name)["arm"] in a.arms]
+    named = {f: m["arm"] for f in sorted(a.src.glob("*.jsonl")) if (m := NAME.match(f.name))}
+    paths = [f for f, arm in named.items() if not a.arms or arm in a.arms]
     if not paths:
         print(
             f"⛔ no <ARM>-<domain>-<split>.jsonl files in {shown(a.src)}"
@@ -229,13 +228,7 @@ def main(argv: list[str] | None = None) -> int:
             f"   ✓ {e['file']}: {e['conversations']} conversations, {e['tasks']} tasks, {e['crashed']} crashed, {rate}"
         )
 
-    api = None
-    manifest = dict(local)
-    if not a.dry_run:
-        from huggingface_hub import HfApi
-
-        api = HfApi()
-        manifest = {**remote_manifest(a.repo), **local}
+    manifest = dict(local) if a.dry_run else {**remote_manifest(a.repo), **local}
 
     shutil.rmtree(OUT, ignore_errors=True)
     for e in local.values():
@@ -250,6 +243,9 @@ def main(argv: list[str] | None = None) -> int:
         print("(dry run: nothing uploaded)")
         return 0
 
+    from huggingface_hub import HfApi
+
+    api = HfApi()
     api.create_repo(a.repo, repo_type="dataset", private=True, exist_ok=True)
     arms = sorted({e["arm"] for e in local.values()})
     info = api.upload_folder(
