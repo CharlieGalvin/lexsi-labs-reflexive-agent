@@ -1,0 +1,248 @@
+{
+  "arms": "S2:trainpool",
+  "rules": {
+    "S2/no_yes": {
+      "retail": {
+        "failures": {
+          "flagged": 3,
+          "n": 25,
+          "errored_unflagged": 0
+        },
+        "unexplained failures": {
+          "flagged": 1,
+          "n": 13,
+          "errored_unflagged": 0
+        },
+        "passes": {
+          "flagged": 2,
+          "n": 21,
+          "errored_unflagged": 0
+        }
+      },
+      "airline": {
+        "failures": {
+          "flagged": 1,
+          "n": 11,
+          "errored_unflagged": 0
+        },
+        "unexplained failures": {
+          "flagged": 0,
+          "n": 6,
+          "errored_unflagged": 0
+        },
+        "passes": {
+          "flagged": 1,
+          "n": 8,
+          "errored_unflagged": 0
+        }
+      },
+      "telecom": {
+        "failures": {
+          "flagged": 0,
+          "n": 21,
+          "errored_unflagged": 0
+        },
+        "unexplained failures": {
+          "flagged": 0,
+          "n": 5,
+          "errored_unflagged": 0
+        },
+        "passes": {
+          "flagged": 0,
+          "n": 26,
+          "errored_unflagged": 0
+        }
+      },
+      "all": {
+        "failures": {
+          "flagged": 4,
+          "n": 57,
+          "errored_unflagged": 0
+        },
+        "unexplained failures": {
+          "flagged": 1,
+          "n": 24,
+          "errored_unflagged": 0
+        },
+        "passes": {
+          "flagged": 3,
+          "n": 55,
+          "errored_unflagged": 0
+        }
+      }
+    },
+    "S2/mismatch": {
+      "retail": {
+        "failures": {
+          "flagged": 12,
+          "n": 25,
+          "errored_unflagged": 0
+        },
+        "unexplained failures": {
+          "flagged": 6,
+          "n": 13,
+          "errored_unflagged": 0
+        },
+        "passes": {
+          "flagged": 5,
+          "n": 21,
+          "errored_unflagged": 0
+        }
+      },
+      "airline": {
+        "failures": {
+          "flagged": 2,
+          "n": 11,
+          "errored_unflagged": 0
+        },
+        "unexplained failures": {
+          "flagged": 1,
+          "n": 6,
+          "errored_unflagged": 0
+        },
+        "passes": {
+          "flagged": 0,
+          "n": 8,
+          "errored_unflagged": 0
+        }
+      },
+      "telecom": {
+        "failures": {
+          "flagged": 0,
+          "n": 21,
+          "errored_unflagged": 0
+        },
+        "unexplained failures": {
+          "flagged": 0,
+          "n": 5,
+          "errored_unflagged": 0
+        },
+        "passes": {
+          "flagged": 0,
+          "n": 26,
+          "errored_unflagged": 0
+        }
+      },
+      "all": {
+        "failures": {
+          "flagged": 14,
+          "n": 57,
+          "errored_unflagged": 0
+        },
+        "unexplained failures": {
+          "flagged": 7,
+          "n": 24,
+          "errored_unflagged": 0
+        },
+        "passes": {
+          "flagged": 5,
+          "n": 55,
+          "errored_unflagged": 0
+        }
+      }
+    },
+    "S2/either": {
+      "retail": {
+        "failures": {
+          "flagged": 12,
+          "n": 25,
+          "errored_unflagged": 0
+        },
+        "unexplained failures": {
+          "flagged": 6,
+          "n": 13,
+          "errored_unflagged": 0
+        },
+        "passes": {
+          "flagged": 5,
+          "n": 21,
+          "errored_unflagged": 0
+        }
+      },
+      "airline": {
+        "failures": {
+          "flagged": 3,
+          "n": 11,
+          "errored_unflagged": 0
+        },
+        "unexplained failures": {
+          "flagged": 1,
+          "n": 6,
+          "errored_unflagged": 0
+        },
+        "passes": {
+          "flagged": 1,
+          "n": 8,
+          "errored_unflagged": 0
+        }
+      },
+      "telecom": {
+        "failures": {
+          "flagged": 0,
+          "n": 21,
+          "errored_unflagged": 0
+        },
+        "unexplained failures": {
+          "flagged": 0,
+          "n": 5,
+          "errored_unflagged": 0
+        },
+        "passes": {
+          "flagged": 0,
+          "n": 26,
+          "errored_unflagged": 0
+        }
+      },
+      "all": {
+        "failures": {
+          "flagged": 15,
+          "n": 57,
+          "errored_unflagged": 0
+        },
+        "unexplained failures": {
+          "flagged": 7,
+          "n": 24,
+          "errored_unflagged": 0
+        },
+        "passes": {
+          "flagged": 6,
+          "n": 55,
+          "errored_unflagged": 0
+        }
+      }
+    }
+  },
+  "checker_errors": [],
+  "mismatch_flagged_passes": [
+    "S2 retail 109#0",
+    "S2 retail 104#0",
+    "S2 retail 11#0",
+    "S2 retail 81#0",
+    "S2 retail 92#0"
+  ],
+  "injected": {
+    "tried": 40,
+    "caught": 29,
+    "caught_raw": 37,
+    "clean_flagged": 8,
+    "errors": 0,
+    "kinds": {
+      "an item dropped from the return": [
+        6,
+        12
+      ],
+      "an extra item returned": [
+        9,
+        11
+      ],
+      "a new item swapped for another item ID it saw": [
+        8,
+        9
+      ],
+      "another order cancelled": [
+        6,
+        8
+      ]
+    }
+  }
+}

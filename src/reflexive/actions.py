@@ -1,0 +1,116 @@
+"""``check_action``: the one function the checker and the guard both code against (SEL-83).
+
+    finding = check_action(conversation, call, policy)   # before the call runs
+    if finding is not None and finding.live: ...          # the guard blocks it (SEL-89)
+
+The **checker** (SEL-88's "no yes" rule, and meta-healing rules later) supplies rules; the
+**guard** (`reflexive.monitor.ActionGuard`) calls `check_action` on every state-changing call the
+agent proposes, before τ²-bench runs it. Neither side knows the other's internals, so a new rule
+plugs in by joining `RULES`, with no change to the guard.
+
+A rule reads only what a live deployment has: the conversation as the agent saw it, the proposed
+call and the domain policy. It never reads τ²-bench's expected actions or the task.
+
+**Live or after the fact.** Every rule says which it is, in the `ActionFinding` it returns:
+
+* ``live=True``: checkable at the moment of the change, and fast. The guard may block on it.
+* ``live=False``: needs more than the moment of the change (later turns, the outcome), or is too
+  slow to run on every call. Used by the gate and in reports only; the guard logs it, never blocks.
+
+This is the agreed interface. ``RULES`` holds SEL-88's ``no_yes`` (`reflexive.intent`), then the
+meta-healing rules (SEL-91, `reflexive.meta_heal`) a person accepted into ``configs/meta_rules.json``.
+Rules in `OPTIONAL_RULES` (the hand-written ``mismatch``) run only for an arm that asks for them, via
+`checker_with`.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable, Sequence
+from dataclasses import asdict, dataclass, replace
+from typing import Any
+
+Message = dict[str, Any]
+
+
+@dataclass(frozen=True)
+class ActionFinding:
+    """Why a proposed call shouldn't run (or, when ``live`` is False, should be looked at later)."""
+
+    type: str  # the finding type, e.g. "INTENT" (made-up intent), beside TOOL / ARG / LOOP
+    rule: str  # the rule that fired, e.g. "no_yes"
+    reason: str  # one sentence a person can read in the log
+    live: bool  # True: checkable at the moment of the change, so the guard may block on it
+    message: str = ""  # what the guard tells the agent when it blocks; "" means its BLOCK_MESSAGE
+    # After-the-fact findings from earlier rules on the same call (e.g. a no_yes_judge_error), kept
+    # on the live finding that wins so they still reach the log.
+    also: tuple[ActionFinding, ...] = ()
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+Rule = Callable[[Sequence[Message], dict, str], "ActionFinding | None"]
+"""``rule(conversation, call, policy) -> ActionFinding | None``, the same arguments as `check_action`."""
+
+RULES: list[Rule] = []
+"""The rules `check_action` runs, in order: SEL-88's ``no_yes``, registered at the end of this module."""
+
+
+def check_action(
+    conversation: Sequence[Message],
+    call: dict,
+    policy: str,
+    rules: Sequence[Rule] | None = None,
+) -> ActionFinding | None:
+    """The first finding for ``call``, live findings before after-the-fact ones; None if it may run.
+
+    ``conversation``: the agent's view so far (OpenAI-style messages, system prompt first), not
+    including the turn that proposes ``call``.
+    ``call``: one OpenAI tool call, ``{"id", "type": "function", "function": {"name", "arguments"}}``,
+    with ``arguments`` a JSON string or a dict.
+    ``policy``: the domain policy text, as the agent's system prompt carries it.
+    ``rules``: the rules to run; `RULES` when omitted.
+    """
+    later: list[ActionFinding] = []
+    for rule in RULES if rules is None else rules:
+        finding = rule(conversation, call, policy)
+        if finding is None:
+            continue
+        if finding.live:
+            return replace(finding, also=tuple(later)) if later else finding
+        later.append(finding)
+    if not later:
+        return None
+    return replace(later[0], also=tuple(later[1:])) if len(later) > 1 else later[0]
+
+
+# The rules, registered last because reflexive.intent builds its findings from this module.
+from reflexive.intent import no_yes  # noqa: E402
+
+RULES.append(no_yes)
+
+# SEL-91: the meta-healing rules a person accepted (configs/meta_rules.json), after "no yes".
+from reflexive.meta_heal import meta_rules  # noqa: E402
+
+RULES.extend(meta_rules())
+
+# Hand-written after meta-healing: a change that doesn't match the request or the lookups. Not in
+# RULES: on train it flags about 1 in 5 good retail changes (results/rule-rates-mismatch.metrics.json),
+# above STAGE2.md's 1-in-10 bar, and it calls full GPT-4.1 on every order or reservation change. So
+# the default guard, and re-runs of arms already published, don't change; an arm opts in.
+from reflexive.mismatch import mismatch  # noqa: E402
+
+OPTIONAL_RULES: dict[str, Rule] = {"mismatch": mismatch}
+
+
+def checker_with(*names: str) -> Callable[[Sequence[Message], dict, str], ActionFinding | None]:
+    """`check_action` with `RULES` and, after them, these `OPTIONAL_RULES` (an arm's ``checker``)."""
+    unknown = [n for n in names if n not in OPTIONAL_RULES]
+    if unknown:
+        raise ValueError(f"no optional rule {unknown}; there are {sorted(OPTIONAL_RULES)}")
+    extra = [OPTIONAL_RULES[n] for n in names]
+
+    def checker(conversation: Sequence[Message], call: dict, policy: str) -> ActionFinding | None:
+        return check_action(conversation, call, policy, [*RULES, *extra])
+
+    return checker

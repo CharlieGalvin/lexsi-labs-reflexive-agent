@@ -155,6 +155,25 @@ def make_episode(arm: Arm, domain: str, task_id: str, **kwargs: Any) -> Tau2Epis
     )
 
 
+def _send_or_block(ep: Any, agent: Any, watch: Any, messages: list[dict], reask: bool) -> bool:
+    """One agent reply, checked before it runs (SEL-89) and then sent. True if it was blocked.
+
+    ``reask``: the last reply was blocked, so this prompt carries the block message.
+    """
+    # this reply's number: a blocked reply never reaches the view, so the next one keeps it
+    agent_turn = 1 + sum(m.get("role") == "assistant" for m in ep.messages())
+    if reask:
+        messages = watch.actions.reasked(messages, agent_turn)
+    try:
+        reply = agent.turn(messages, ep.tool_schemas)
+        if watch.before_step(ep.messages(), reply, agent_turn):
+            return True
+        ep.step(reply)
+    except ContextTooLong:  # the API's own token count was over the window
+        ep.end_for_context()
+    return False
+
+
 def run_episode(
     arm: Arm,
     agent: Any,
@@ -164,7 +183,9 @@ def run_episode(
     judges: bool = True,
     sample: int = 0,
     monitor: str = "log",
+    actions: str = "log",
     audit_log: Path | str | None = None,
+    checker: Any = None,
     **episode_kwargs: Any,
 ) -> dict:
     """One conversation of ``arm`` on one task. Never raises for a failed conversation.
@@ -177,10 +198,17 @@ def run_episode(
     ``act`` (a ``no_progress`` loop gets a nudge, then a stop: an ablation of its own) or ``off``.
     ``audit_log``: a JSONL file the conversation is appended to after every turn, in the
     audit-log format AgentTune's ``FullClosedLoop`` reads.
+
+    Before each reply is sent, every state-changing call in it goes through `check_action`
+    (SEL-89, `reflexive.monitor.ActionGuard`). ``actions``, its own mode, apart from ``monitor``:
+    ``log`` (default) records findings, ``act`` blocks a reply with a live finding and asks the
+    agent again, ``off`` checks nothing. ``checker`` replaces
+    `reflexive.actions.check_action` (tests, smoke runs); what it decided is in
+    ``rec["monitor"]["actions"]``.
     """
     from reflexive.monitor import Guard, Watcher
 
-    Guard(monitor)  # refuse an unknown mode before the conversation starts
+    Guard(monitor), Guard(actions)  # refuse an unknown mode before the conversation starts
     ep = make_episode(arm, domain, task_id, **episode_kwargs)
     watch: Watcher | None = None
     start = time.monotonic()
@@ -195,18 +223,21 @@ def run_episode(
             audit_log,
             f"{arm.key}/{domain}/{task_id}/{sample}",
             customer_tools=_customer_tools(domain),
+            write_tools=ep.write_tools,
+            policy=ep.policy,
+            checker=checker,
+            actions=actions,
         )
-        nudge = False
+        nudge = reask = False
         while not ep.done:
             messages = ep.prompt()
             if ep.done:
                 break
             if nudge:
                 messages, nudge = watch.guard.nudged(messages), False
-            try:
-                ep.step(agent.turn(messages, ep.tool_schemas))
-            except ContextTooLong:  # the API's own token count was over the window
-                ep.end_for_context()
+            reask = _send_or_block(ep, agent, watch, messages, reask)
+            if reask:  # not sent: τ²-bench never saw it, and the conversation carries on
+                continue
             act = watch.after_turn(ep.messages())
             nudge = act == "nudge"
             if act == "stop":  # the guard's stop, recorded as termination monitor_stop

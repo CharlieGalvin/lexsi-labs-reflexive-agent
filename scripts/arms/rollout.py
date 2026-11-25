@@ -66,6 +66,22 @@ def main() -> int:
         "act = nudge, then stop, a no_progress loop (an ablation: writes <arm>-<domain>-<split>-guard.jsonl)",
     )
     ap.add_argument(
+        "--actions",
+        default="log",
+        choices=["off", "log", "act"],
+        help="the action guard (SEL-89), apart from --monitor: log = record what check_action "
+        "finds (default); act = block an unconfirmed change and ask the agent again "
+        "(writes <arm>-<domain>-<split>-actions.jsonl)",
+    )
+    ap.add_argument(
+        "--rules",
+        nargs="*",
+        default=[],
+        metavar="RULE",
+        help="optional checker rules to run after the default ones, e.g. --rules mismatch "
+        "(reflexive.actions.OPTIONAL_RULES; Stage 2's guarded runs use mismatch)",
+    )
+    ap.add_argument(
         "--audit-log",
         type=pathlib.Path,
         help="also append every turn to this JSONL audit log (FullClosedLoop's format)",
@@ -79,7 +95,8 @@ def main() -> int:
         a.split = "-".join(sorted({_split_of(a.domain, t) for t in tasks}))
     if a.limit:
         tasks = tasks[: a.limit]
-    guard = "-guard" if a.monitor == "act" else ""  # never mixed into the arm's own file
+    # never mixed into the arm's own file; -guard is Stage 1's loop-guard ablation
+    guard = ("-guard" if a.monitor == "act" else "") + ("-actions" if a.actions == "act" else "")
     out = a.out or pathlib.Path(f"results/episodes/arms/{arm.key}-{a.domain}-{a.split}{guard}.jsonl")
     out.parent.mkdir(parents=True, exist_ok=True)
 
@@ -108,8 +125,14 @@ def main() -> int:
     lock = threading.Lock()
     passed = errors = overflows = 0
 
+    from reflexive.actions import RULES, checker_with
+
+    checker = checker_with(*a.rules) if a.rules else None  # None: the default check_action
+    checker_rules = [getattr(r, "__name__", str(r)) for r in RULES] + list(a.rules)
+    print(f"checker rules: {', '.join(checker_rules)} (actions: {a.actions})")
+
     def one(task_id: str, sample: int) -> dict:
-        return run_episode(
+        rec = run_episode(
             arm,
             make_student(arm.student, limiter=limiter),
             a.domain,
@@ -117,8 +140,12 @@ def main() -> int:
             judges=judges,
             sample=sample,
             monitor=a.monitor,
+            actions=a.actions,
             audit_log=a.audit_log,
+            checker=checker,
         )
+        rec["checker_rules"] = checker_rules  # what the guard checked with, for the record
+        return rec
 
     if out.exists() and not a.fresh:  # rewrite without the crashed records being re-run
         out.write_text("".join(f"{line}\n" for line in kept))

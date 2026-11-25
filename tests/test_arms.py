@@ -361,3 +361,111 @@ def test_log_mode_records_the_loop_but_leaves_the_conversation_alone(tau2):
     assert m["mode"] == "log" and (m["nudged_at"], m["stopped_at"]) == (None, None)
     assert any(a["kind"] == "no_progress" for a in m["alarms"])
     assert all(p[-1]["content"] != NUDGE for p in agent.prompts) and rec["termination"] == "max_steps"
+
+
+# --- The guard before a change runs (SEL-89) ----------------------------------------------------
+
+ASK = "I can cancel order #W2378156 for you. Shall I go ahead?"
+
+
+class Canceller:
+    """Tries to cancel an order at once; asked to confirm, it asks the customer, then tries again."""
+
+    def __init__(self):
+        self.prompts: list[list[dict]] = []
+
+    def turn(self, messages, tool_schemas):
+        from reflexive.monitor import BLOCK_MESSAGE
+
+        self.prompts.append(messages)
+        last = messages[-1]
+        if last.get("content") == BLOCK_MESSAGE:
+            return {"role": "assistant", "content": ASK}
+        if last["role"] == "tool":
+            return {"role": "assistant", "content": "That's done. Anything else?"}
+        n = len(self.prompts)
+        args = json.dumps({"order_id": "#W2378156", "reason": "no longer needed"})
+        return {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {
+                    "id": f"c{n}",
+                    "type": "function",
+                    "function": {"name": "cancel_pending_order", "arguments": args},
+                }
+            ],
+        }
+
+
+def asked_first(conversation, call, policy):
+    """A stand-in for SEL-88's rule: a change is fine only after the agent has asked."""
+    from reflexive.actions import ActionFinding
+
+    if any(m.get("role") == "assistant" and m.get("content") == ASK for m in conversation):
+        return None
+    return ActionFinding("INTENT", "no_yes", "the agent never asked the customer to confirm", live=True)
+
+
+def cancels(view):
+    return [
+        tc for m in view if m.get("role") == "assistant" for tc in m.get("tool_calls") or []
+        if tc["function"]["name"] == "cancel_pending_order"
+    ]  # fmt: skip
+
+
+def test_act_mode_blocks_an_unconfirmed_change_then_lets_it_run_after_the_customer_says_yes(tau2):
+    from reflexive.arms import run_episode
+    from reflexive.monitor import BLOCK_MESSAGE
+
+    agent = Canceller()
+    rec = run_episode(
+        get_arm("A"),
+        agent,
+        "retail",
+        "0",
+        judges=False,
+        actions="act",
+        checker=asked_first,
+        max_steps=12,
+        **CUSTOMER,
+    )
+    a = rec["monitor"]["actions"]
+    assert rec["monitor"]["error"] is None and a["mode"] == "act" and a["error"] is None
+    # PR #73 review: the action guard's own mode; the loop monitor stays at its default, log
+    assert rec["monitor"]["mode"] == "log" and rec["monitor"]["nudged_at"] is None
+    # agent turn 1 is τ²-bench's greeting; the student's first reply (turn 2) is blocked
+    (b,) = a["blocks"]
+    assert (b["action"], b["rule"], b["tool"], b["agent_turn"], b["live"]) == (
+        "blocked",
+        "no_yes",
+        "cancel_pending_order",
+        2,
+        True,
+    )
+    # the next prompt carries the block message; the blocked call never reached τ²-bench
+    assert agent.prompts[1][-1]["content"] == BLOCK_MESSAGE and a["reasks"][0]["before_agent_turn"] == 2
+    view = rec["agent_view"]
+    assert BLOCK_MESSAGE not in [m.get("content") for m in view]  # only in that one prompt
+    assert [m.get("content") for m in view if m.get("role") == "assistant"][1] == ASK
+    # no cancellation ran before the agent asked; after the customer's yes the same change is
+    # allowed and runs (the scripted agent repeats it on every later yes), and nothing else is blocked
+    asked = next(i for i, m in enumerate(view) if m.get("content") == ASK)
+    first = next(i for i, m in enumerate(view) if m.get("tool_calls"))
+    assert first > asked and cancels(view)
+    assert a["counts"] == {"blocked": 1, "overridden": 0, "held": 0, "logged": 0}
+    assert rec["outcome"]["reward"] is not None and rec["termination"] != "monitor_stop"
+
+
+def test_log_mode_records_the_unconfirmed_change_and_lets_it_run(tau2):
+    from reflexive.arms import run_episode
+    from reflexive.monitor import BLOCK_MESSAGE
+
+    agent = Canceller()
+    rec = run_episode(
+        get_arm("A"), agent, "retail", "0", judges=False, checker=asked_first, max_steps=8, **CUSTOMER
+    )
+    a = rec["monitor"]["actions"]
+    assert a["mode"] == "log" and a["blocks"][0]["action"] == "logged" and a["reasks"] == []
+    assert not any(p[-1].get("content") == BLOCK_MESSAGE for p in agent.prompts)
+    assert len(cancels(rec["agent_view"])) >= 1  # it ran: log mode never changes the conversation
