@@ -302,6 +302,18 @@ error switched the guard off, and how often the customer refused or went off-scr
 **No-go:** skip retraining; v2 + guard goes to Decision 2. (Amended Sat 21 Nov 23:28, see
 Retraining: with an accepted meta-healing rule, a no-go retrains on meta-healing's fixes only.)
 
+**Amended Sun 22 Nov, 15:36 UK, after Decision 1's run finished and before any of its blocks were
+read: what counts as a wrongly blocked good change.** The third condition had no written
+definition. Fixed now: a reply the guard blocked with a call that matches one of the task's
+expected agent actions by τ²-bench's own rule (`same_call`, as the fix step matches them).
+τ²-bench expects that change, so blocking it was wrong. The condition counts passing conversations
+with at least one, out of all passing conversations: overall for the bar (at most 1 in 10), and per
+domain. Crashed conversations are left out. A block of a change τ²-bench doesn't expect isn't
+counted as wrong, even in a passing conversation: the bar is about good changes stopped; the extra
+turns blocks cost are reported beside it. `scripts/arms/guard_report.py` computes it, with the costs
+listed above (blocks, overrides, re-asks, guard switched off by a checker error, judge errors).
+Conditions 1 and 2 are read from `scripts/arms/samples.py S2 S2G --split val`, as v2's 17.0 was.
+
 ## Retraining (SEL-100, SEL-102, SEL-103)
 
 - Fixes: v2 + guard (act mode) on the train tasks. Kept only if τ²-bench passes them, with
