@@ -220,7 +220,6 @@ We're open about how this result was protected. On validation the gain (+2.5 of 
 that included zero, so it went to test as a declared extra arm, labelled as such. And after a
 borderline first test at 2 runs per task (+8.0, range −1.0 to +16.5) we extended both models to 8:
 a decision made after seeing a result. The 6 new runs alone give +10.5 (+4.0 to +17.0).
-<!-- TODO (Thu): the second training seed, judged by its pre-registered rule (STAGE2.md, Stage 2d). -->
 
 ### Does the agent's own practice add anything? No
 
@@ -245,7 +244,11 @@ own, costs $0.052 per conversation; the final model is served the same way.
 of 60.4 GiB. The memory freed doubles the context, from 32K to 64K tokens, and its validation
 score doesn't move (18.5 against 18.5). Serving the model ourselves rather than through Cohere's
 API made no difference within noise (11.5% against 14.5% for the base model, range −8.0 to +1.5).
-<!-- TODO (Katie, Thu): retention on the final model. -->
+
+**And it lost nothing elsewhere.** On instruction following (IFEval), maths (GSM8K) and multilingual
+knowledge (Global-MMLU-Lite), no benchmark's 95% range of the change falls below zero, against the
+base model or, for FP8, against 16-bit. Multilingual knowledge rose 2.5 points (95% +1.4 to +3.6),
+as it did after healing.
 
 ### What we learned
 
@@ -264,7 +267,8 @@ API made no difference within noise (11.5% against 14.5% for the base model, ran
 
 * **One model, one benchmark.** Every result is Aya Expanse 32B on τ²-bench's three
   customer-service domains, with 100 test tasks.
-* **One training run behind the final gain**, until the second seed is in. <!-- TODO: update Thu. -->
+* **One training run behind the final gain.** A second seed was planned and not completed, so the
+  ranges cover task and conversation noise, not training noise.
 * **Two disclosed departures** for the final model: it went to test without meeting our validation
   rule, and its test was extended after a borderline first result.
 * **GPT-4.1 is a reference, not a paired comparison**: 2 runs per task against our 8.
@@ -275,19 +279,23 @@ API made no difference within noise (11.5% against 14.5% for the base model, ran
 
 * **Code, and the dated rulebook for every run:** [github.com/CharlieGalvin/lexsi-labs-reflexive-agent](https://github.com/CharlieGalvin/lexsi-labs-reflexive-agent)
   (`docs/experiments/STAGE2.md`)
-* **The final model:** <!-- TODO: link, e.g. reagent-lexsi/sft-aya32b-v2-e4 --> a LoRA adapter for
-  Aya Expanse 32B. The healed model from Part 1 is
+* **The final model:** [reagent-lexsi/sft-aya32b-v2-e4](https://huggingface.co/reagent-lexsi/sft-aya32b-v2-e4),
+  a LoRA adapter for Aya Expanse 32B. The healed model from Part 1 is
   [reagent-lexsi/sft-aya32b-r16-v2](https://huggingface.co/reagent-lexsi/sft-aya32b-r16-v2), and every
   other version we trained, adopted or not, is in [reagent-lexsi](https://huggingface.co/reagent-lexsi).
 * **Data:** [reagent-lexsi/tau2-golden-trajectories](https://huggingface.co/datasets/reagent-lexsi/tau2-golden-trajectories),
-  the teacher's verified conversations (CC BY-NC 4.0). <!-- TODO: Stage 2 conversations and practice data. -->
+  the teacher's verified conversations (CC BY-NC 4.0);
+  [reagent-tau2-conversations](https://huggingface.co/datasets/reagent-lexsi/reagent-tau2-conversations),
+  every conversation behind every number here; and
+  [reagent-stage2-artifacts](https://huggingface.co/datasets/reagent-lexsi/reagent-stage2-artifacts),
+  the practice data and Stage 2's analysis outputs.
 
 ```python
 from peft import PeftModel
 from transformers import AutoModelForCausalLM
 
 base = AutoModelForCausalLM.from_pretrained("CohereLabs/aya-expanse-32b", device_map="auto")
-model = PeftModel.from_pretrained(base, "reagent-lexsi/sft-aya32b-v2-e4")  # TODO: confirm the repo name
+model = PeftModel.from_pretrained(base, "reagent-lexsi/sft-aya32b-v2-e4")
 ```
 
 ### Reproduce it yourself
