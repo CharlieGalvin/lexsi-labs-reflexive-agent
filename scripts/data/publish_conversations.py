@@ -52,6 +52,7 @@ ARMS = {
     "S2G": "SFT v2 with the consent and mismatch guard",
     "S2E4": "SFT v2's data trained for 4 epochs (the final model)",
     "S2E4Q": "S2E4 served with FP8 weights and a 64K context",
+    "GPT": "GPT-4.1 as the agent, a reference (OpenRouter, 2 samples per task)",
     "S2E4S1": "S2E4's recipe trained again with seed 1",
     "S2PR": "SFT v2 practising on train tasks at temperature 0.7: the source of S2P1's practice data",
     "S2P1": "SFT v2's data plus 100 of its own verified practice conversations, 2 epochs",
