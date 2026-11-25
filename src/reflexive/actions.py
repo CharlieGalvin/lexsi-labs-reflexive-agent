@@ -17,14 +17,16 @@ call and the domain policy. It never reads τ²-bench's expected actions or the 
 * ``live=False``: needs more than the moment of the change (later turns, the outcome), or is too
   slow to run on every call. Used by the gate and in reports only; the guard logs it, never blocks.
 
-This is the agreed interface; ``RULES`` is empty until SEL-88 adds its rule, so today
-`check_action` flags nothing.
+This is the agreed interface. ``RULES`` holds SEL-88's ``no_yes`` (`reflexive.intent`), then the
+meta-healing rules (SEL-91, `reflexive.meta_heal`) a person accepted into ``configs/meta_rules.json``.
+Rules in `OPTIONAL_RULES` (the hand-written ``mismatch``) run only for an arm that asks for them, via
+`checker_with`.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from typing import Any
 
 Message = dict[str, Any]
@@ -38,6 +40,10 @@ class ActionFinding:
     rule: str  # the rule that fired, e.g. "no_yes"
     reason: str  # one sentence a person can read in the log
     live: bool  # True: checkable at the moment of the change, so the guard may block on it
+    message: str = ""  # what the guard tells the agent when it blocks; "" means its BLOCK_MESSAGE
+    # After-the-fact findings from earlier rules on the same call (e.g. a no_yes_judge_error), kept
+    # on the live finding that wins so they still reach the log.
+    also: tuple[ActionFinding, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -47,7 +53,7 @@ Rule = Callable[[Sequence[Message], dict, str], "ActionFinding | None"]
 """``rule(conversation, call, policy) -> ActionFinding | None``, the same arguments as `check_action`."""
 
 RULES: list[Rule] = []
-"""The rules `check_action` runs, in order. SEL-88's ``no_yes`` goes here."""
+"""The rules `check_action` runs, in order: SEL-88's ``no_yes``, registered at the end of this module."""
 
 
 def check_action(
@@ -65,12 +71,46 @@ def check_action(
     ``policy``: the domain policy text, as the agent's system prompt carries it.
     ``rules``: the rules to run; `RULES` when omitted.
     """
-    later: ActionFinding | None = None
+    later: list[ActionFinding] = []
     for rule in RULES if rules is None else rules:
         finding = rule(conversation, call, policy)
         if finding is None:
             continue
         if finding.live:
-            return finding
-        later = later or finding
-    return later
+            return replace(finding, also=tuple(later)) if later else finding
+        later.append(finding)
+    if not later:
+        return None
+    return replace(later[0], also=tuple(later[1:])) if len(later) > 1 else later[0]
+
+
+# The rules, registered last because reflexive.intent builds its findings from this module.
+from reflexive.intent import no_yes  # noqa: E402
+
+RULES.append(no_yes)
+
+# SEL-91: the meta-healing rules a person accepted (configs/meta_rules.json), after "no yes".
+from reflexive.meta_heal import meta_rules  # noqa: E402
+
+RULES.extend(meta_rules())
+
+# Hand-written after meta-healing: a change that doesn't match the request or the lookups. Not in
+# RULES: on train it flags about 1 in 5 good retail changes (results/rule-rates-mismatch.metrics.json),
+# above STAGE2.md's 1-in-10 bar, and it calls full GPT-4.1 on every order or reservation change. So
+# the default guard, and re-runs of arms already published, don't change; an arm opts in.
+from reflexive.mismatch import mismatch  # noqa: E402
+
+OPTIONAL_RULES: dict[str, Rule] = {"mismatch": mismatch}
+
+
+def checker_with(*names: str) -> Callable[[Sequence[Message], dict, str], ActionFinding | None]:
+    """`check_action` with `RULES` and, after them, these `OPTIONAL_RULES` (an arm's ``checker``)."""
+    unknown = [n for n in names if n not in OPTIONAL_RULES]
+    if unknown:
+        raise ValueError(f"no optional rule {unknown}; there are {sorted(OPTIONAL_RULES)}")
+    extra = [OPTIONAL_RULES[n] for n in names]
+
+    def checker(conversation: Sequence[Message], call: dict, policy: str) -> ActionFinding | None:
+        return check_action(conversation, call, policy, [*RULES, *extra])
+
+    return checker

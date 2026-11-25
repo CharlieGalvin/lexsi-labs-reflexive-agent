@@ -214,6 +214,40 @@ list and each rule's live / after-the-fact mark are added below this line in the
 Nothing changes the checker after the tag. If meta-healing isn't ready, the freeze goes ahead with
 the "no yes" rule only, and meta-healing's rules are reported offline as a separate result.
 
+**Frozen Sun 22 Nov, 12:36 UK, in the commit tagged `stage2-checker-frozen`.** The checker for every
+Stage 2 guarded run (Decision 1, the guard-fix collection, the mismatch fixes, the dev gate's fifth
+check, and any guarded test arm):
+
+| Rule | Where | Checks | Model | Mark |
+|---|---|---|---|---|
+| Tool / Arg / Loop | `reflexive.hallucination` | every call | none (deterministic) | after the fact (the loop monitor stays in log mode) |
+| `no_yes` | `reflexive.intent`, default `RULES` | retail and airline changes, telecom `refuel_data` | word match, then `gpt-4.1-mini-2025-04-14` | live |
+| `mismatch` | `reflexive.mismatch`, `OPTIONAL_RULES` | 7 listed retail / airline changes | `gpt-4.1-2025-04-14` | live, own block message |
+
+Runs opt into "mismatch" with `scripts/arms/rollout.py --rules mismatch` (PR #79); each record
+notes `checker_rules`. No meta-healing rule is in the checker: v1 and v2 accepted none, and v2's
+domain-scoped re-score (secondary) also passes none.
+
+Rates measured with this checker (train-pool, 112 conversations; re-run after the review fixes):
+"no yes" 4/57 failures, 3/55 passes (words only: 13/57, 10/55); "mismatch" 14/57, 5/55; either
+15/57, 6/55; injected errors 29/40 caught with the original not flagged (37/40 flagged in all), 8/40
+originals flagged. Held out (224 fresh): "no yes" 4/113, 2/111; "mismatch" 29/113, 7/111; with Tool /
+Arg / Loop, 78/113 failures (69%) and 22/111 passes (20%). Meta-healing v2's domain-scoped re-score:
+the closest, `retail_transfer_to_human_agent_on_policy_limit`, adds 4/14 retail failures and flags
+6/43 retail passes (14%); none meets the bar.
+
+**Re-frozen Sun 22 Nov, 13:04 UK, as `stage2-checker-frozen-2`, before 16:00 and before any
+validation run.** One change to "no yes" (PR #80): a refusal after a polite or hesitant opening
+("Please stop, I changed my mind.", "Sorry, no.") now withdraws an earlier yes, and "changed my mind"
+counts anywhere; before, only a refusal at the very start of the message did. Found while checking
+the review fixes. Its train rates were re-run with the same bar (at most 1 in 10 passes): unchanged ("no yes"
+3/55 passes, 4/57 failures; words only 10/55, 13/57; "mismatch" 5/55), since no train conversation has a
+withdrawal after a polite opening. Meta-healing v1's split is unchanged by the review fixes (checked at 12:56: the same
+74 / 38 conversations and unexplained failures per domain). The first tag, `stage2-checker-frozen`,
+stays where it is; every Stage 2 guarded run uses `stage2-checker-frozen-2`, which also has the
+`S2G` arm (PR #81: v2 with the guard, its own key so its records never mix with v2's). A judge-only "no yes"
+(the LLM decides every time, the word match only recorded) is noted as future work.
+
 ## The guard (SEL-89)
 
 `reflexive.monitor.ActionGuard`, PR #73. Before a reply is sent to τ²-bench, every state-changing
@@ -244,7 +278,8 @@ SFT v2 with the guard in act mode, validation 30 tasks × 2, with the frozen che
 
 Also reported: blocks per conversation, overrides, extra turns, conversations where a checker
 error switched the guard off, and how often the customer refused or went off-script.
-**No-go:** skip retraining; v2 + guard goes to Decision 2.
+**No-go:** skip retraining; v2 + guard goes to Decision 2. (Amended Sat 21 Nov 23:28, see
+Retraining: with an accepted meta-healing rule, a no-go retrains on meta-healing's fixes only.)
 
 ## Retraining (SEL-100, SEL-102, SEL-103)
 
@@ -256,6 +291,118 @@ error switched the guard off, and how often the customer refused or went off-scr
   epochs, learning rate 1e-4, same QLoRA settings), on v2's data plus the fixes as their own group.
   One change from v2: the added fixes. Adapter published with its `lexsi_provenance.json`.
 - First score: validation 30 × 2 **without** the guard, reported whatever it shows.
+
+**Amended Sun 22 Nov, 10:14 UK, after meta-healing v2's held-out score and before its result is
+recorded: transient checker errors are re-asked once.** The score (Sun 00:35–01:10) had 51 checker
+errors on each of the two telecom whole-conversation rules and 1 on the frozen rules; no rule met the
+bar. A check at 10:14 re-asked 5 of the telecom errors and all 5 answered, so the errors were
+transient (most likely rate limits on long telecom prompts, 8 calls at a time). As the crash rule does
+for crashed conversations, `score` is run once more: every answer already given is replayed from the
+cache unchanged, and only the calls that errored are asked again. Rules, data, bar and models are
+unchanged. Both runs are reported; the second decides. No further re-runs.
+
+**Meta-healing v2 result, Sun 22 Nov 10:20 UK: no rule accepted.** Second run (2 calls at a time):
+every v2 rule answered on every conversation, with 1 checker error left on the frozen rules. Held
+out: 224 fresh conversations, 113 failures, 111 passes; 35 failures no frozen rule catches.
+
+- The closest, `retail_transfer_to_human_agent_on_policy_limit` (whole conversation), added 7/35
+  (20%) but flagged 14/111 passes (13%, bar 10%); it also flags 17 of the 29 failures "mismatch"
+  catches, so it fires on failure in general more than on one error. Every other rule added 0 or 1.
+- Rediscovery: two rules are slices of "mismatch" (5/29 and 4/29); none is the general rule.
+- First run (errors not re-asked): the same verdicts; the two telecom rules then had 51 errors each.
+- "Mismatch" out of sample: 29/113 failures (26%), 7/111 passes (6%), as in sample (25%, 9%).
+  "No yes": 4/113, 2/111. With Tool / Arg / Loop, the frozen checker spots 78/113 failures (69%,
+  from 56% for Tool / Arg / Loop alone) and flags 22/111 passes (20%, from 14%).
+
+Under the amendment of Sat 23:28, with no v2 rule accepted, retraining is as before it: only if
+Decision 1 says go.
+
+**Mismatch fixes, Sun 22 Nov 13:35 UK (SEL-117, `onpolicy_fixes.py --points mismatch`, #82): 39
+fixes, so retraining runs whatever Decision 1 says.** Over v2's 112 train-pool and 224 fresh train
+conversations, "mismatch" flagged a change in 43 failed and 12 passed ones (no checker errors); the
+12 in passes get no fix, as pre-registered. GLM-5.3-Flash, told what was flagged in its own copy of
+the prompt only, fixed 39 of the 43 (4 refused after 3 attempts), from 23 distinct tasks.
+
+- **What the fixes are:** 27 ask or explain with no change (many correct the agent's own earlier
+  mistake before acting: a wrong item's specs, a price per passenger, a misstated policy), 9 look
+  something up first, 3 make the expected change. The answer key verified every change; a turn with
+  no change passes that check, as in Stage 1. So the fixes teach the guard's caution, *check before
+  acting*, more than the correct action. Only the fixed turn is verified, not the rest of the
+  conversation.
+- A check for fixes that say a change was made without making it found none among the 39. Neither
+  `check_fix` nor any rule reads what a turn says, only its calls: "claimed but not done" is not in
+  the taxonomy, and is a next rule to build.
+- **What to watch:** the retrained model asking or stalling where it should act. The dev gate (no
+  drop in success; the fifth check) covers it; average conversation length is reported too. The
+  targeted measure, "mismatch" flags on the retrained model's dev conversations against v2's, is
+  the test of whether the caution was learned.
+
+**Amended Sun 22 Nov, 12:18 UK, after Chiara's review of PRs #74–#77 and before any re-run, merge
+or freeze.** Her review fixed bugs in all four (25 issues, each with a test). Three affect results
+already recorded, and are handled as follows, decided now:
+
+- **"No yes" is the fixed version.** Five bugs: contractions ("isn't", "don't") and questions ("is
+  that correct?") read as a yes; friendly openings ("Don't worry, go ahead") read as a refusal; a
+  yes not tied to the change it answers; an empty judge answer blocking instead of counting as an
+  error. The frozen checker uses the fixed rule. Its train rates (`just intent-rates`, with and
+  without the judge) and the "no yes" and "either" rows of `just rule-rates` are re-run before the
+  freeze, and replace the earlier numbers; both are reported.
+- **"Mismatch" is opt-in, and opted in for Stage 2's guarded runs.** The rule is unchanged. It is
+  no longer in the default `RULES`, so earlier published arms behave as before; Decision 1, the
+  guard-fix collection and the mismatch fixes run with `checker_with("mismatch")`. It met its
+  pre-registered bar, which is overall (5 of 55 train passes; 7 of 111 held-out passes). Retail
+  alone was 5 of 21; Decision 1's check on wrongly blocked good changes tests exactly that, and is
+  reported per domain. The injected-error count now credits a catch only when the original change
+  is not flagged too (`caught`; the old count is kept as `caught_raw`).
+- **Meta-healing v2's domain-scoped re-score is a secondary analysis and cannot change the
+  verdict.** The review found that rules were scored on every domain, though each is named for one
+  (e.g. `retail_transfer_to_human_agent_on_policy_limit`). The re-score that limits each rule to its
+  own domain is reported beside this morning's result. The primary verdict stays as recorded: no
+  rule accepted. If a rule crosses the bar only under the re-score, that is reported as a
+  sensitivity result and a reason for v3, not an acceptance. Because the fixed "no yes" changes
+  which held-out failures count as caught, the re-score also reports the frozen layers again.
+- **Meta-healing v1 is not re-run.** It used the earlier "no yes"; that is noted beside its result.
+
+**Amended Sun 22 Nov, 10:40 UK, before the freeze and before Decision 1 runs: retraining runs either
+way, on fixes at the "mismatch" rule's findings.** The amendment of Sat 23:28 applies, with the
+frozen "mismatch" rule in place of an accepted meta-healing v2 rule (it is the rule meta-healing v1
+pointed to, tightened by a person, and the only new rule that held up out of sample). So:
+
+- **Fix points:** every change "mismatch" flags in the train conversations (v2's 112 train-pool and
+  224 fresh ones), failures and passes alike. GLM-5.3-Flash rewrites that turn, told the rule's
+  description, up to 3 attempts, through Stage 1's checks; on these train tasks a fix is kept only
+  if every change in it is one the task still expects. A wrong flag therefore yields no fix.
+- **Retraining:** Decision 1 go: v2's data + guard fixes + mismatch fixes. No-go: v2's data +
+  mismatch fixes. Fewer than 30 fixes in what would be used: report the count, skip retraining.
+  The 30 is not lowered.
+- **Targeted measure (reported, not a gate):** "mismatch" flags per conversation on the retrained
+  model's dev conversations against v2's.
+- **What it shows:** a loop that chooses what to fix without an answer key, as it would in
+  deployment. On train tasks the answer key could find these mistakes anyway; this is a
+  demonstration of the label-free loop, not a better source of data. An overall gain is credited to
+  the loop as a whole.
+
+**Amended Sat 21 Nov, 23:28 UK, before meta-healing v2 is scored and before Decision 1 runs:
+meta-healing's fixes join retraining, and retraining no longer depends on Decision 1.**
+
+- **Meta-healing fixes.** For each meta-healing v2 rule accepted by the freeze, every place it
+  fires in the train conversations (v2's 112 train-pool conversations and the fresh ones) is a fix
+  point: a call rule's flagged call; for a whole-conversation rule, the agent turn holding the
+  rule's quoted evidence, else the agent's last turn. GLM-5.3-Flash rewrites that turn, told the
+  rule's description, up to 3 attempts, through Stage 1's checks (`heal.fix_point`, `check_fix`,
+  `to_sft_example`). On these train tasks a fix is kept only if every change in it is one the task
+  still expects (`onpolicy_fixes`' rule). They are added as their own group, next to the guard's.
+- **Retraining runs either way.** Decision 1 go: v2's data + guard fixes + meta-healing fixes.
+  Decision 1 no-go: v2's data + meta-healing fixes. Too few: if the fixes that would be used number
+  fewer than 30, report the count and skip retraining (v2 + guard to Decision 2, as above). If no
+  meta-healing rule is accepted, everything is as before this amendment.
+- **Same recipe** as above (from base, v2's recipe, the fixes as their own groups). Validation
+  without the guard is still the retrained model's first score; Decision 2 is unchanged.
+- **The targeted measure (reported, not a gate).** Each accepted rule's rate (conversations it
+  flags) on the retrained model's dev conversations against v2's dev conversations: does the kind
+  of error meta-healing found become rarer? An overall gain is credited to the loop as a whole, not
+  to meta-healing alone: separating them needs a second retrain without its fixes, which is a next
+  step.
 
 ## Decision 2: the dev gate, third and last decision (SEL-104)
 

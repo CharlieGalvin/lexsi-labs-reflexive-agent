@@ -1,0 +1,1320 @@
+{
+  "ticket": "SEL-91 (v2)",
+  "proposer_model": "gpt-4.1-2025-04-14",
+  "checker_model": "gpt-4.1-2025-04-14",
+  "bar": {
+    "min_added": 3,
+    "min_added_share": 0.1,
+    "max_pass_share": 0.1,
+    "review": "≥4 of 5 real errors"
+  },
+  "learning": {
+    "unexplained_failures": [
+      "retail:103#0",
+      "retail:24#0",
+      "retail:22#0",
+      "retail:3#0",
+      "retail:28#0",
+      "retail:31#0",
+      "retail:57#0",
+      "retail:66#0",
+      "retail:63#0",
+      "retail:72#0",
+      "retail:8#0",
+      "retail:98#0",
+      "airline:11#0",
+      "airline:21#0",
+      "airline:3#0",
+      "airline:33#0",
+      "airline:42#0",
+      "airline:9#0",
+      "telecom:[mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|break_apn_mms_setting|break_app_storage_permission|data_mode_off|data_usage_exceeded|unseat_sim_card|user_abroad_roaming_disabled_off[PERSONA:Easy]#0",
+      "telecom:[mobile_data_issue]data_mode_off|data_usage_exceeded[PERSONA:None]#0",
+      "telecom:[service_issue]airplane_mode_on|break_apn_settings|contract_end_suspension|unseat_sim_card[PERSONA:Easy]#0",
+      "telecom:[service_issue]lock_sim_card_pin|overdue_bill_suspension[PERSONA:Easy]#0",
+      "telecom:[mms_issue]bad_network_preference|bad_wifi_calling|break_app_both_permissions|data_usage_exceeded|unseat_sim_card|user_abroad_roaming_disabled_off[PERSONA:None]#0"
+    ],
+    "passes_shown": [
+      "telecom:[service_issue]break_apn_settings|overdue_bill_suspension|unseat_sim_card[PERSONA:Hard]#0",
+      "retail:88#0",
+      "telecom:[mobile_data_issue]data_mode_off|data_usage_exceeded|user_abroad_roaming_disabled_off[PERSONA:Hard]#0",
+      "retail:92#0",
+      "airline:34#0",
+      "retail:30#0",
+      "telecom:[mms_issue]airplane_mode_on|bad_network_preference|break_apn_mms_setting|break_app_both_permissions|data_mode_off|data_usage_exceeded|user_abroad_roaming_enabled_off[PERSONA:None]#0",
+      "telecom:[mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|break_app_storage_permission|unseat_sim_card[PERSONA:Hard]#0"
+    ],
+    "passes_scored": [
+      "retail:89#0",
+      "telecom:[mobile_data_issue]data_usage_exceeded|user_abroad_roaming_enabled_off[PERSONA:Easy]#0",
+      "retail:69#0",
+      "telecom:[mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|break_app_storage_permission|data_mode_off|data_usage_exceeded|unseat_sim_card|user_abroad_roaming_enabled_off[PERSONA:Hard]#0",
+      "retail:85#0",
+      "telecom:[mms_issue]break_app_both_permissions|unseat_sim_card|user_abroad_roaming_disabled_on[PERSONA:Hard]#0",
+      "retail:16#0",
+      "telecom:[mms_issue]airplane_mode_on|bad_network_preference|break_apn_mms_setting|break_app_both_permissions|data_mode_off|data_usage_exceeded|user_abroad_roaming_enabled_off[PERSONA:None]#0",
+      "retail:104#0",
+      "retail:58#0",
+      "telecom:[mobile_data_issue]bad_network_preference|data_mode_off|data_saver_mode_on|data_usage_exceeded|user_abroad_roaming_disabled_off[PERSONA:Easy]#0",
+      "airline:49#0",
+      "telecom:[mobile_data_issue]airplane_mode_on|bad_network_preference|bad_vpn|data_mode_off|data_saver_mode_on|data_usage_exceeded|user_abroad_roaming_disabled_on[PERSONA:None]#0",
+      "retail:30#0",
+      "telecom:[mms_issue]bad_network_preference|user_abroad_roaming_disabled_on[PERSONA:None]#0",
+      "telecom:[mms_issue]break_app_storage_permission|data_usage_exceeded[PERSONA:Easy]#0",
+      "retail:109#0",
+      "telecom:[service_issue]airplane_mode_on|lock_sim_card_pin|unseat_sim_card[PERSONA:Hard]#0",
+      "telecom:[mobile_data_issue]airplane_mode_on|bad_network_preference|data_usage_exceeded|user_abroad_roaming_disabled_off[PERSONA:Easy]#0",
+      "airline:46#0",
+      "retail:84#0",
+      "telecom:[service_issue]airplane_mode_on|break_apn_settings|unseat_sim_card[PERSONA:None]#0",
+      "telecom:[mms_issue]break_apn_mms_setting|data_mode_off|user_abroad_roaming_disabled_on[PERSONA:Hard]#0",
+      "telecom:[service_issue]airplane_mode_on|unseat_sim_card[PERSONA:None]#0"
+    ],
+    "rounds": [
+      {
+        "round": 1,
+        "candidates": [
+          {
+            "name": "retail_cancel_pending_order_entire_order_only",
+            "what": "The agent cancels an entire pending order when the customer requested to cancel only specific items.",
+            "applies_to": "call",
+            "question": "Is the agent attempting to cancel an entire pending order when the customer only requested to cancel specific items from that order?",
+            "live": true,
+            "block_message": "You can only cancel the entire order if the customer explicitly requests it; otherwise, you must use the item modification flow for partial cancellations.",
+            "seen_in": [],
+            "tools": [
+              "cancel_pending_order"
+            ],
+            "tool_chars": 6000,
+            "model": "gpt-4.1-2025-04-14"
+          },
+          {
+            "name": "retail_modify_pending_order_items_requires_all_items",
+            "what": "The agent attempts to modify items in a pending order without confirming all items to be changed in a single call.",
+            "applies_to": "call",
+            "question": "Is the agent attempting to modify items in a pending order without confirming with the customer that all desired item changes are included in this single modification call?",
+            "live": true,
+            "block_message": "You must confirm with the customer that all item changes are included before modifying items in a pending order, as only one modification is allowed per order.",
+            "seen_in": [],
+            "tools": [
+              "modify_pending_order_items"
+            ],
+            "tool_chars": 6000,
+            "model": "gpt-4.1-2025-04-14"
+          },
+          {
+            "name": "retail_exchange_delivered_order_items_requires_same_order",
+            "what": "The agent attempts to exchange items from different orders in a single exchange call.",
+            "applies_to": "call",
+            "question": "Is the agent attempting to exchange items from more than one order in a single exchange_delivered_order_items call?",
+            "live": true,
+            "block_message": "You can only exchange items from the same delivered order in a single exchange call.",
+            "seen_in": [],
+            "tools": [
+              "exchange_delivered_order_items"
+            ],
+            "tool_chars": 6000,
+            "model": "gpt-4.1-2025-04-14"
+          },
+          {
+            "name": "retail_return_delivered_order_items_requires_same_order",
+            "what": "The agent attempts to return items from different orders in a single return call.",
+            "applies_to": "call",
+            "question": "Is the agent attempting to return items from more than one order in a single return_delivered_order_items call?",
+            "live": true,
+            "block_message": "You can only return items from the same delivered order in a single return call.",
+            "seen_in": [],
+            "tools": [
+              "return_delivered_order_items"
+            ],
+            "tool_chars": 6000,
+            "model": "gpt-4.1-2025-04-14"
+          },
+          {
+            "name": "retail_modify_user_address_state_required",
+            "what": "The agent submits a modify_user_address or modify_pending_order_address call with a missing or empty state field for US addresses.",
+            "applies_to": "call",
+            "question": "Is the agent submitting a modify_user_address or modify_pending_order_address call for a US address with a missing or empty state field?",
+            "live": true,
+            "block_message": "You must include a valid state for all US addresses when modifying user or order addresses.",
+            "seen_in": [],
+            "tools": [
+              "modify_user_address",
+              "modify_pending_order_address"
+            ],
+            "tool_chars": 6000,
+            "model": "gpt-4.1-2025-04-14"
+          },
+          {
+            "name": "retail_modify_pending_order_items_variant_availability",
+            "what": "The agent attempts to modify a pending order to a new item variant that is not available.",
+            "applies_to": "call",
+            "question": "Is the agent attempting to modify a pending order to a new item variant that is not available (i.e., not marked as available in the product details)?",
+            "live": true,
+            "block_message": "You can only modify a pending order to an item variant that is currently available.",
+            "seen_in": [],
+            "tools": [
+              "modify_pending_order_items"
+            ],
+            "tool_chars": 6000,
+            "model": "gpt-4.1-2025-04-14"
+          },
+          {
+            "name": "retail_modify_pending_order_items_same_item_id",
+            "what": "The agent attempts to modify a pending order item to the same item id (no actual change).",
+            "applies_to": "call",
+            "question": "Is the agent attempting to modify a pending order item to the same item id as the original (i.e., no actual change)?",
+            "live": true,
+            "block_message": "You cannot modify an item to itself; please select a different variant for modification.",
+            "seen_in": [],
+            "tools": [
+              "modify_pending_order_items"
+            ],
+            "tool_chars": 6000,
+            "model": "gpt-4.1-2025-04-14"
+          },
+          {
+            "name": "retail_transfer_to_human_agent_on_policy_limit",
+            "what": "The agent fails to offer a transfer to a human agent when the customer requests an action that is not possible under policy or system limitations.",
+            "applies_to": "conversation",
+            "question": "Did the customer request an action that is not possible under policy or system limitations, and the agent did not offer to transfer to a human agent?",
+            "live": false,
+            "block_message": "",
+            "seen_in": [],
+            "tools": [],
+            "tool_chars": 6000,
+            "model": "gpt-4.1-2025-04-14"
+          }
+        ],
+        "errors": 0,
+        "counts": {
+          "retail_cancel_pending_order_entire_order_only": {
+            "failures": [
+              3,
+              23
+            ],
+            "passes": [
+              0,
+              24
+            ]
+          },
+          "retail_modify_pending_order_items_requires_all_items": {
+            "failures": [
+              4,
+              23
+            ],
+            "passes": [
+              1,
+              24
+            ]
+          },
+          "retail_exchange_delivered_order_items_requires_same_order": {
+            "failures": [
+              0,
+              23
+            ],
+            "passes": [
+              0,
+              24
+            ]
+          },
+          "retail_return_delivered_order_items_requires_same_order": {
+            "failures": [
+              0,
+              23
+            ],
+            "passes": [
+              0,
+              24
+            ]
+          },
+          "retail_modify_user_address_state_required": {
+            "failures": [
+              1,
+              23
+            ],
+            "passes": [
+              0,
+              24
+            ]
+          },
+          "retail_modify_pending_order_items_variant_availability": {
+            "failures": [
+              0,
+              23
+            ],
+            "passes": [
+              0,
+              24
+            ]
+          },
+          "retail_modify_pending_order_items_same_item_id": {
+            "failures": [
+              1,
+              23
+            ],
+            "passes": [
+              0,
+              24
+            ]
+          },
+          "retail_transfer_to_human_agent_on_policy_limit": {
+            "failures": [
+              8,
+              23
+            ],
+            "passes": [
+              1,
+              24
+            ]
+          }
+        }
+      },
+      {
+        "round": 2,
+        "candidates": [
+          {
+            "name": "retail_cancel_pending_order_entire_order_only",
+            "what": "The agent cancels an entire pending order when the customer requested to cancel only specific items.",
+            "applies_to": "call",
+            "question": "Is the agent attempting to cancel an entire pending order when the customer only requested to cancel specific items from that order?",
+            "live": true,
+            "block_message": "You can only cancel the entire order if the customer explicitly requests it; otherwise, you must use the item modification flow for partial cancellations.",
+            "seen_in": [],
+            "tools": [
+              "cancel_pending_order"
+            ],
+            "tool_chars": 6000,
+            "model": "gpt-4.1-2025-04-14"
+          },
+          {
+            "name": "retail_modify_pending_order_items_requires_all_items",
+            "what": "The agent attempts to modify items in a pending order without confirming all items to be changed in a single call.",
+            "applies_to": "call",
+            "question": "Is the agent attempting to modify items in a pending order without confirming with the customer that all desired item changes are included in this single modification call?",
+            "live": true,
+            "block_message": "You must confirm with the customer that all item changes are included before modifying items in a pending order, as only one modification is allowed per order.",
+            "seen_in": [],
+            "tools": [
+              "modify_pending_order_items"
+            ],
+            "tool_chars": 6000,
+            "model": "gpt-4.1-2025-04-14"
+          },
+          {
+            "name": "retail_modify_user_address_state_required",
+            "what": "The agent submits a modify_user_address or modify_pending_order_address call with a missing or empty state field for US addresses.",
+            "applies_to": "call",
+            "question": "Is the agent submitting a modify_user_address or modify_pending_order_address call for a US address with a missing or empty state field?",
+            "live": true,
+            "block_message": "You must include a valid state for all US addresses when modifying user or order addresses.",
+            "seen_in": [],
+            "tools": [
+              "modify_user_address",
+              "modify_pending_order_address"
+            ],
+            "tool_chars": 6000,
+            "model": "gpt-4.1-2025-04-14"
+          },
+          {
+            "name": "retail_modify_pending_order_items_same_item_id",
+            "what": "The agent attempts to modify a pending order item to the same item id (no actual change).",
+            "applies_to": "call",
+            "question": "Is the agent attempting to modify a pending order item to the same item id as the original (i.e., no actual change)?",
+            "live": true,
+            "block_message": "You cannot modify an item to itself; please select a different variant for modification.",
+            "seen_in": [],
+            "tools": [
+              "modify_pending_order_items"
+            ],
+            "tool_chars": 6000,
+            "model": "gpt-4.1-2025-04-14"
+          },
+          {
+            "name": "retail_transfer_to_human_agent_on_policy_limit",
+            "what": "The agent fails to offer a transfer to a human agent when the customer requests an action that is not possible under policy or system limitations.",
+            "applies_to": "conversation",
+            "question": "Did the customer request an action that is not possible under policy or system limitations, and the agent did not offer to transfer to a human agent?",
+            "live": false,
+            "block_message": "",
+            "seen_in": [],
+            "tools": [],
+            "tool_chars": 6000,
+            "model": "gpt-4.1-2025-04-14"
+          },
+          {
+            "name": "retail_exchange_delivered_order_items_one_order_only",
+            "what": "The agent attempts to exchange items from more than one delivered order in a single exchange call.",
+            "applies_to": "call",
+            "question": "Is the agent attempting to exchange items from more than one delivered order in a single exchange_delivered_order_items call?",
+            "live": true,
+            "block_message": "You can only exchange items from the same delivered order in a single exchange call.",
+            "seen_in": [],
+            "tools": [
+              "exchange_delivered_order_items"
+            ],
+            "tool_chars": 6000,
+            "model": "gpt-4.1-2025-04-14"
+          },
+          {
+            "name": "airline_baggage_allowance_policy_error",
+            "what": "The agent gives an incorrect baggage allowance based on membership level, cabin, or passenger count.",
+            "applies_to": "call",
+            "question": "Does the agent provide a baggage allowance that does not match the policy for the user's membership level, cabin class, and number of passengers?",
+            "live": false,
+            "block_message": "",
+            "seen_in": [],
+            "tools": [],
+            "tool_chars": 6000,
+            "model": "gpt-4.1-2025-04-14"
+          },
+          {
+            "name": "telecom_escalate_on_sim_locked_or_contract_end",
+            "what": "The agent fails to transfer to a human agent when the SIM is locked or the line is suspended due to contract end date.",
+            "applies_to": "conversation",
+            "question": "Did the customer have a SIM locked by PIN/PUK or a line suspended due to contract end date, and the agent did not offer to transfer to a human agent?",
+            "live": false,
+            "block_message": "",
+            "seen_in": [],
+            "tools": [],
+            "tool_chars": 6000,
+            "model": "gpt-4.1-2025-04-14"
+          }
+        ],
+        "errors": 0,
+        "counts": {
+          "retail_cancel_pending_order_entire_order_only": {
+            "failures": [
+              3,
+              23
+            ],
+            "passes": [
+              0,
+              24
+            ]
+          },
+          "retail_modify_pending_order_items_requires_all_items": {
+            "failures": [
+              4,
+              23
+            ],
+            "passes": [
+              1,
+              24
+            ]
+          },
+          "retail_modify_user_address_state_required": {
+            "failures": [
+              1,
+              23
+            ],
+            "passes": [
+              0,
+              24
+            ]
+          },
+          "retail_modify_pending_order_items_same_item_id": {
+            "failures": [
+              1,
+              23
+            ],
+            "passes": [
+              0,
+              24
+            ]
+          },
+          "retail_transfer_to_human_agent_on_policy_limit": {
+            "failures": [
+              8,
+              23
+            ],
+            "passes": [
+              1,
+              24
+            ]
+          },
+          "retail_exchange_delivered_order_items_one_order_only": {
+            "failures": [
+              0,
+              23
+            ],
+            "passes": [
+              0,
+              24
+            ]
+          },
+          "airline_baggage_allowance_policy_error": {
+            "failures": [
+              2,
+              23
+            ],
+            "passes": [
+              0,
+              24
+            ]
+          },
+          "telecom_escalate_on_sim_locked_or_contract_end": {
+            "failures": [
+              1,
+              23
+            ],
+            "passes": [
+              0,
+              24
+            ]
+          }
+        }
+      },
+      {
+        "round": 3,
+        "candidates": [
+          {
+            "name": "retail_cancel_pending_order_entire_order_only",
+            "what": "The agent cancels an entire pending order when the customer requested to cancel only specific items.",
+            "applies_to": "call",
+            "question": "Is the agent attempting to cancel an entire pending order when the customer only requested to cancel specific items from that order?",
+            "live": true,
+            "block_message": "You can only cancel the entire order if the customer explicitly requests it; otherwise, you must use the item modification flow for partial cancellations.",
+            "seen_in": [],
+            "tools": [
+              "cancel_pending_order"
+            ],
+            "tool_chars": 6000,
+            "model": "gpt-4.1-2025-04-14"
+          },
+          {
+            "name": "retail_modify_pending_order_items_requires_all_items",
+            "what": "The agent attempts to modify items in a pending order without confirming all items to be changed in a single call.",
+            "applies_to": "call",
+            "question": "Is the agent attempting to modify items in a pending order without confirming with the customer that all desired item changes are included in this single modification call, or without warning that only one modification is allowed?",
+            "live": true,
+            "block_message": "You must confirm with the customer that all item changes are included before modifying items in a pending order, as only one modification is allowed per order.",
+            "seen_in": [],
+            "tools": [
+              "modify_pending_order_items"
+            ],
+            "tool_chars": 6000,
+            "model": "gpt-4.1-2025-04-14"
+          },
+          {
+            "name": "retail_modify_user_address_state_required",
+            "what": "The agent submits a modify_user_address or modify_pending_order_address call with a missing or empty state field for US addresses.",
+            "applies_to": "call",
+            "question": "Is the agent submitting a modify_user_address or modify_pending_order_address call for a US address with a missing or empty state field?",
+            "live": true,
+            "block_message": "You must include a valid state for all US addresses when modifying user or order addresses.",
+            "seen_in": [],
+            "tools": [
+              "modify_user_address",
+              "modify_pending_order_address"
+            ],
+            "tool_chars": 6000,
+            "model": "gpt-4.1-2025-04-14"
+          },
+          {
+            "name": "retail_modify_pending_order_items_same_item_id",
+            "what": "The agent attempts to modify a pending order item to the same item id (no actual change).",
+            "applies_to": "call",
+            "question": "Is the agent attempting to modify a pending order item to the same item id as the original (i.e., no actual change)?",
+            "live": true,
+            "block_message": "You cannot modify an item to itself; please select a different variant for modification.",
+            "seen_in": [],
+            "tools": [
+              "modify_pending_order_items"
+            ],
+            "tool_chars": 6000,
+            "model": "gpt-4.1-2025-04-14"
+          },
+          {
+            "name": "retail_transfer_to_human_agent_on_policy_limit",
+            "what": "The agent fails to offer a transfer to a human agent when the customer requests an action that is not possible under policy or system limitations.",
+            "applies_to": "conversation",
+            "question": "Did the customer request an action that is not possible under policy or system limitations, and the agent did not offer to transfer to a human agent?",
+            "live": false,
+            "block_message": "",
+            "seen_in": [],
+            "tools": [],
+            "tool_chars": 6000,
+            "model": "gpt-4.1-2025-04-14"
+          },
+          {
+            "name": "airline_baggage_allowance_policy_error",
+            "what": "The agent gives an incorrect baggage allowance based on membership level, cabin, or passenger count.",
+            "applies_to": "call",
+            "question": "Does the agent provide a baggage allowance that does not match the policy for the user's membership level, cabin class, and number of passengers?",
+            "live": false,
+            "block_message": "",
+            "seen_in": [],
+            "tools": [],
+            "tool_chars": 6000,
+            "model": "gpt-4.1-2025-04-14"
+          },
+          {
+            "name": "telecom_escalate_on_sim_locked_or_contract_end",
+            "what": "The agent fails to transfer to a human agent when the SIM is locked or the line is suspended due to contract end date.",
+            "applies_to": "conversation",
+            "question": "Did the customer have a SIM locked by PIN/PUK or a line suspended due to contract end date, and the agent did not offer to transfer to a human agent?",
+            "live": false,
+            "block_message": "",
+            "seen_in": [],
+            "tools": [],
+            "tool_chars": 6000,
+            "model": "gpt-4.1-2025-04-14"
+          },
+          {
+            "name": "telecom_mobile_data_issue_missed_root_cause",
+            "what": "The agent fails to identify and resolve the root cause of a mobile data or MMS issue when all required troubleshooting steps are available and the problem is fixable by toggling data, roaming, or refueling data.",
+            "applies_to": "conversation",
+            "question": "Did the customer have a mobile data or MMS issue that could be resolved by toggling data, enabling roaming, or refueling data, but the agent failed to identify and resolve it despite having all necessary information?",
+            "live": false,
+            "block_message": "",
+            "seen_in": [],
+            "tools": [],
+            "tool_chars": 6000,
+            "model": "gpt-4.1-2025-04-14"
+          }
+        ],
+        "errors": 0,
+        "counts": {
+          "retail_cancel_pending_order_entire_order_only": {
+            "failures": [
+              3,
+              23
+            ],
+            "passes": [
+              0,
+              24
+            ]
+          },
+          "retail_modify_pending_order_items_requires_all_items": {
+            "failures": [
+              4,
+              23
+            ],
+            "passes": [
+              1,
+              24
+            ]
+          },
+          "retail_modify_user_address_state_required": {
+            "failures": [
+              1,
+              23
+            ],
+            "passes": [
+              0,
+              24
+            ]
+          },
+          "retail_modify_pending_order_items_same_item_id": {
+            "failures": [
+              1,
+              23
+            ],
+            "passes": [
+              0,
+              24
+            ]
+          },
+          "retail_transfer_to_human_agent_on_policy_limit": {
+            "failures": [
+              8,
+              23
+            ],
+            "passes": [
+              1,
+              24
+            ]
+          },
+          "airline_baggage_allowance_policy_error": {
+            "failures": [
+              2,
+              23
+            ],
+            "passes": [
+              0,
+              24
+            ]
+          },
+          "telecom_escalate_on_sim_locked_or_contract_end": {
+            "failures": [
+              1,
+              23
+            ],
+            "passes": [
+              0,
+              24
+            ]
+          },
+          "telecom_mobile_data_issue_missed_root_cause": {
+            "failures": [
+              0,
+              23
+            ],
+            "passes": [
+              0,
+              24
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "final": [
+    {
+      "name": "retail_cancel_pending_order_entire_order_only",
+      "what": "The agent cancels an entire pending order when the customer requested to cancel only specific items.",
+      "applies_to": "call",
+      "question": "Is the agent attempting to cancel an entire pending order when the customer only requested to cancel specific items from that order?",
+      "live": true,
+      "block_message": "You can only cancel the entire order if the customer explicitly requests it; otherwise, you must use the item modification flow for partial cancellations.",
+      "seen_in": [],
+      "tools": [
+        "cancel_pending_order"
+      ],
+      "tool_chars": 6000,
+      "model": "gpt-4.1-2025-04-14"
+    },
+    {
+      "name": "retail_modify_pending_order_items_requires_all_items",
+      "what": "The agent attempts to modify items in a pending order without confirming all items to be changed in a single call.",
+      "applies_to": "call",
+      "question": "Is the agent attempting to modify items in a pending order without confirming with the customer that all desired item changes are included in this single modification call, or without warning that only one modification is allowed?",
+      "live": true,
+      "block_message": "You must confirm with the customer that all item changes are included before modifying items in a pending order, as only one modification is allowed per order.",
+      "seen_in": [],
+      "tools": [
+        "modify_pending_order_items"
+      ],
+      "tool_chars": 6000,
+      "model": "gpt-4.1-2025-04-14"
+    },
+    {
+      "name": "retail_modify_user_address_state_required",
+      "what": "The agent submits a modify_user_address or modify_pending_order_address call with a missing or empty state field for US addresses.",
+      "applies_to": "call",
+      "question": "Is the agent submitting a modify_user_address or modify_pending_order_address call for a US address with a missing or empty state field?",
+      "live": true,
+      "block_message": "You must include a valid state for all US addresses when modifying user or order addresses.",
+      "seen_in": [],
+      "tools": [
+        "modify_user_address",
+        "modify_pending_order_address"
+      ],
+      "tool_chars": 6000,
+      "model": "gpt-4.1-2025-04-14"
+    },
+    {
+      "name": "retail_modify_pending_order_items_same_item_id",
+      "what": "The agent attempts to modify a pending order item to the same item id (no actual change).",
+      "applies_to": "call",
+      "question": "Is the agent attempting to modify a pending order item to the same item id as the original (i.e., no actual change)?",
+      "live": true,
+      "block_message": "You cannot modify an item to itself; please select a different variant for modification.",
+      "seen_in": [],
+      "tools": [
+        "modify_pending_order_items"
+      ],
+      "tool_chars": 6000,
+      "model": "gpt-4.1-2025-04-14"
+    },
+    {
+      "name": "retail_transfer_to_human_agent_on_policy_limit",
+      "what": "The agent fails to offer a transfer to a human agent when the customer requests an action that is not possible under policy or system limitations.",
+      "applies_to": "conversation",
+      "question": "Did the customer request an action that is not possible under policy or system limitations, and the agent did not offer to transfer to a human agent?",
+      "live": false,
+      "block_message": "",
+      "seen_in": [],
+      "tools": [],
+      "tool_chars": 6000,
+      "model": "gpt-4.1-2025-04-14"
+    },
+    {
+      "name": "airline_baggage_allowance_policy_error",
+      "what": "The agent gives an incorrect baggage allowance based on membership level, cabin, or passenger count.",
+      "applies_to": "call",
+      "question": "Does the agent provide a baggage allowance that does not match the policy for the user's membership level, cabin class, and number of passengers?",
+      "live": false,
+      "block_message": "",
+      "seen_in": [],
+      "tools": [],
+      "tool_chars": 6000,
+      "model": "gpt-4.1-2025-04-14"
+    },
+    {
+      "name": "telecom_escalate_on_sim_locked_or_contract_end",
+      "what": "The agent fails to transfer to a human agent when the SIM is locked or the line is suspended due to contract end date.",
+      "applies_to": "conversation",
+      "question": "Did the customer have a SIM locked by PIN/PUK or a line suspended due to contract end date, and the agent did not offer to transfer to a human agent?",
+      "live": false,
+      "block_message": "",
+      "seen_in": [],
+      "tools": [],
+      "tool_chars": 6000,
+      "model": "gpt-4.1-2025-04-14"
+    },
+    {
+      "name": "telecom_mobile_data_issue_missed_root_cause",
+      "what": "The agent fails to identify and resolve the root cause of a mobile data or MMS issue when all required troubleshooting steps are available and the problem is fixable by toggling data, roaming, or refueling data.",
+      "applies_to": "conversation",
+      "question": "Did the customer have a mobile data or MMS issue that could be resolved by toggling data, enabling roaming, or refueling data, but the agent failed to identify and resolve it despite having all necessary information?",
+      "live": false,
+      "block_message": "",
+      "seen_in": [],
+      "tools": [],
+      "tool_chars": 6000,
+      "model": "gpt-4.1-2025-04-14"
+    }
+  ],
+  "held_out_domains": {
+    "retail_cancel_pending_order_entire_order_only": [
+      "retail"
+    ],
+    "retail_modify_pending_order_items_requires_all_items": [
+      "retail"
+    ],
+    "retail_modify_user_address_state_required": [
+      "retail"
+    ],
+    "retail_modify_pending_order_items_same_item_id": [
+      "retail"
+    ],
+    "retail_transfer_to_human_agent_on_policy_limit": [
+      "retail"
+    ],
+    "airline_baggage_allowance_policy_error": [
+      "airline"
+    ],
+    "telecom_escalate_on_sim_locked_or_contract_end": [
+      "telecom"
+    ],
+    "telecom_mobile_data_issue_missed_root_cause": [
+      "telecom"
+    ]
+  },
+  "held_out": [
+    {
+      "name": "retail_cancel_pending_order_entire_order_only",
+      "added": [
+        0,
+        14
+      ],
+      "added_share": 0.0,
+      "failures": [
+        5,
+        49
+      ],
+      "passes": [
+        0,
+        43
+      ],
+      "passes_errored": 0,
+      "pass_share_at_worst": 0.0,
+      "rediscovers": [
+        5,
+        25
+      ],
+      "errors": 0,
+      "meets_bar": false,
+      "flagged_ids": [
+        {
+          "id": "retail:31#0",
+          "kind": "failure"
+        },
+        {
+          "id": "retail:63#1",
+          "kind": "failure"
+        },
+        {
+          "id": "retail:98#1",
+          "kind": "failure"
+        },
+        {
+          "id": "retail:99#1",
+          "kind": "failure"
+        },
+        {
+          "id": "retail:99#0",
+          "kind": "failure"
+        }
+      ]
+    },
+    {
+      "name": "retail_modify_pending_order_items_requires_all_items",
+      "added": [
+        0,
+        14
+      ],
+      "added_share": 0.0,
+      "failures": [
+        6,
+        49
+      ],
+      "passes": [
+        2,
+        43
+      ],
+      "passes_errored": 0,
+      "pass_share_at_worst": 0.046511627906976744,
+      "rediscovers": [
+        4,
+        25
+      ],
+      "errors": 0,
+      "meets_bar": false,
+      "flagged_ids": [
+        {
+          "id": "retail:104#1",
+          "kind": "failure"
+        },
+        {
+          "id": "retail:109#0",
+          "kind": "failure"
+        },
+        {
+          "id": "retail:28#0",
+          "kind": "failure"
+        },
+        {
+          "id": "retail:31#1",
+          "kind": "failure"
+        },
+        {
+          "id": "retail:63#1",
+          "kind": "failure"
+        },
+        {
+          "id": "retail:66#1",
+          "kind": "failure"
+        },
+        {
+          "id": "retail:85#0",
+          "kind": "pass"
+        },
+        {
+          "id": "retail:85#1",
+          "kind": "pass"
+        }
+      ]
+    },
+    {
+      "name": "retail_modify_user_address_state_required",
+      "added": [
+        0,
+        14
+      ],
+      "added_share": 0.0,
+      "failures": [
+        0,
+        49
+      ],
+      "passes": [
+        0,
+        43
+      ],
+      "passes_errored": 0,
+      "pass_share_at_worst": 0.0,
+      "rediscovers": [
+        0,
+        25
+      ],
+      "errors": 0,
+      "meets_bar": false,
+      "flagged_ids": []
+    },
+    {
+      "name": "retail_modify_pending_order_items_same_item_id",
+      "added": [
+        0,
+        14
+      ],
+      "added_share": 0.0,
+      "failures": [
+        1,
+        49
+      ],
+      "passes": [
+        0,
+        43
+      ],
+      "passes_errored": 0,
+      "pass_share_at_worst": 0.0,
+      "rediscovers": [
+        1,
+        25
+      ],
+      "errors": 0,
+      "meets_bar": false,
+      "flagged_ids": [
+        {
+          "id": "retail:109#0",
+          "kind": "failure"
+        }
+      ]
+    },
+    {
+      "name": "retail_transfer_to_human_agent_on_policy_limit",
+      "added": [
+        4,
+        14
+      ],
+      "added_share": 0.2857142857142857,
+      "failures": [
+        24,
+        49
+      ],
+      "passes": [
+        6,
+        43
+      ],
+      "passes_errored": 0,
+      "pass_share_at_worst": 0.13953488372093023,
+      "rediscovers": [
+        15,
+        25
+      ],
+      "errors": 0,
+      "meets_bar": false,
+      "flagged_ids": [
+        {
+          "id": "retail:104#0",
+          "kind": "pass"
+        },
+        {
+          "id": "retail:107#1",
+          "kind": "pass"
+        },
+        {
+          "id": "retail:11#0",
+          "kind": "pass"
+        },
+        {
+          "id": "retail:107#0",
+          "kind": "failure"
+        },
+        {
+          "id": "retail:11#1",
+          "kind": "pass"
+        },
+        {
+          "id": "retail:19#0",
+          "kind": "failure"
+        },
+        {
+          "id": "retail:2#1",
+          "kind": "added"
+        },
+        {
+          "id": "retail:20#1",
+          "kind": "added"
+        },
+        {
+          "id": "retail:20#0",
+          "kind": "failure"
+        },
+        {
+          "id": "retail:21#1",
+          "kind": "failure"
+        },
+        {
+          "id": "retail:28#0",
+          "kind": "failure"
+        },
+        {
+          "id": "retail:3#0",
+          "kind": "added"
+        },
+        {
+          "id": "retail:43#1",
+          "kind": "pass"
+        },
+        {
+          "id": "retail:37#1",
+          "kind": "failure"
+        },
+        {
+          "id": "retail:57#0",
+          "kind": "failure"
+        },
+        {
+          "id": "retail:57#1",
+          "kind": "failure"
+        },
+        {
+          "id": "retail:6#1",
+          "kind": "failure"
+        },
+        {
+          "id": "retail:6#0",
+          "kind": "failure"
+        },
+        {
+          "id": "retail:58#1",
+          "kind": "failure"
+        },
+        {
+          "id": "retail:66#1",
+          "kind": "failure"
+        },
+        {
+          "id": "retail:8#0",
+          "kind": "failure"
+        },
+        {
+          "id": "retail:84#1",
+          "kind": "failure"
+        },
+        {
+          "id": "retail:84#0",
+          "kind": "failure"
+        },
+        {
+          "id": "retail:93#1",
+          "kind": "pass"
+        },
+        {
+          "id": "retail:95#1",
+          "kind": "added"
+        },
+        {
+          "id": "retail:92#0",
+          "kind": "failure"
+        },
+        {
+          "id": "retail:98#1",
+          "kind": "failure"
+        },
+        {
+          "id": "retail:99#1",
+          "kind": "failure"
+        },
+        {
+          "id": "retail:99#0",
+          "kind": "failure"
+        },
+        {
+          "id": "retail:98#0",
+          "kind": "failure"
+        }
+      ]
+    },
+    {
+      "name": "airline_baggage_allowance_policy_error",
+      "added": [
+        0,
+        8
+      ],
+      "added_share": 0.0,
+      "failures": [
+        3,
+        20
+      ],
+      "passes": [
+        0,
+        18
+      ],
+      "passes_errored": 0,
+      "pass_share_at_worst": 0.0,
+      "rediscovers": [
+        2,
+        4
+      ],
+      "errors": 0,
+      "meets_bar": false,
+      "flagged_ids": [
+        {
+          "id": "airline:17#0",
+          "kind": "failure"
+        },
+        {
+          "id": "airline:23#0",
+          "kind": "failure"
+        },
+        {
+          "id": "airline:23#1",
+          "kind": "failure"
+        }
+      ]
+    },
+    {
+      "name": "telecom_escalate_on_sim_locked_or_contract_end",
+      "added": [
+        1,
+        13
+      ],
+      "added_share": 0.07692307692307693,
+      "failures": [
+        3,
+        44
+      ],
+      "passes": [
+        0,
+        50
+      ],
+      "passes_errored": 0,
+      "pass_share_at_worst": 0.0,
+      "rediscovers": [
+        0,
+        0
+      ],
+      "errors": 0,
+      "meets_bar": false,
+      "flagged_ids": [
+        {
+          "id": "telecom:[service_issue]airplane_mode_on|break_apn_settings|contract_end_suspension|unseat_sim_card[PERSONA:Easy]#1",
+          "kind": "added"
+        },
+        {
+          "id": "telecom:[service_issue]airplane_mode_on|break_apn_settings|contract_end_suspension|unseat_sim_card[PERSONA:Easy]#0",
+          "kind": "failure"
+        },
+        {
+          "id": "telecom:[service_issue]break_apn_settings|lock_sim_card_pin|overdue_bill_suspension|unseat_sim_card[PERSONA:Easy]#1",
+          "kind": "failure"
+        }
+      ]
+    },
+    {
+      "name": "telecom_mobile_data_issue_missed_root_cause",
+      "added": [
+        0,
+        13
+      ],
+      "added_share": 0.0,
+      "failures": [
+        13,
+        44
+      ],
+      "passes": [
+        0,
+        50
+      ],
+      "passes_errored": 0,
+      "pass_share_at_worst": 0.0,
+      "rediscovers": [
+        0,
+        0
+      ],
+      "errors": 0,
+      "meets_bar": false,
+      "flagged_ids": [
+        {
+          "id": "telecom:[mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|break_apn_mms_setting|break_app_both_permissions|data_mode_off|data_usage_exceeded|unseat_sim_card|user_abroad_roaming_disabled_off[PERSONA:Hard]#1",
+          "kind": "failure"
+        },
+        {
+          "id": "telecom:[mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|break_apn_mms_setting|break_app_storage_permission|data_mode_off|data_usage_exceeded|unseat_sim_card|user_abroad_roaming_disabled_off[PERSONA:Easy]#1",
+          "kind": "failure"
+        },
+        {
+          "id": "telecom:[mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|break_app_sms_permission|data_mode_off|data_usage_exceeded|unseat_sim_card|user_abroad_roaming_disabled_off[PERSONA:None]#1",
+          "kind": "failure"
+        },
+        {
+          "id": "telecom:[mms_issue]bad_network_preference|bad_wifi_calling|break_app_both_permissions|data_usage_exceeded|unseat_sim_card|user_abroad_roaming_disabled_off[PERSONA:None]#1",
+          "kind": "failure"
+        },
+        {
+          "id": "telecom:[mms_issue]bad_wifi_calling|break_apn_mms_setting|break_app_sms_permission|data_usage_exceeded[PERSONA:Hard]#0",
+          "kind": "failure"
+        },
+        {
+          "id": "telecom:[mms_issue]break_apn_mms_setting|data_mode_off|user_abroad_roaming_disabled_on[PERSONA:Hard]#0",
+          "kind": "failure"
+        },
+        {
+          "id": "telecom:[mobile_data_issue]airplane_mode_on|bad_network_preference|bad_vpn|data_mode_off|data_saver_mode_on|user_abroad_roaming_disabled_off[PERSONA:Hard]#1",
+          "kind": "failure"
+        },
+        {
+          "id": "telecom:[mobile_data_issue]airplane_mode_on|bad_network_preference|data_usage_exceeded|user_abroad_roaming_disabled_off[PERSONA:Easy]#1",
+          "kind": "failure"
+        },
+        {
+          "id": "telecom:[mobile_data_issue]airplane_mode_on|bad_network_preference|data_usage_exceeded|user_abroad_roaming_disabled_off[PERSONA:Easy]#0",
+          "kind": "failure"
+        },
+        {
+          "id": "telecom:[mobile_data_issue]airplane_mode_on|bad_network_preference|user_abroad_roaming_enabled_off[PERSONA:Easy]#1",
+          "kind": "failure"
+        },
+        {
+          "id": "telecom:[mobile_data_issue]airplane_mode_on|bad_network_preference|user_abroad_roaming_enabled_off[PERSONA:Easy]#0",
+          "kind": "failure"
+        },
+        {
+          "id": "telecom:[mobile_data_issue]bad_network_preference|bad_vpn|data_usage_exceeded|user_abroad_roaming_disabled_off[PERSONA:Easy]#0",
+          "kind": "failure"
+        },
+        {
+          "id": "telecom:[mobile_data_issue]bad_network_preference|bad_vpn|user_abroad_roaming_enabled_off[PERSONA:Easy]#1",
+          "kind": "failure"
+        }
+      ]
+    }
+  ],
+  "frozen_rules_held_out": {
+    "no_yes": {
+      "failures": [
+        4,
+        113
+      ],
+      "passes": [
+        2,
+        111
+      ]
+    },
+    "mismatch": {
+      "failures": [
+        29,
+        113
+      ],
+      "passes": [
+        7,
+        111
+      ]
+    }
+  },
+  "layers": [
+    {
+      "layer": "Tool / Arg / Loop (Stage 1)",
+      "failures": [
+        63,
+        113
+      ],
+      "passes": [
+        15,
+        111
+      ]
+    },
+    {
+      "layer": "+ \"no yes\" (hand-written)",
+      "failures": [
+        64,
+        113
+      ],
+      "passes": [
+        17,
+        111
+      ]
+    },
+    {
+      "layer": "+ \"mismatch\" (hand-written after meta-healing v1)",
+      "failures": [
+        78,
+        113
+      ],
+      "passes": [
+        22,
+        111
+      ]
+    }
+  ],
+  "meets_bar": [],
+  "accepted": {
+    "names": [],
+    "reviewer": "Charlie",
+    "date": "2026-11-22"
+  }
+}
