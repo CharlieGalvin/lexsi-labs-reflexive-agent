@@ -13,6 +13,7 @@ models:                       # label: the name vLLM serves it under
   base: CohereLabs/aya-expanse-32b
   sft2: sft2
   sft2e4: sft2e4             # S2E4 (Stage 2c): v2's data, 4 epochs
+  sft2e4q: sft2e4q           # S2E4 served in FP8 (QUANTIZATION=fp8): same adapter, served under this name
 
 # Each benchmark: lm-eval tasks, and `score`, the lm-eval metric an item's "correct" must reproduce.
 # AuditKIT saves one copy of an item per lm-eval filter (GSM8K: strict and flexible, same item ID);
