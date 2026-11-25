@@ -2,6 +2,14 @@
 
     python scripts/heal/onpolicy_fixes.py results/episodes/arms/S2-*-trainpool.jsonl --dry-run
     python scripts/heal/onpolicy_fixes.py results/episodes/arms/S2-*-trainpool.jsonl
+    python scripts/heal/onpolicy_fixes.py results/episodes/arms/S2-*-{trainpool,fresh}.jsonl --points mismatch
+
+``--points mismatch`` (STAGE2.md, amended Sun 22 Nov 10:40): the fix point is the first change the
+frozen "mismatch" rule flags, found with no answer key, as the loop would in deployment. The
+teacher is told what was flagged (in its own copy of the prompt; the saved example keeps the
+agent's), the flagged change may not come back unchanged, and the answer key still verifies the
+fix as below. A flag in a conversation that passed is counted and gets no fix: τ²-bench says that
+change was right. Writes ``results/heal/mismatch-fixes.jsonl`` (group ``mismatch``).
 
 The heal loop's `PrefixTeacher` fixes a failure at the classifier's first finding (a Tool, Arg or
 Loop hallucination). Most of SFT v2's remaining failures have none: they are wrong *decisions*
@@ -72,6 +80,11 @@ Call = tuple[str, dict]
 Expected = tuple[str, dict, Any]  # (name, arguments, compare_args)
 VAL = ROOT / "results" / "episodes" / "arms"
 OUT = ROOT / "results" / "heal" / "onpolicy-fixes.jsonl"
+MISMATCH_OUT = ROOT / "results" / "heal" / "mismatch-fixes.jsonl"
+MISMATCH_HINT = (
+    "Note for this turn: a reviewer flagged the change you are about to make: {detail} Check it "
+    "against what the customer asked for and agreed to, and against your own lookups, then act."
+)
 VAL_TASKS = {"retail": 13, "airline": 5, "telecom": 12}  # the 30 validation tasks (SEL-71)
 
 
@@ -190,14 +203,35 @@ def watch_requests() -> None:
     httpx.post = post  # ty: ignore[invalid-assignment]  # a logging wrapper with the same call signature
 
 
+def unchanged(fixed: dict, original: list[Call], mutating: Callable[[str], bool]) -> list[str]:
+    """At a "mismatch" point the flagged change must change: the same calls again fix nothing."""
+    writes = sorted(json.dumps(c, sort_keys=True) for c in calls_in(fixed) if mutating(c[0]))
+    if original and writes == sorted(json.dumps(c, sort_keys=True) for c in original):
+        return ["the flagged change is made again unchanged"]
+    return []
+
+
 def teach(
-    failure: Any, point: FixPoint, mutating: Callable[[str], bool], attempts: int
+    failure: Any, point: FixPoint, mutating: Callable[[str], bool], attempts: int, source: str = ""
 ) -> tuple[dict | None, list]:
     """The teacher's turn at ``point`` (`heal.PrefixTeacher`, plus `verify`): the accepted example
-    as an on-policy one, and every try. Raises `runner.OutOfCredits` / ``ModelUnavailable``."""
-    from reflexive import heal
+    as an on-policy one, and every try. Raises `runner.OutOfCredits` / ``ModelUnavailable``.
 
-    teacher = heal.PrefixTeacher(attempts=attempts, extra_check=lambda fixed: verify(fixed, point, mutating))
+    At a "mismatch" point the teacher is told what was flagged (in its copy of the prompt only),
+    and the flagged change must not come back unchanged. ``source`` (the rollout file's name) goes
+    into a mismatch fix's id: the train-pool and fresh files share tasks and sample numbers."""
+    from reflexive import heal
+    from reflexive.hallucination import agent_view_of
+
+    mismatch = point.kind == "mismatch"
+    original = changes_in(agent_view_of(failure.record), point.turn, mutating) if mismatch else []
+
+    def check(fixed: dict) -> list[str]:
+        return verify(fixed, point, mutating) + (unchanged(fixed, original, mutating) if mismatch else [])
+
+    teacher = heal.PrefixTeacher(attempts=attempts, extra_check=check)
+    if mismatch:  # set after: a test's stand-in teacher needn't take it
+        teacher.hint = MISMATCH_HINT.format(detail=point.detail)
     try:
         ex = teacher.fix(failure)
     except ValueError as e:  # e.g. to_sft_example: the fixed turn didn't come out last
@@ -209,8 +243,10 @@ def teach(
     domain, task_id = failure.task
     sample = failure.record.get("sample", 0)
     src = ex["source"]
-    ex["id"] = f"onpolicy/{src['teacher']}/{domain}/{task_id}/s{sample}/t{point.turn}/a{src['attempt']}"
-    ex["group"] = "onpolicy"
+    group = "mismatch" if mismatch else "onpolicy"
+    where = f"{source}/" if mismatch and source else ""
+    ex["id"] = f"{group}/{src['teacher']}/{domain}/{task_id}/{where}s{sample}/t{point.turn}/a{src['attempt']}"
+    ex["group"] = group
     src.update(kind="onpolicy_fix", fix_kind=point.kind, fix_detail=point.detail, sample=sample)
     return ex, log
 
@@ -235,7 +271,17 @@ def val_ids(paths: Iterable[str]) -> tuple[set[tuple[str, str]], list[str]]:
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("files", nargs="+", type=Path, help="rollout files of the student on train tasks")
-    p.add_argument("--out", type=Path, default=OUT)
+    p.add_argument(
+        "--out", type=Path, help=f"default {shown(OUT)}, or {shown(MISMATCH_OUT)} with --points mismatch"
+    )
+    p.add_argument(
+        "--points",
+        choices=["answer-key", "mismatch"],
+        default="answer-key",
+        help="where to fix: answer-key = the first change that leaves the expected actions (the "
+        'default, as before); mismatch = the first change the frozen "mismatch" rule flags, which '
+        "needs no answer key (STAGE2.md, amended Sun 22 Nov 10:40); the answer key still verifies the fix",
+    )
     p.add_argument(
         "--exclude",
         nargs="*",
@@ -245,6 +291,7 @@ def main() -> int:
     p.add_argument("--attempts", type=int, default=3)
     p.add_argument("--dry-run", action="store_true", help="find the fix points only: no API call")
     a = p.parse_args()
+    use_points(a)
 
     from loguru import logger
 
@@ -268,6 +315,7 @@ def main() -> int:
     report: dict[str, Any] = {
         "files": [shown(f) for f in a.files],
         "excluded": len(banned),
+        "points": a.points,
         "conversations": [],
     }
     kinds: collections.Counter = collections.Counter()
@@ -281,26 +329,40 @@ def main() -> int:
         for f in a.files:
             for r in latest_records(read_jsonl(f, partial_last_ok=True)):
                 d, t = r["domain"], str(r["task_id"])
-                if (r.get("outcome") or {}).get("passed") or is_broken(r):
+                passed = bool((r.get("outcome") or {}).get("passed"))
+                if is_broken(r) or (passed and a.points == "answer-key"):
                     continue
                 if (d, t) in banned or split_of(d, t) != "train":
                     kinds["left out: a validation or non-train task"] += 1
                     continue
-                point, diag, mutating = domains.fix_point(r)
-                entry: dict[str, Any] = {"domain": d, "task_id": t, "sample": r.get("sample", 0)}
+                point, diag, mutating = domains.fix_point(r, a.points)
+                entry: dict[str, Any] = {
+                    "file": f.stem,
+                    "domain": d,
+                    "task_id": t,
+                    "sample": r.get("sample", 0),
+                    "passed": passed,
+                }
                 report["conversations"].append(entry)
-                if point is None:
-                    kinds["no fix point (actions match; failed another check)"] += 1
-                    entry["fix_point"] = None
+                if (why := skip_reason(point, passed, a.points)) is not None:
+                    kinds[why] += 1
+                    entry["fix_point"] = (
+                        None
+                        if point is None
+                        else {"turn": point.turn, "kind": point.kind, "detail": point.detail}
+                    )
                     continue
+                assert point is not None  # skip_reason gives a reason for every None
                 kinds[point.kind] += 1
                 entry["fix_point"] = {"turn": point.turn, "kind": point.kind, "detail": point.detail}
                 if out is None:
                     continue
-                done = sum(kinds[k] for k in ("unexpected_change", "change_never_made", "classifier"))
+                done = sum(
+                    kinds[k] for k in ("unexpected_change", "change_never_made", "classifier", "mismatch")
+                )
                 start = time.monotonic()
                 ex, entry["attempts"] = teach(
-                    Failure(r, diagnosis_for(point, diag)), point, mutating, a.attempts
+                    Failure(r, diagnosis_for(point, diag)), point, mutating, a.attempts, source=f.stem
                 )
                 if ex is not None:
                     fixes.append(ex)
@@ -331,7 +393,9 @@ class Domains:
         self.tasks: dict[str, Any] = {}
         self.tools: dict[str, Any] = {}
 
-    def fix_point(self, r: dict) -> tuple[FixPoint | None, Diagnosis, Callable[[str], bool]]:
+    def fix_point(
+        self, r: dict, points: str = "answer-key"
+    ) -> tuple[FixPoint | None, Diagnosis, Callable[[str], bool]]:
         from tau2.registry import registry
 
         from reflexive.hallucination import agent_view_of, classify_record
@@ -352,8 +416,10 @@ class Domains:
         ]
         view = agent_view_of(r)
         writes = [e for e in expected if mutating(e[0])]
-        point = locate(view, writes, mutating)
         diag = classify_record(r)
+        if points == "mismatch":
+            return mismatch_point(r, view, writes, mutating), diag, mutating
+        point = locate(view, writes, mutating)
         if point is None and diag.first is not None:
             point = FixPoint(
                 diag.first.turn,
@@ -362,6 +428,48 @@ class Domains:
                 pending_at(view, diag.first.turn, writes, mutating),
             )
         return point, diag, mutating
+
+
+def use_points(a: argparse.Namespace) -> None:
+    """The output file for ``--points``; with ``mismatch``, the frozen checker switched on (cached)."""
+    import os
+
+    a.out = a.out or (MISMATCH_OUT if a.points == "mismatch" else OUT)
+    if a.points == "mismatch":
+        os.environ["REFLEXIVE_INTENT_JUDGE"] = "on"
+        os.environ.setdefault("REFLEXIVE_META_CACHE", str(ROOT / "results" / "cache" / "meta-rules.jsonl"))
+
+
+def skip_reason(point: FixPoint | None, passed: bool, points: str) -> str | None:
+    """Why a conversation gets no teacher call (None: it does)."""
+    if point is None:
+        if points == "answer-key":
+            return "no fix point (actions match; failed another check)"
+        return "not flagged" + (" (passed)" if passed else " (failed)")
+    if point.kind == "checker_error":
+        return "checker error: not flagged"
+    if passed:  # τ²-bench says the flagged change was right: a wrong flag gives no fix
+        return "flagged, but the conversation passed: no fix"
+    return None
+
+
+def mismatch_point(
+    r: dict, view: list[dict], writes: list[Expected], mutating: Callable[[str], bool], findings: Any = None
+) -> FixPoint | None:
+    """The first change the frozen "mismatch" rule flags (live), or a ``checker_error`` point if it
+    couldn't answer before any flag; None if it flags nothing. ``findings`` is for tests."""
+    if findings is None:
+        from reflexive.intent import intent_findings
+        from reflexive.mismatch import mismatch
+
+        findings = intent_findings(r, rules=[mismatch])
+    for f in sorted(findings, key=lambda f: f["turn"]):
+        if f["live"]:
+            return FixPoint(
+                f["turn"], "mismatch", str(f["reason"]), pending_at(view, f["turn"], writes, mutating)
+            )
+        return FixPoint(f["turn"], "checker_error", str(f["reason"]), ())
+    return None
 
 
 def finish(
@@ -376,6 +484,7 @@ def finish(
     report["fix_points"] = dict(kinds)
     report["fixes"] = len(fixes)
     report["fixes_by_kind"] = dict(collections.Counter(x["source"]["fix_kind"] for x in fixes))
+    report["teacher_hint"] = MISMATCH_HINT if report.get("points") == "mismatch" else None
     report["stopped"] = stopped
     print(f"fix points: {dict(kinds)}")
     if out is None:

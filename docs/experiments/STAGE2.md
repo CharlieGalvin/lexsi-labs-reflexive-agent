@@ -240,8 +240,9 @@ the closest, `retail_transfer_to_human_agent_on_policy_limit`, adds 4/14 retail 
 validation run.** One change to "no yes" (PR #80): a refusal after a polite or hesitant opening
 ("Please stop, I changed my mind.", "Sorry, no.") now withdraws an earlier yes, and "changed my mind"
 counts anywhere; before, only a refusal at the very start of the message did. Found while checking
-the review fixes. Its train rates are re-run with the same bar (at most 1 in 10 passes) and replace
-those above. Meta-healing v1's split is unchanged by the review fixes (checked at 12:56: the same
+the review fixes. Its train rates were re-run with the same bar (at most 1 in 10 passes): unchanged ("no yes"
+3/55 passes, 4/57 failures; words only 10/55, 13/57; "mismatch" 5/55), since no train conversation has a
+withdrawal after a polite opening. Meta-healing v1's split is unchanged by the review fixes (checked at 12:56: the same
 74 / 38 conversations and unexplained failures per domain). The first tag, `stage2-checker-frozen`,
 stays where it is; every Stage 2 guarded run uses `stage2-checker-frozen-2`, which also has the
 `S2G` arm (PR #81: v2 with the guard, its own key so its records never mix with v2's). A judge-only "no yes"
@@ -336,6 +337,26 @@ out: 224 fresh conversations, 113 failures, 111 passes; 35 failures no frozen ru
 
 Under the amendment of Sat 23:28, with no v2 rule accepted, retraining is as before it: only if
 Decision 1 says go.
+
+**Mismatch fixes, Sun 22 Nov 13:35 UK (SEL-117, `onpolicy_fixes.py --points mismatch`, #82): 39
+fixes, so retraining runs whatever Decision 1 says.** Over v2's 112 train-pool and 224 fresh train
+conversations, "mismatch" flagged a change in 43 failed and 12 passed ones (no checker errors); the
+12 in passes get no fix, as pre-registered. GLM-5.3-Flash, told what was flagged in its own copy of
+the prompt only, fixed 39 of the 43 (4 refused after 3 attempts), from 23 distinct tasks.
+
+- **What the fixes are:** 27 ask or explain with no change (many correct the agent's own earlier
+  mistake before acting: a wrong item's specs, a price per passenger, a misstated policy), 9 look
+  something up first, 3 make the expected change. The answer key verified every change; a turn with
+  no change passes that check, as in Stage 1. So the fixes teach the guard's caution, *check before
+  acting*, more than the correct action. Only the fixed turn is verified, not the rest of the
+  conversation.
+- A check for fixes that say a change was made without making it found none among the 39. Neither
+  `check_fix` nor any rule reads what a turn says, only its calls: "claimed but not done" is not in
+  the taxonomy, and is a next rule to build.
+- **What to watch:** the retrained model asking or stalling where it should act. The dev gate (no
+  drop in success; the fifth check) covers it; average conversation length is reported too. The
+  targeted measure, "mismatch" flags on the retrained model's dev conversations against v2's, is
+  the test of whether the caution was learned.
 
 **Amended Sun 22 Nov, 12:18 UK, after Chiara's review of PRs #74–#77 and before any re-run, merge
 or freeze.** Her review fixed bugs in all four (25 issues, each with a test). Three affect results
