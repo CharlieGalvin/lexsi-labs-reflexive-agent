@@ -1,0 +1,36 @@
+# Stage 2d (STAGE2.md, amended Wed 25 Nov): S2E4 trained again with a different seed, to test
+# whether its +9.9 on test was a lucky training run. Identical to sft_aya32b_v2_e4.yaml except
+# the name and the seed (0 -> 1), which changes LoRA's start and the order of the examples.
+# Train on the pod:  bash scripts/pod/night_seed.sh   (or just sft-train this file --push)
+
+name: sft-aya32b-v2-e4-s1
+model: CohereLabs/aya-expanse-32b
+data: data/train/sft-v2.jsonl          # v1's sft-all examples + group "extra"
+train_group: [healable, extra]
+eval_group: solved_by_aya             # the same 15 held-out examples as v1 (no extras for them)
+max_len: 16384
+
+lora:
+  r: 16
+  alpha: 32
+  dropout: 0.05
+  target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+
+quantization:
+  load_in_4bit: true
+  quant_type: nf4
+  double_quant: true
+
+trainer:
+  num_train_epochs: 4
+  learning_rate: 1.0e-4
+  lr_scheduler_type: cosine
+  warmup_ratio: 0.05
+  per_device_train_batch_size: 1
+  gradient_accumulation_steps: 4
+  max_grad_norm: 1.0
+  weight_decay: 0.0
+  optim: paged_adamw_8bit
+  logging_steps: 1
+  eval_steps: 7
+  seed: 1

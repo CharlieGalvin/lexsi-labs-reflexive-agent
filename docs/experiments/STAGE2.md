@@ -721,6 +721,27 @@ fewer changes without the customer's yes, not more. Serving it in FP8 halves the
 doubles the context without changing its score. Arm P ran with `configs/sft/arms.base.yaml` (amended
 Tue 21:55); its telecom drop against the API's run is within noise and not investigated further.
 
+### Stage 2d: a second training seed
+
+**Amended Wed 25 Nov, 11:48 UK, before the run: S2E4 trained again with a different seed, and the
+rule that says whether its gain replicates.** S2E4's +9.88 on test (95% +3.88 to +16.00) rests on
+one training run, and training is random: the seed sets LoRA's starting weights and the order of
+the examples. So the same recipe is trained once more, with one change, the seed (0 → 1):
+`configs/train/sft_aya32b_v2_e4_s1.yaml`, arm **S2E4S1** (`configs/sft/arms.s2e4s1.yaml`), same
+data, epochs, settings, server, prompt, decoding and customer as S2E4.
+
+- **Declared for test, run once:** 100 tasks × 8 samples (`scripts/pod/night_seed.sh`: train,
+  serve, test, compare, stop the pod). No validation run first: the question is replication of
+  a test result, not a new candidate.
+- **The rule (primary): the gain replicates if S2E4S1 beats v2 on test with the paired 95% range
+  above 0,** the rule S2E4's own test claim met (`stage2b_compare.py S2 S2E4S1 --split test
+  --samples 8`).
+- **Reported whatever it shows:** S2E4S1's success, its gain over v2 with the 95% range, by domain,
+  and its difference from S2E4 (seed 0) with the 95% range.
+- **If it does not replicate,** both runs are reported, and the headline becomes the average gain
+  over the two training runs with the spread between them. Neither run is dropped.
+- **Crash rule** as for every arm: conversations that crashed are re-run; finished ones never are.
+
 ## Launched before this file
 
 - Retention, base vs v2 (SEL-84): rule fixed in `configs/retention.yaml` before the result.
