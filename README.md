@@ -384,11 +384,11 @@ interval of the difference is below zero; drops and rises are both reported:
 |---|---:|---:|---:|---:|---:|---:|
 | IFEval (strict, prompt-level) | 541 | 69.3% (65.3–73.1) | 67.8% (63.8–71.6) | 68.0% (64.0–71.8) | −1.5 (−4.6 to +1.7) | −1.3 (−4.4 to +2.0) |
 | GSM8K (5-shot, strict) | 1,319 | 84.5% (82.5–86.4) | 85.5% (83.5–87.3) | 85.1% (83.1–87.0) | +1.0 (−0.7 to +2.7) | +0.6 (−1.3 to +2.4) |
-| Global-MMLU-Lite (en, fr, ar, hi, ja) | 2,000 | 63.4% (61.3–65.5) | 65.8% (63.7–67.9) | 66.0% (63.8–68.0) | **+2.4 (+1.2 to +3.5)** | **+2.5 (+1.4 to +3.6)** |
+| Global-MMLU-Lite (en, fr, ar, hi, ja) | 2,000 | 63.5% (61.3–65.5) | 65.9% (63.7–67.9) | 66.0% (63.8–68.0) | **+2.4 (+1.3 to +3.5)** | **+2.5 (+1.4 to +3.6)** |
 
 No drop for either model; both rise on Global-MMLU-Lite, in English and Hindi for both, and in
 Japanese for v2. S2E4 served in FP8 against S2E4 in 16-bit: IFEval +1.7 (−1.3 to +4.6), GSM8K −0.2
-(−1.7 to +1.2), Global-MMLU-Lite −0.7 (−1.5 to +0.1), and no clear change in any language. Every
+(−1.7 to +1.2), Global-MMLU-Lite −0.7 (−1.5 to +0.2), and no clear change in any language. Every
 item's answer and score: [`analysis/retention/`](https://huggingface.co/datasets/reagent-lexsi/reagent-stage2-artifacts/tree/main/analysis/retention);
 the comparisons: `results/retention-*.metrics.json`.
 
