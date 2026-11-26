@@ -224,12 +224,15 @@ per task**, paired task by task. Re-measured this way, the healed model scores 5
 - **Safer:** changes made without the customer's explicit yes fell from 0.152 to 0.010 per
   conversation (−0.142, 95% −0.310 to −0.035): 6 of S2E4's 800 test conversations had one.
 - **Nothing else got worse** (S2E4 against base Aya, paired 95%): IFEval −1.3 (−4.4 to +2.0), GSM8K
-  +0.6 (−1.3 to +2.4), Global-MMLU-Lite +2.5 (+1.4 to +3.6), a rise, as for v2.
+  +0.6 (−1.3 to +2.4), Global-MMLU-Lite +2.5 (+1.4 to +3.6), a rise, as for v2
+  ([table](#stage-2-latency-cost-and-retention)).
 - **Cheaper to serve.** With FP8 weights, the model needs 32.2 GiB of GPU memory instead of 60.4
   GiB, the context doubles from 32K to 64K tokens, and validation doesn't move (18.50 against 18.50,
-  95% −2.25 to +2.25); retention shows no drop against 16-bit. GPT-4.1 costs $0.235 per conversation;
-  the healed model on one H100 costs $0.052, and the final model is served the same way.
-  <!-- TODO (Katie): S2E4's own cost per conversation and per 1,000 replies. -->
+  95% −2.25 to +2.25); retention shows no drop against 16-bit. On one H100 (16-bit, $4.39/h shared
+  by 8 conversations), S2E4 costs **$0.068 per conversation and $0.11 per solved task**, customer
+  included, and about $0.41 per 1,000 replies for the model alone (2.7 seconds each). GPT-4.1 costs
+  $0.235 per conversation and $0.38 per solved task; base Aya through Cohere's API, $0.068 and $0.47
+  ([table](#stage-2-latency-cost-and-retention)).
 
 > [!NOTE]
 > Every Stage 2 rule is in [`STAGE2.md`](docs/experiments/STAGE2.md), dated before the run it
@@ -330,6 +333,7 @@ between splits, since τ²-bench tasks within a domain share tools and policy by
 | Conversations with a loop | ↓ | 49.0% (42–56) | 49.5% | **27.0% (21–33.5)** |
 | Tool-call validity (AuditKIT) | ↑ | 72.2% | 75.3% | **97.6%** |
 | Seconds per agent request, median | ↓ | 3.3 | 3.5 | **2.4** |
+| Seconds per agent request, mean | ↓ | 3.7 | 3.7 | **2.8** |
 | Seconds per conversation, mean | ↓ | 52.5 | 59.6 | 94.3 |
 | Output tokens per agent request, median | ↓ | 117 | 117 | **78** |
 
@@ -350,6 +354,43 @@ the time for one model response, measured by the harness: B self-hosted on one H
 C on Cohere's hosted API, so the comparison includes the difference in serving. B's mean per
 request is 2.8 seconds. Its conversations take longer on average (94 against 52 seconds for A)
 because they run more than twice as many steps (25.7 against 11.3 on average).
+
+### Stage 2: latency, cost and retention
+
+**Latency and cost on test** (scored conversations; seconds per agent request is each conversation's
+model time ÷ its model calls, mean over conversations, with the median in brackets):
+
+| Arm | Served | Success | s/request, mean (median) | Retail | Airline | Telecom | $/conversation | $/solved task |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| A, base Aya | Cohere API | 14.5% | 3.7 (3.2) | 3.1 | 3.9 | 4.3 | 0.068 | 0.47 |
+| C, careful prompt | Cohere API | 13.0% | 3.7 (3.4) | 3.5 | 3.6 | 4.0 | 0.067 | 0.51 |
+| P, base Aya | our H100 | 11.5% | 3.7 (3.4) | 3.3 | 3.7 | 4.1 | 0.034 | 0.29 |
+| B, v2 (2 samples) | our H100 | 51.5% | 2.8 (2.4) | | | | 0.052 | 0.10 |
+| **S2E4** | **our H100** | **60.0%** | **2.7 (2.5)** | 2.9 | 3.4 | 2.2 | **0.068** | **0.11** |
+| S2P1E4 | our H100 | 58.9% | 2.6 (2.4) | 2.7 | 3.4 | 2.1 | 0.075 | 0.13 |
+| GPT-4.1 (reference) | OpenRouter | 61.5% | 1.6 (1.6) | | | | 0.235 | 0.38 |
+
+Cost is the agent plus the simulated customer (GPT-4.1). API agents are priced per token at list
+price. Self-hosted agents are an estimate: one H100 at $4.39/h, divided among the conversations that
+shared it (8; 6 for S2P1E4). S2E4 costs as much per conversation as base Aya through the API but
+solves four times as many tasks; its conversations cost more in telecom ($0.13), where they run
+longest. Per-domain rows: [`results/roi-*-test.metrics.json`](results/).
+
+**Retention** (full test sets, temperature 0, the same server; accuracy with its 95% interval, and
+each model's paired difference from base over the same items). A drop counts only if the whole
+interval of the difference is below zero; drops and rises are both reported:
+
+| Benchmark | Items | Base Aya | v2 | S2E4 | v2 − base | S2E4 − base |
+|---|---:|---:|---:|---:|---:|---:|
+| IFEval (strict, prompt-level) | 541 | 69.3% (65.3–73.1) | 67.8% (63.8–71.6) | 68.0% (64.0–71.8) | −1.5 (−4.6 to +1.7) | −1.3 (−4.4 to +2.0) |
+| GSM8K (5-shot, strict) | 1,319 | 84.5% (82.5–86.4) | 85.5% (83.5–87.3) | 85.1% (83.1–87.0) | +1.0 (−0.7 to +2.7) | +0.6 (−1.3 to +2.4) |
+| Global-MMLU-Lite (en, fr, ar, hi, ja) | 2,000 | 63.4% (61.3–65.5) | 65.8% (63.7–67.9) | 66.0% (63.8–68.0) | **+2.4 (+1.2 to +3.5)** | **+2.5 (+1.4 to +3.6)** |
+
+No drop for either model; both rise on Global-MMLU-Lite, in English and Hindi for both, and in
+Japanese for v2. S2E4 served in FP8 against S2E4 in 16-bit: IFEval +1.7 (−1.3 to +4.6), GSM8K −0.2
+(−1.7 to +1.2), Global-MMLU-Lite −0.7 (−1.5 to +0.1), and no clear change in any language. Every
+item's answer and score: [`analysis/retention/`](https://huggingface.co/datasets/reagent-lexsi/reagent-stage2-artifacts/tree/main/analysis/retention);
+the comparisons: `results/retention-*.metrics.json`.
 
 **Checking the automatic judges.** Two automatic judges score the runs.
 - **Task success** is τ²-bench's evaluator: database and environment checks, plus LLM judges in retail
