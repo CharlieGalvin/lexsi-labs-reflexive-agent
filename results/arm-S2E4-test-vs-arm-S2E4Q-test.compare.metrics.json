@@ -1,0 +1,127 @@
+{
+ "a": {
+  "name": "arm-S2E4-test",
+  "file": "/workspace/katie/sel106/arm-S2E4-test.jsonl"
+ },
+ "b": {
+  "name": "arm-S2E4Q-test",
+  "file": "/workspace/katie/sel106/arm-S2E4Q-test.jsonl"
+ },
+ "commit": "fe1014c",
+ "date": "2026-11-26",
+ "rows": [
+  {
+   "metric": "success_rate",
+   "a": 0.6,
+   "a_ci95": [
+    0.56625,
+    0.63375
+   ],
+   "b": 0.5775,
+   "b_ci95": [
+    0.5425,
+    0.61125
+   ],
+   "diff_b_minus_a": -0.022499999999999964,
+   "diff_ci95": [
+    -0.06625000000000003,
+    0.02124999999999999
+   ],
+   "clear": false
+  },
+  {
+   "metric": "hallucination_rate",
+   "a": 0.065,
+   "a_ci95": [
+    0.04875,
+    0.0825
+   ],
+   "b": 0.05,
+   "b_ci95": [
+    0.03625,
+    0.06625
+   ],
+   "diff_b_minus_a": -0.015,
+   "diff_ci95": [
+    -0.03624999999999999,
+    0.0037499999999999964
+   ],
+   "clear": false
+  },
+  {
+   "metric": "loop_rate",
+   "a": 0.1325,
+   "a_ci95": [
+    0.11,
+    0.155
+   ],
+   "b": 0.16625,
+   "b_ci95": [
+    0.14,
+    0.19125
+   ],
+   "diff_b_minus_a": 0.03375,
+   "diff_ci95": [
+    0.0037500000000000033,
+    0.06250000000000001
+   ],
+   "clear": true
+  },
+  {
+   "metric": "steps_per_task",
+   "a": 19.23875,
+   "a_ci95": [
+    18.51875,
+    20.02875
+   ],
+   "b": 21.14375,
+   "b_ci95": [
+    20.22375,
+    22.11
+   ],
+   "diff_b_minus_a": 1.9050000000000011,
+   "diff_ci95": [
+    0.7474999999999987,
+    3.1875
+   ],
+   "clear": true
+  },
+  {
+   "metric": "redundant_call_rate",
+   "a": 0.11813439705431114,
+   "a_ci95": [
+    0.09278029003586465,
+    0.14720506252825072
+   ],
+   "b": 0.2399892861925807,
+   "b_ci95": [
+    0.1956521739130435,
+    0.28743718592964823
+   ],
+   "diff_b_minus_a": 0.12185488913826956,
+   "diff_ci95": [
+    0.07201154289713615,
+    0.1775274152770443
+   ],
+   "clear": true
+  }
+ ],
+ "a_scored": 800,
+ "b_scored": 800,
+ "a_crashed": 0,
+ "b_crashed": 0,
+ "shared_tasks": 100,
+ "reps": 10000,
+ "seed": 0,
+ "a_monitor_stopped": {
+  "conversations": 0,
+  "passed": 0,
+  "task_success_if_failed": 0.6
+ },
+ "b_monitor_stopped": {
+  "conversations": 0,
+  "passed": 0,
+  "task_success_if_failed": 0.5775
+ },
+ "method": "percentile bootstrap; difference paired on shared tasks (cluster by task)"
+}
