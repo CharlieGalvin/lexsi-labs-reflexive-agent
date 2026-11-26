@@ -52,6 +52,7 @@ ARMS = {
     "S2G": "SFT v2 with the consent and mismatch guard",
     "S2E4": "SFT v2's data trained for 4 epochs (the final model)",
     "S2E4Q": "S2E4 served with FP8 weights and a 64K context",
+    "GPT": "GPT-4.1 as the agent, a reference (OpenRouter, 2 samples per task)",
     "S2E4S1": "S2E4's recipe trained again with seed 1",
     "S2PR": "SFT v2 practising on train tasks at temperature 0.7: the source of S2P1's practice data",
     "S2P1": "SFT v2's data plus 100 of its own verified practice conversations, 2 epochs",
@@ -200,9 +201,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     a = p.parse_args(argv)
 
-    paths = sorted(f for f in a.src.glob("*.jsonl") if NAME.match(f.name))
-    if a.arms:
-        paths = [f for f in paths if NAME.match(f.name)["arm"] in a.arms]
+    named = {f: m["arm"] for f in sorted(a.src.glob("*.jsonl")) if (m := NAME.match(f.name))}
+    paths = [f for f, arm in named.items() if not a.arms or arm in a.arms]
     if not paths:
         print(
             f"⛔ no <ARM>-<domain>-<split>.jsonl files in {shown(a.src)}"
@@ -228,13 +228,7 @@ def main(argv: list[str] | None = None) -> int:
             f"   ✓ {e['file']}: {e['conversations']} conversations, {e['tasks']} tasks, {e['crashed']} crashed, {rate}"
         )
 
-    api = None
-    manifest = dict(local)
-    if not a.dry_run:
-        from huggingface_hub import HfApi
-
-        api = HfApi()
-        manifest = {**remote_manifest(a.repo), **local}
+    manifest = dict(local) if a.dry_run else {**remote_manifest(a.repo), **local}
 
     shutil.rmtree(OUT, ignore_errors=True)
     for e in local.values():
@@ -249,6 +243,9 @@ def main(argv: list[str] | None = None) -> int:
         print("(dry run: nothing uploaded)")
         return 0
 
+    from huggingface_hub import HfApi
+
+    api = HfApi()
     api.create_repo(a.repo, repo_type="dataset", private=True, exist_ok=True)
     arms = sorted({e["arm"] for e in local.values()})
     info = api.upload_folder(
