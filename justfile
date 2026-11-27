@@ -82,6 +82,10 @@ golden *args:
 golden-publish *args:
     python scripts/data/publish_golden.py {{args}}
 
+# Every arm's saved conversations → one HF dataset (SEL-110): --dry-run first; --arms to send some
+conversations-publish *args:
+    python scripts/data/publish_conversations.py {{args}}
+
 # Build the hard subset from Arm A's train runs and golden v1 → data/golden/hard/ (SEL-7; no API calls)
 hard-subset *args:
     python scripts/data/build_hard_subset.py {{args}}
@@ -325,6 +329,10 @@ blog-figures:
 # Walk through the blog's experiments and reproduce each result from results/ (no GPU or keys): `just reproduce 3`, `--list`
 reproduce *args:
     python scripts/blog/reproduce.py {{args}}
+
+# Stage 2's headline comparisons, recomputed from the published conversations (downloads them; no GPU or keys)
+reproduce-stage2 *args:
+    python scripts/blog/reproduce_stage2.py {{args}}
 
 # How often the "no yes" rule (SEL-88) flags v2's train-task failures and passes
 intent-rates *args:

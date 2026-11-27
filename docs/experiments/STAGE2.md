@@ -801,6 +801,42 @@ data, epochs, settings, server, prompt, decoding and customer as S2E4.
   over the two training runs with the spread between them. Neither run is dropped.
 - **Crash rule** as for every arm: conversations that crashed are re-run; finished ones never are.
 
+**Stage 2d, not completed (recorded Fri 27 Nov).** The second training seed (S2E4S1) was not
+completed and its outputs were lost, so the rule above was never applied. The +9.9 rests on one
+training run, as the README, blog and paper say.
+
+### Stage 2e: S2E4 served in FP8, on test (SEL-122)
+
+**Recorded Fri 27 Nov, 08:46 UK, after the run; not pre-registered in this file.** The rule below
+was written in Linear (SEL-122, created Thu 26 Nov 16:38 UK) and agreed by the team, but it was
+never committed here, and this file cannot show that it preceded the run. We record it now, with
+the result, and treat the result as a declared check rather than a pre-registered one.
+
+- **What ran:** S2E4Q (S2E4's adapter served with FP8 weights and a 64K context,
+  `configs/sft/arms.s2e4q.yaml`) on the 100 test tasks × 8 samples, paired against S2E4 in 16-bit;
+  pinned GPT-4.1 customer, guard off, every conversation re-scored by AuditKIT's oracle with judges
+  on. A check that S2E4 holds up in FP8, not a candidate to replace it.
+- **The rule, as written in SEL-122:** FP8 costs nothing on test unless the paired 95% interval of
+  S2E4Q − S2E4 lies entirely below zero. Also reported: the difference with its range, per domain,
+  conversations ending at the context limit, latency and cost.
+- **Deviations:** telecom ran at 2 workers instead of 8 (the OpenAI key's per-minute limit), so its
+  latency isn't comparable; the run moved to a second OpenAI key when the pod's ran out of credit.
+  The customer and scoring are unchanged.
+
+| Test, 100 tasks × 8, paired by task | S2E4 (16-bit) | S2E4Q (FP8) | S2E4Q − S2E4 (95%) |
+|---|---:|---:|---:|
+| Success | 60.0% | 57.8% | −2.2 (−6.6 to +2.1) |
+| Conversations with a hallucination | 6.5% | 5.0% | −1.5 (−3.6 to +0.4) |
+| Conversations with a loop | 13.3% | 16.6% | **+3.4 (+0.4 to +6.3)** |
+| Steps per task | 19.2 | 21.1 | **+1.9 (+0.7 to +3.2)** |
+| Redundant calls (compare.py) | 11.8% | 24.0% | **+12.2 (+7.2 to +17.8)** |
+
+**Result: success holds by the rule; FP8 is less tidy.** No crashes in either arm's 800
+conversations. Loops, steps and redundant calls all rise, with ranges above zero. Cost per
+conversation is about the same ($0.067 against $0.068); replies are about 30% faster in retail and
+airline. Files: `results/arm-S2E4Q-test.eval.metrics.json`,
+`results/arm-S2E4-test-vs-arm-S2E4Q-test.compare.metrics.json`, `results/roi-S2E4Q-test.metrics.json`.
+
 ## Launched before this file
 
 - Retention, base vs v2 (SEL-84): rule fixed in `configs/retention.yaml` before the result.
