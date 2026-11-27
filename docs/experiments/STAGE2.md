@@ -518,6 +518,16 @@ whatever the outcome. Recall: 40 conversations, flagged and not. The 37: one mai
 build the checker. Precision rests mostly on the base model's findings; false alarms could only
 overstate v2's rate, so the reported drop is conservative.
 
+**Result, the 37 (recorded Fri 27 Nov).** Katie labelled the decisions sheet
+(`results/labels/decisions-katie.csv`); Charlie did not, so there is no kappa, and the precision
+and recall sheets were not labelled, so classifier recall stays unmeasured. Main error:
+`reasoning` 27 of 37 (73%, Wilson 95% 57–85%), `against_policy` 8 (22%, 11–37%), `unclear` 2;
+`no_yes` and `nobody_asked` 0 (0–9%). Made-up intent appears only as a second error (D04 a late
+"no yes", D06 possibly `nobody_asked`). This is why the made-up-intent rules flagged 6 of 37: the
+decision failures are mostly misread results, wrong sums or wrong items, not unrequested changes.
+At least 5 also state facts no tool returned (D04, D07, D11, D20, D35), which are outside
+Tool / Arg / Loop by definition.
+
 ## Stage 2b: training for an uplift over v2
 
 **Amended Sun 22 Nov, 16:04 UK, after Decision 1 and before any Stage 2b run.**

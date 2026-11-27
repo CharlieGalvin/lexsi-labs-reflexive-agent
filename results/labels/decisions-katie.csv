@@ -1,0 +1,38 @@
+id,category,notes
+D01,reasoning,"Turn 11: decides XEHM4B can be cancelled because ""you have travel insurance on reservation 59XX6W"". not the same flight!"
+D02,against_policy,"Against Policy, because on Turn 27 it incorrectly says that it can't return an item that is out of stock. Turn 25, confuses robotic and standard vacuum cleaners, but it's corrected so doesn't fail the task? "
+D03,unclear,"Looks like policy was followed, but user ended the call before transfer was properly made."
+D04,reasoning,Agent invented order dates in Turn 13 - the tool didn't give any dates. Also a no yes but later - agent went ahead with cancellation before answering the clarifying questions raised in turn 14.
+D05,reasoning,"Turn 19, wrong direction. HAT178 flies ATL --> LAS (turn 8), but the agent calls search_direct_flight for LAS --> ATL. HAT178 isn't in those results. In turn 21 it then quotes ""HAT178 business $222"". That's HAT005's price on 30 May, not HAT178's. "
+D06,reasoning,"Turn 15: correctly says no partial cancellation, then offers to ""cancel the rest and keep the Hiking Boots"" for $1,103.34, which is impossible. Turn 17: cancel_pending_order cancels all of W1845024, including the boots and helmet the customer wanted to keep. The tool refunds $1,527.24. T19: wrongly claims the boots were kept and $1,103.34 refunded, and lists the helmet as cancelled. The customer's stated fallback (change address to 224 Elm St, NYC 10108) was the correct path. Alternative: nobody_asked (cancelled the boots the customer said to keep)."
+D07,reasoning,"Turn 19 invents ""Amex card (ending in 3024)"". The only place those digits appear is paypal_3024827. It got a yes for the amex refund, but returned it to paypal. "
+D08,reasoning,"Turn 19 - claims 10x zoom options are unavailable, and says the highest available zoom is 5x. Contradicts the result in turn 18: 9228757377: 30MP, 10x, SD card, ""available"": true, $3,066.23"
+D09,reasoning,"Agent misreading permission, turn 27: The customer reports ""permission for storage and phone"". The agent replies ""The messaging app has the required permissions for storage and SMS, so that's not the issue."" The customer never said SMS was confirmed as working. There was an earlier misreading too at turn 21 (The agent says roaming is ""enabled on your phone and your line"", but the line's roaming_enabled: false was in turn 10), but this was caught later at turn 45, so not failure."
+D10,reasoning,"Turn 15: ""your line has used 8.7 GB… your plan's data limit is 15.0 GB. Since you've exceeded your data limit…""."
+D11,reasoning,"Same issue as D07. Turn 17, agent invents amex card from paypal info. ""refund would go back to your Amex card (ending in 3024)"". The profile in turn 8 has only paypal_3024827, so ""3024"" comes from the PayPal ID again."
+D12,reasoning,"Turn 15: transferred early. The customer reports airplane mode on, which has a known fix. Agent calls transfer_to_human_agents instead."
+D13,reasoning,"Turn 21: refuses to cancel anything, claiming ""all flights have already taken off"" and ""none are business"". These are both not true. Misreads facts rather than invented rule, so reasoning not against policy."
+D14,against_policy,"Turn 13 - makes up rule that it can only look up orders by order id. it reiterated this in later steps, stating it as policy."
+D15,reasoning,Turn 19 - the agent got the maths wrong of calculating how long it had been since booking - said it was less than 24hrs ago (so able to cancel) when it was actually 29 hours ago.
+D16,against_policy,"Turn 23, agent makes up rules ""I can only process a return for a single item at a time"" and ""the refund must go to the original payment method… So I can't return both tablets to a gift card."" The policy says: ""The refund must either go to the original payment method, or an existing gift card."" "
+D17,reasoning,Turn 25: price differences are backwards and kettle 1 is straight up wrong.
+D18,reasoning,"Turn 17: The customer asked for ""the easiest one with the fewest pieces"". The agent lists 11 variants and leaves out the one that fits best: 1096508426: 500 pieces, art, beginner, available: true, $46.13. Agent gives intermediate 500 piece puzzle instead."
+D19,reasoning,"Same task as D08, and same issue - only looks at the CF cameras, not SD ones. says the 10x zoom is unavailable when there is one there for SD."
+D20,reasoning,"Turn 61: agent says ""I've just enabled international roaming on your line at no cost to you"", but it hadn't done anything. There is no tool call for that."
+D21,against_policy,"Same task as D16 and same error. Error in turn 17 is reasoning but it recoverable (tried to refund a giftcard purchase to a mastercard). Deciding error is in turns 23 and 25 when the agent makes up the rules about only returning one item at a time, and only returning to original payment method (misses gift card option)."
+D22,reasoning,"Turn 23 says the line 555-123-2002 is suspended due to an overduel bill. This one is actually active (L1002, see turn 10) and the other one (L003, see turn 22) is suspended. The bill is also issued, not overdue (see turn 20)."
+D23,reasoning,"Turn 21, agent puts the watch change under #W3730488, which has no watch."
+D24,reasoning,"Turn 21, wrong maths for the refund. Call fails on insufficient balance after it tries to charge instead of refund."
+D25,reasoning,Turn 23 mixes up old grill and pending grill. basically tries to change to the grill she already has.
+D26,against_policy,"Turn 23, cancels D1EW9B against the rules. booked over 24 hours ago, not business, no insurance."
+D27,reasoning,"Turn 17, agent says that the 1000 piece jigsaw is out of stock, to unable to be swapped. the user asked for the easiest jigsaw, not the 1000 piece one."
+D28,reasoning,"Turn 27, says 7706410293 has an RBG backlight, but it doesn't. not what the customer wanted."
+D29,against_policy,"policy says ""You are not allowed to lift the suspension if the line's contract end date is in the past, even if the user has paid all their overdue bills."" Contract ended on 2025-01-31, which is in the past. Agent also skipped make_payment - went straight from customer saying ""I paid"" to resuming the line!"
+D30,reasoning,"Turn 24, customer asked agent to process return, and escalate something else. Agent calls transfer_to_human_agents, but never calls return_delivered_order_items."
+D31,reasoning,"Grill is wrong in exactly the same way again as D25 (reverses current and prev order details, Turn 23)."
+D32,reasoning,"Turn 19, quotes 1569765161 as cheapest available option. Turn 18 result has a cheaper one (5320792178)."
+D33,against_policy,Turn 23 cancels flight that doesn't meet any cancellation conditions.
+D34,reasoning,"Turn 23 says ""none are business class"" and refuses to cancel any flights. 8C8K4E and LU15PA were business class, and cancellable."
+D35,reasoning,"Same as D04, order details have no date fields so agent guesses which order was older and gets it wrong. "
+D36,unclear,Customer send ###TRANSFER### before agent could call transfer_to_human_agents
+D37,against_policy,"Turn 35, the agent says ""this reservation has travel insurance and the delay is covered by the insurance, you are eligible for a full refund."" A delay is not covered in the policy."
