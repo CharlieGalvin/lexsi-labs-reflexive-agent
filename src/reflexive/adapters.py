@@ -226,6 +226,7 @@ def _eval_lines(ev: dict[str, Any]) -> list[str]:
 
 STATUS_WORDS = {
     "current": "**Arm B**: the adapter served as the project's healed student.",
+    "adopted": "Adopted: it passed its pre-registered rule.",
     "candidate": "A candidate, not yet decided.",
     "superseded": "Superseded: it was the current adapter and has been replaced.",
     "not_adopted": "Not adopted: its pre-registered rule didn't hold. Kept for the record.",

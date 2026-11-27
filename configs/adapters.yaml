@@ -84,3 +84,57 @@ adapters:
     status: not_adopted
     eval: {val: {mean: 17.0, samples: [18, 16]}}
     metrics: []
+
+  - id: sft-v2-e4
+    repo: sft-aya32b-v2-e4
+    parent: null
+    method: SFT (QLoRA r16, 4 epochs, 148 steps); also served in FP8 with a 64K context (arm S2E4Q)
+    data: v2's data exactly (146 verified teacher conversations)
+    train_config: configs/train/sft_aya32b_v2_e4.yaml
+    arm_config: configs/sft/arms.s2e4.yaml
+    served_as: sft2e4
+    ticket: SEL-110
+    # Passed its test claim (+9.88 over v2, 95% +3.88 to +16.00), not its validation rule: both
+    # disclosed in STAGE2.md (Stage 2b results). FP8 (S2E4Q): 18.50 on val, the same as 16-bit.
+    status: adopted
+    eval: {val: {mean: 18.5, n_samples: 8}, test: {mean: 60.0, of: 100, n_samples: 8}}
+    metrics: []
+
+  - id: sft-p1
+    repo: sft-aya32b-p1
+    parent: null
+    method: SFT (QLoRA r16, 2 epochs)
+    data: v2's 146 + 100 of v2's own verified practice conversations (data/train/sft-p1.jsonl)
+    train_config: configs/train/sft_aya32b_p1.yaml
+    arm_config: configs/sft/arms.s2p1.yaml
+    served_as: sft2p1
+    ticket: SEL-23
+    status: not_adopted
+    eval: {val: {mean: 17.9, n_samples: 8}}
+    metrics: []
+
+  - id: sft-p1-e4
+    repo: sft-aya32b-p1-e4
+    parent: null
+    method: SFT (QLoRA r16, 4 epochs)
+    data: sft-p1's data (v2's 146 + 100 own verified practice conversations)
+    train_config: configs/train/sft_aya32b_p1_e4.yaml
+    arm_config: configs/sft/arms.s2p1e4.yaml
+    served_as: sft2p1e4
+    ticket: SEL-121
+    status: not_adopted
+    eval: {val: {mean: 17.88, n_samples: 8}, test: {mean: 58.9, of: 100, n_samples: 8}}
+    metrics: []
+
+  - id: sft-v2-e4-s1
+    repo: sft-aya32b-v2-e4-s1
+    parent: null
+    method: SFT (QLoRA r16, 4 epochs, 148 steps), seed 1 (Stage 2d)
+    data: v2's data exactly
+    train_config: configs/train/sft_aya32b_v2_e4_s1.yaml
+    arm_config: configs/sft/arms.s2e4s1.yaml
+    served_as: sft2e4s1
+    ticket: SEL-110
+    status: candidate
+    eval: {}
+    metrics: []
