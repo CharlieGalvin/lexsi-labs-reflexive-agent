@@ -330,6 +330,10 @@ blog-figures:
 reproduce *args:
     python scripts/blog/reproduce.py {{args}}
 
+# Stage 2's headline comparisons, recomputed from the published conversations (downloads them; no GPU or keys)
+reproduce-stage2 *args:
+    python scripts/blog/reproduce_stage2.py {{args}}
+
 # How often the "no yes" rule (SEL-88) flags v2's train-task failures and passes
 intent-rates *args:
     python scripts/labels/intent_rates.py {{args}}
