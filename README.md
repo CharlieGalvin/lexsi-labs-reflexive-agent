@@ -5,7 +5,7 @@
 
 # Reflexive Agents
 
-*An AI agent that heals its own hallucinations: it detects how it went wrong, learns from a
+*An AI agent that heals its own wrong actions: it detects how it went wrong, learns from a
 teacher's verified fix, and keeps the update only if it passes a gate.*
 
 [![CI](https://github.com/CharlieGalvin/lexsi-labs-reflexive-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/CharlieGalvin/lexsi-labs-reflexive-agent/actions/workflows/ci.yml)
@@ -13,12 +13,13 @@ teacher's verified fix, and keeps the update only if it passes a gate.*
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](LICENSE)
 [![Benchmark: τ²-bench](https://img.shields.io/badge/Benchmark-τ²--bench-2f6f9f?style=flat-square)](https://github.com/sierra-research/tau2-bench)
 <br>
-[![Model on HF](https://img.shields.io/badge/🤗_Model-sft--aya32b--r16--v2-ffcc4d?style=flat-square)](https://huggingface.co/reagent-lexsi/sft-aya32b-r16-v2)
+[![Model on HF](https://img.shields.io/badge/🤗_Model-sft--aya32b--v2--e4-ffcc4d?style=flat-square)](https://huggingface.co/reagent-lexsi/sft-aya32b-v2-e4)
 [![Dataset on HF](https://img.shields.io/badge/🤗_Dataset-tau2--golden--trajectories-ffcc4d?style=flat-square)](https://huggingface.co/datasets/reagent-lexsi/tau2-golden-trajectories)
-[![Blog post](https://img.shields.io/badge/🤗_Read-the_blog_post-ff6b35?style=flat-square)](https://huggingface.co/blog/cg3849/reflexive-agents)
+[![Every conversation on HF](https://img.shields.io/badge/🤗_Every_conversation-reagent--tau2--conversations-ffcc4d?style=flat-square)](https://huggingface.co/datasets/reagent-lexsi/reagent-tau2-conversations)
+[![Blog post](https://img.shields.io/badge/🤗_Read-the_blog_post-ff6b35?style=flat-square)](https://huggingface.co/blog/cg3849/reflexive-agents-full-story)
 [![Play Spot the hallucination](https://img.shields.io/badge/🔎_Play-Spot_the_hallucination-7c5cd6?style=flat-square)](https://huggingface.co/spaces/reagent-lexsi/spot-the-hallucination)
 
-[Abstract](#abstract) • [Overview](#overview) • [Research questions](#research-questions-and-rules-set-in-advance) • [Results](#results) • [How it works](#how-it-works) • [Lexsi Labs kits](#lexsi-labs-kits-used) • [Data and metrics](#data-splits-and-metrics) • [Training setup](#training-setup) • [Experiments](#experiments) • [Ablations](#ablations) • [Get started](#get-started) • [Models and data](#models-and-data) • [Related work](#related-work) • [Limitations](#limitations) • [Discussion](#discussion-and-implications) • [Future work](#with-more-credits-future-work) • [Appendix](#appendix-prompts-and-judging-rules) • [Declaration](#declaration-of-work-done-outside-the-hackathon)
+[Abstract](#abstract) • [Overview](#overview) • [Research questions](#research-questions-and-rules-set-in-advance) • [Results](#results) • [How it works](#how-it-works) • [Lexsi Labs kits](#lexsi-labs-kits-used) • [Data and metrics](#data-splits-and-metrics) • [Training setup](#training-setup) • [Experiments](#experiments) • [Ablations](#ablations) • [Get started](#get-started) • [Models and data](#models-and-data) • [Related work](#related-work) • [Threat model](#threat-model) • [Limitations](#limitations) • [Discussion](#discussion-and-implications) • [Future work](#with-more-credits-future-work) • [Appendix](#appendix-prompts-and-judging-rules) • [Declaration](#declaration-of-work-done-outside-the-hackathon)
 
 ![The self-healing loop, animated: detect the failing turn, a teacher rewrites it, retrain on verified fixes, promote only if better](docs/blog/img/heal-loop.gif)
 
@@ -30,54 +31,67 @@ closed loop that turns those failures into training data, built for the Lexsi La
 Alignment Hackathon (Track 3: Agentic Fine-tuning) on the Lexsi Labs stack.
 
 > [!IMPORTANT]
-> **Hallucinations fall from 95% to 10% of conversations, and the agent solves 3.5× as many tasks**
-> (14.5% → 51.5% of τ²-bench's test split, a hard public benchmark). A "be careful not to
-> hallucinate" prompt changed nothing (13.0%).
+> **A self-hosted 32B agent goes from 14.5% to 60.0% of τ²-bench's test tasks, close to GPT-4.1
+> (61.5%).** Healing on verified conversations cut made-up tool calls from 95% to 10% of
+> conversations (14.5% → 51.5%). Training the healed model longer on the same data added **+9.9
+> points** (95% +3.9 to +16.0), with about 15× fewer changes made without the customer's consent.
+> A "be careful not to hallucinate" prompt changed nothing (13.0%).
 
 > [!TIP]
 > **For judges: one minute**
 >
-> - **What:** a self-healing loop for agent hallucination. A classifier finds the failing turn, a
->   stronger teacher's verified conversation fixes it, QLoRA retrains Aya Expanse 32B, and a gate
+> - **What:** a self-healing loop for an agent's wrong actions. A classifier finds the failing turn,
+>   a stronger teacher's verified conversation fixes it, QLoRA retrains Aya Expanse 32B, and a gate
 >   with rules fixed in advance decides whether the new adapter goes live.
-> - **Result** (τ²-bench test, 100 tasks × 2): hallucinated tools or arguments in **95% → 10%** of
->   conversations; tasks solved **14.5% → 51.5%**; tool-call validity **72% → 98%**. Telling the model
->   to be careful changed nothing.
-> - **Why trust it:** frozen splits, arms declared before the test run, every run reported, every
->   success re-scored by AuditKIT's oracle, 95% intervals, and `just reproduce` recomputes every
->   number in seconds with no GPU.
-> - **It runs itself:** the loop ran unattended on a GPU and the gate promoted it (dev 6 → 22 of 36).
->   It had rejected an earlier cycle that cut hallucinations but solved no more tasks.
-> - **Look at:** [Results](#results), [Lexsi Labs kits](#lexsi-labs-kits-used), the
->   [model](https://huggingface.co/reagent-lexsi/sft-aya32b-r16-v2),
->   [article](https://huggingface.co/blog/cg3849/reflexive-agents) and
+> - **Result** (τ²-bench test, 100 tasks): made-up tools or arguments in **95% → 10%** of
+>   conversations; tasks solved **14.5% → 51.5%** after healing, and **60.0%** after training the
+>   healed model longer (+9.9 points over it, 95% +3.9 to +16.0, 8 samples per task). GPT-4.1 scores
+>   61.5%, at about 3.5× the final model's cost per conversation ($0.235 against $0.068).
+> - **What we learned:** the loop heals what it can see. Detectors for wrong *decisions* (rules, a
+>   consent checker, a hybrid LLM judge), scored against an answer key, found failures but rarely
+>   the turn where they went wrong. The real bottleneck was under-training.
+> - **Safer and cheaper:** changes without the customer's yes fell from 0.152 to 0.010 per
+>   conversation; no drop on general benchmarks; FP8 halves the weights' memory with the same score.
+> - **Why trust it:** frozen splits, every rule dated before the run it judged, every run reported
+>   (the failures too), paired 95% intervals over 8 samples per task, and `just reproduce`.
+> - **Look at:** [Results](#results), [Threat model](#threat-model), the
+>   [model](https://huggingface.co/reagent-lexsi/sft-aya32b-v2-e4),
+>   [every conversation](https://huggingface.co/datasets/reagent-lexsi/reagent-tau2-conversations),
+>   [article](https://huggingface.co/blog/cg3849/reflexive-agents-full-story) and
 >   [demo](https://huggingface.co/spaces/reagent-lexsi/spot-the-hallucination).
 
 ## Abstract
 
-Agents built on open models hallucinate: they call tools they don't have, invent arguments and
-repeat failed calls. ReAgent is a reflexive loop that detects these failures with a Tool/Arg/Loop
-classifier. It fixes them with a teacher model's verified conversations, retrains the agent (QLoRA
-on Aya Expanse 32B) and lets a deployment gate decide whether the new version is swapped in. The
-pass/fail rules for that gate were fixed before any results.
+Agents built on open models take wrong actions: they call tools they don't have, invent arguments,
+repeat failed calls and change records nobody asked them to change. ReAgent is a self-healing loop
+for Aya Expanse 32B on τ²-bench. A classifier detects each failure, a teacher (GLM-5.3-Flash) writes
+a conversation that τ²-bench verifies, QLoRA retrains the agent, and a gate with rules fixed in
+advance decides whether the new version goes live.
 
-On τ²-bench's held-out test split (100 tasks × 2 samples, scored by the benchmark's own evaluator),
-the share of conversations with a hallucinated tool or argument fell from 95% to 10%. The agent
-solved 3.5× as many tasks, rising from 14.5% to 51.5% (95% CI 43.5–59.5%). A prompt telling it not to hallucinate changed
-nothing (13.0%).
+On τ²-bench's held-out test split, healing cut conversations with a made-up tool or argument from
+95% to 10%, and raised task success from 14.5% to 51.5%. A prompt telling the agent not to
+hallucinate changed nothing. Run unattended, the gate promoted a cycle trained on whole verified
+conversations (dev 6 → 22 of 36) and rejected one trained on single turns.
 
-Run end to end with no one in the loop, the automated cycle cut hallucination findings from 8.2 to
-1.0 per conversation and lifted dev success from 6/36 to 22/36, and the gate promoted it. We release the code, a dataset
-of verified trajectories, 11 adapters with provenance (including the ones we rejected) and an
-article on Hugging Face with an interactive demo.
+The failures left were wrong decisions, so we asked whether the loop could find those too. Rules, a
+consent checker and a hybrid LLM judge, scored against an answer key, found failed conversations
+but rarely the turn where they went wrong, and healing where they pointed didn't help. The
+bottleneck was elsewhere: the healed model hadn't finished learning its own training data. Trained
+twice as long on the same data, it solved 60.0% of test tasks (+9.9 points, 95% +3.9 to +16.0, 8
+samples per task), close to GPT-4.1's 61.5%. It made changes without the customer's consent about
+15× less often, lost nothing on general benchmarks, and served in FP8 it needs half the memory for
+the same score. Every rule was written down, dated, before the run it judged.
+
+We release the code, every adapter with its provenance, every conversation, and an article on
+Hugging Face with an interactive demo.
 
 | | |
 |---|---|
-| **Title and claim** | **Reflexive Agents:** a detect → fix → retrain → gate loop that cuts an open 32B agent's hallucinations from 95% to 10% of conversations and solves 3.5× as many τ²-bench tasks |
+| **Title and claim** | **Reflexive Agents:** a detect → fix → retrain → gate loop that takes an open 32B agent from 14.5% to 60.0% of τ²-bench test tasks, close to GPT-4.1, with made-up calls down from 95% to 10% of conversations and about 15× fewer changes made without the customer's consent |
 | **Track** | Track 3: Agentic Fine-tuning (AgentTune, AuditKIT) |
-| **Problem statements** (Track 3 numbering, in the order on the [tracks page](https://hackathon.lexsi.ai/tracks)) | **#8 Self-healing agents** (the main one): detect failing runs, classify why, generate corrective training examples, retrain, gate redeployment.<br>**#3 Agentic distillation:** GLM-5.3-Flash's verified trajectories distilled into Aya Expanse 32B.<br>**#1 Reliable tool calling:** tool-call validity 72.2% → 97.6%; we also tried RL on real tool-calling rollouts (GRPO), which didn't beat SFT.<br>**#2 Efficient trajectories** (partly): loops 49% → 27% with success up, but steps per conversation rose (the agent now finishes tasks).<br>**#9 Reward design and reward-hacking defences** (negative result): our GRPO rewards were gamed, and we report how. |
-| **Headline** | Conversations with a Tool or Arg hallucination **95% → 10%**; task success **14.5% → 51.5%** (τ²-bench test) |
-| **Base model + method** | Aya Expanse 32B + QLoRA (rank 16) SFT on a stronger teacher's verified conversations, inside a detect → fix → retrain → gate loop |
+| **Problem statements** (Track 3 numbering, in the order on the [tracks page](https://hackathon.lexsi.ai/tracks)) | **#8 Self-healing agents** (the main one): detect failing runs, classify why, generate corrective training examples, retrain, gate redeployment. Stage 2 measures where detection-led healing stalls (decision errors) and what fixed the bottleneck instead.<br>**#3 Agentic distillation:** GLM-5.3-Flash's verified trajectories distilled into Aya Expanse 32B.<br>**#1 Reliable tool calling:** tool-call validity 72.2% → 97.6%; we also tried RL on real tool-calling rollouts (GRPO), which didn't beat SFT.<br>**#2 Efficient trajectories** (partly): loops 49% → 27% with success up, but steps per conversation rose (the agent now finishes tasks).<br>**#9 Reward design and reward-hacking defences:** our GRPO rewards were gamed, and we report how; a hybrid LLM judge with rule-computed facts, scored against τ²-bench's answer key. |
+| **Headline** | Task success **14.5% → 51.5%** (healing) **→ 60.0%** (trained longer); conversations with a Tool or Arg hallucination **95% → 10%** (τ²-bench test) |
+| **Base model + method** | Aya Expanse 32B + QLoRA (rank 16) SFT on a stronger teacher's verified conversations, inside a detect → fix → retrain → gate loop; the final model trains the same data for 4 epochs instead of 2 |
 | **Team** | Katie Kitchen ([katiemarieek](https://huggingface.co/katiemarieek), [katiemarieek](https://github.com/katiemarieek)), Chiara Picardi ([cp89](https://huggingface.co/cp89), [chiara89](https://github.com/chiara89)), Charlie Galvin ([cg3849](https://huggingface.co/cg3849), [CharlieGalvin](https://github.com/CharlieGalvin)) |
 
 ## Overview
@@ -116,6 +130,14 @@ swaps the adapter with no one in it.
    only a better adapter.
 4. **Can reinforcement learning (GRPO) heal beyond SFT?**
 
+Stage 2 asked what was left:
+
+5. **Can the loop find and heal decision errors?** Rules, a consent checker and a hybrid LLM judge,
+   each scored against τ²-bench's answer key: which conversations failed, and at which turn.
+6. **Was the healed model under-trained?** The same data, 4 epochs instead of 2, on test.
+7. **Does the model's own verified practice add anything?**
+8. **Is the final model safer and cheaper?** Unconfirmed changes, general benchmarks, FP8 serving.
+
 Each answer was judged by a rule written down before the run it judged:
 
 - **The deployment gate** ([`configs/gate.yaml`](configs/gate.yaml), rules in the
@@ -128,6 +150,8 @@ Each answer was judged by a rule written down before the run it judged:
 - **Stage 2** is pre-registered the same way in [`STAGE2.md`](docs/experiments/STAGE2.md).
 
 ## Results
+
+### Part 1: healing what the agent makes up
 
 τ²-bench **test split**: 100 tasks × 2 samples per arm, the same student, harness, customer (GPT-4.1)
 and decoding. 95% ranges are a bootstrap over tasks.
@@ -158,6 +182,65 @@ and decoding. 95% ranges are a bootstrap over tasks.
 > Arm B was declared before any test run, every test run is reported, and every success is
 > re-scored by AuditKIT's outcome oracle (0 disagreements with τ²-bench). B ran self-hosted at a 32K
 > context (2 of its 200 conversations ran past it and count as failures); A and C ran on Cohere's API.
+
+### Part 2: what healing can't see, and what fixed it
+
+<div align="center">
+
+![Task success on the τ²-bench test, 100 tasks: base Aya through the API 14.5%, with a careful prompt 13.0%, base Aya on our own GPU 11.5%, healed (v2) 50.1%, trained longer 60.0%, trained longer plus its own practice 58.9%. Training longer added 9.9 points over the healed model, 95% range +3.9 to +16.0.](docs/blog/img/test-success-arc.png)
+
+</div>
+
+The same model scores anywhere from 12 to 19 of the 30 validation tasks from one run to the next,
+because the simulated customer behaves differently each time. So Stage 2 measures with **8 samples
+per task**, paired task by task. Re-measured this way, the healed model scores 50.1% on test.
+
+| Arm | What it is | Success | Retail | Airline | Telecom | Against v2 (95%) |
+|---|---|---:|---:|---:|---:|---:|
+| **B (v2)** | Healed | 50.1% | 55.9% | 35.0% | 51.9% | |
+| **S2E4** | **v2's data, 4 epochs (the final model)** | **60.0%** | 55.9% | 38.1% | **75.0%** | **+9.9 (+3.9 to +16.0)** |
+| S2P1E4 | v2's data + 100 of its own verified practice conversations, 4 epochs | 58.9% | 59.4% | 40.0% | 67.8% | +8.75 (+3.6 to +13.9) |
+| GPT-4.1 | Reference, through OpenRouter, 2 samples per task | 61.5% | | | | not paired |
+
+- **Detectors find failures, not where to fix them.** On 224 held-out train-task conversations,
+  scored against τ²-bench's answer key: the rules caught 56% of failures but never at the turn where
+  the task went wrong (0 of 52); the consent and mismatch checker caught 27%, with 8% of successes
+  flagged; a hybrid LLM judge (an LLM reading the whole conversation, with code supplying the facts)
+  caught 42% at 9% and missed its pre-registered bar. Used as a live guard, the checker didn't move
+  validation (15.0 against 17.0); healing at the turns it flagged kept 21 conversations, too few to
+  retrain on.
+- **The bottleneck was under-training.** v2 passed only 55 of the 112 train tasks it was trained
+  on. Trained for 4 epochs instead of 2, it passes 60, validation rises from 16.0 to 18.5 of 30, and
+  test by +9.9 points, mostly in telecom. Two departures are disclosed: the validation gain (+2.5,
+  95% −0.75 to +5.88) didn't meet our validation rule, so S2E4 went to test as a declared arm; and its
+  test was extended from 2 to 8 samples after a borderline first result (the 6 new samples alone:
+  +10.5, 95% +4.0 to +17.0).
+- **AuditKIT confirms it, and the agent is cleaner.** AuditKIT's outcome oracle re-scored all 1,600
+  test conversations of v2 and S2E4 and reached exactly τ²-bench's totals (401 and 480 of 800). Its
+  agent metrics, v2 → S2E4: tool-call validity 98.3% → 99.9%, redundant tool calls 16.2% → 7.2%,
+  loop-free conversations 37% → 57% (AuditKIT's detector, which also counts repeated replies),
+  seconds per conversation 64.1 → 56.4, and steps per task 24.8 → 19.2 (−5.6, 95% −7.4 to −3.9;
+  `results/arm-S2-test-vs-arm-S2E4-test.compare.metrics.json`) ([outputs](https://huggingface.co/datasets/reagent-lexsi/reagent-stage2-artifacts/tree/main/analysis/auditkit)).
+- **The model's own practice adds nothing:** S2P1E4 against S2E4 is −1.1 points (95% −6.6 to +4.4).
+- **Safer:** changes made without the customer's explicit yes fell from 0.152 to 0.010 per
+  conversation (−0.142, 95% −0.310 to −0.035): 6 of S2E4's 800 test conversations had one.
+- **Nothing else got worse** (S2E4 against base Aya, paired 95%): IFEval −1.3 (−4.4 to +2.0), GSM8K
+  +0.6 (−1.3 to +2.4), Global-MMLU-Lite +2.5 (+1.4 to +3.6), a rise, as for v2
+  ([table](#stage-2-latency-cost-and-retention)).
+- **Cheaper to serve.** With FP8 weights, the model needs 32.2 GiB of GPU memory instead of 60.4
+  GiB, the context doubles from 32K to 64K tokens, and validation doesn't move (18.50 against 18.50,
+  95% −2.25 to +2.25); retention shows no drop against 16-bit. On one H100 (16-bit, $4.39/h shared
+  by 8 conversations), S2E4 costs **$0.068 per conversation and $0.11 per solved task**, customer
+  included, and about $0.41 per 1,000 replies for the model alone (2.7 seconds each). GPT-4.1 costs
+  $0.235 per conversation and $0.38 per solved task; base Aya through Cohere's API, $0.068 and $0.47
+  ([table](#stage-2-latency-cost-and-retention)).
+
+> [!NOTE]
+> Every Stage 2 rule is in [`STAGE2.md`](docs/experiments/STAGE2.md), dated before the run it
+> judged, and every run is reported, the failed ideas too. Serving the base model ourselves gave the
+> same result as Cohere's API within noise (11.5% against 14.5%, 95% −8.0 to +1.5). Every
+> conversation is on Hugging Face:
+> [reagent-tau2-conversations](https://huggingface.co/datasets/reagent-lexsi/reagent-tau2-conversations).
 
 ## How it works
 
@@ -199,6 +282,9 @@ arms only).
   conversations.
 - **Agent metrics** (`src/reflexive/evaluate.py`): `ToolCallValidity`, `RedundantToolCalls` and
   `AgentLoopDetection` on every conversation, reported next to our own classifier.
+- **Stage 2:** the oracle and the agent metrics re-scored the 1,600 test conversations of v2 and
+  the final model (the same totals as τ²-bench); every Stage 2 adapter carries AgentTune's
+  `lexsi_provenance.json`.
 
 **How they connect:**
 
@@ -248,6 +334,7 @@ between splits, since τ²-bench tasks within a domain share tools and policy by
 | Conversations with a loop | ↓ | 49.0% (42–56) | 49.5% | **27.0% (21–33.5)** |
 | Tool-call validity (AuditKIT) | ↑ | 72.2% | 75.3% | **97.6%** |
 | Seconds per agent request, median | ↓ | 3.3 | 3.5 | **2.4** |
+| Seconds per agent request, mean | ↓ | 3.7 | 3.7 | **2.8** |
 | Seconds per conversation, mean | ↓ | 52.5 | 59.6 | 94.3 |
 | Output tokens per agent request, median | ↓ | 117 | 117 | **78** |
 
@@ -269,6 +356,43 @@ C on Cohere's hosted API, so the comparison includes the difference in serving. 
 request is 2.8 seconds. Its conversations take longer on average (94 against 52 seconds for A)
 because they run more than twice as many steps (25.7 against 11.3 on average).
 
+### Stage 2: latency, cost and retention
+
+**Latency and cost on test** (scored conversations; seconds per agent request is each conversation's
+model time ÷ its model calls, mean over conversations, with the median in brackets):
+
+| Arm | Served | Success | s/request, mean (median) | Retail | Airline | Telecom | $/conversation | $/solved task |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| A, base Aya | Cohere API | 14.5% | 3.7 (3.2) | 3.1 | 3.9 | 4.3 | 0.068 | 0.47 |
+| C, careful prompt | Cohere API | 13.0% | 3.7 (3.4) | 3.5 | 3.6 | 4.0 | 0.067 | 0.51 |
+| P, base Aya | our H100 | 11.5% | 3.7 (3.4) | 3.3 | 3.7 | 4.1 | 0.034 | 0.29 |
+| B, v2 (2 samples) | our H100 | 51.5% | 2.8 (2.4) | | | | 0.052 | 0.10 |
+| **S2E4** | **our H100** | **60.0%** | **2.7 (2.5)** | 2.9 | 3.4 | 2.2 | **0.068** | **0.11** |
+| S2P1E4 | our H100 | 58.9% | 2.6 (2.4) | 2.7 | 3.4 | 2.1 | 0.075 | 0.13 |
+| GPT-4.1 (reference) | OpenRouter | 61.5% | 1.6 (1.6) | | | | 0.235 | 0.38 |
+
+Cost is the agent plus the simulated customer (GPT-4.1). API agents are priced per token at list
+price. Self-hosted agents are an estimate: one H100 at $4.39/h, divided among the conversations that
+shared it (8; 6 for S2P1E4). S2E4 costs as much per conversation as base Aya through the API but
+solves four times as many tasks; its conversations cost more in telecom ($0.13), where they run
+longest. Per-domain rows: [`results/roi-*-test.metrics.json`](results/).
+
+**Retention** (full test sets, temperature 0, the same server; accuracy with its 95% interval, and
+each model's paired difference from base over the same items). A drop counts only if the whole
+interval of the difference is below zero; drops and rises are both reported:
+
+| Benchmark | Items | Base Aya | v2 | S2E4 | v2 − base | S2E4 − base |
+|---|---:|---:|---:|---:|---:|---:|
+| IFEval (strict, prompt-level) | 541 | 69.3% (65.3–73.1) | 67.8% (63.8–71.6) | 68.0% (64.0–71.8) | −1.5 (−4.6 to +1.7) | −1.3 (−4.4 to +2.0) |
+| GSM8K (5-shot, strict) | 1,319 | 84.5% (82.5–86.4) | 85.5% (83.5–87.3) | 85.1% (83.1–87.0) | +1.0 (−0.7 to +2.7) | +0.6 (−1.3 to +2.4) |
+| Global-MMLU-Lite (en, fr, ar, hi, ja) | 2,000 | 63.5% (61.3–65.5) | 65.9% (63.7–67.9) | 66.0% (63.8–68.0) | **+2.4 (+1.3 to +3.5)** | **+2.5 (+1.4 to +3.6)** |
+
+No drop for either model; both rise on Global-MMLU-Lite, in English and Hindi for both, and in
+Japanese for v2. S2E4 served in FP8 against S2E4 in 16-bit: IFEval +1.7 (−1.3 to +4.6), GSM8K −0.2
+(−1.7 to +1.2), Global-MMLU-Lite −0.7 (−1.5 to +0.2), and no clear change in any language. Every
+item's answer and score: [`analysis/retention/`](https://huggingface.co/datasets/reagent-lexsi/reagent-stage2-artifacts/tree/main/analysis/retention);
+the comparisons: `results/retention-*.metrics.json`.
+
 **Checking the automatic judges.** Two automatic judges score the runs.
 - **Task success** is τ²-bench's evaluator: database and environment checks, plus LLM judges in retail
   (`gpt-5.4-mini`) and airline (`gpt-5.5`); telecom has no LLM judge ([setup](docs/TAU2_SETUP.md)). AuditKIT's outcome oracle re-scored all 600 test conversations and agreed
@@ -276,9 +400,12 @@ because they run more than twice as many steps (25.7 against 11.3 on average).
 - **The Tool / Arg / Loop classifier** is deterministic. A spot check of 30 findings, 10 of each type
   from 30 failed telecom conversations, found all 30 correct (precision 100%, 95% CI 72–100% per
   type: [classifier page](docs/experiments/HALLUCINATION_CLASSIFIER.md)). These were labelled once,
-  by Claude, and recall wasn't measured. Agreement between two human labellers (Cohen's κ, with
-  precision and recall in every domain) is planned in [`STAGE2.md`](docs/experiments/STAGE2.md)
-  (SEL-85, SEL-98) and not yet reported.
+  by Claude, and recall wasn't measured. Two human labellers then audited it (SEL-85):
+  <!-- TODO (Katie): precision, recall and Cohen's κ from SEL-85. -->
+- **The Stage 2 detectors** (rules, the consent and mismatch checker, the hybrid LLM judge) were
+  scored against τ²-bench's answer key rather than people: [Results, Part 2](#part-2-what-healing-cant-see-and-what-fixed-it).
+  The frozen checker run on τ²-bench's verdicts by a teammate who didn't build it flagged 6 of the
+  37 decision failures on dev and validation, and 2 of 77 successes.
 
 ## Training setup
 
@@ -301,6 +428,10 @@ trained with TRL. The automated loop's adapter uses the same settings
 | Seed | 0 |
 | Hardware | one H100 SXM, about 25 minutes |
 
+**S2E4, the final model** ([`configs/train/sft_aya32b_v2_e4.yaml`](configs/train/sft_aya32b_v2_e4.yaml)):
+SFT v2's data and settings exactly, 4 epochs (148 steps) instead of 2. Served with vLLM in bfloat16,
+or with FP8 weights (`QUANTIZATION=fp8`) and a 64K context.
+
 **GRPO with AgentTune** (arm H, [`configs/train/grpo_heal_aya32b.yaml`](configs/train/grpo_heal_aya32b.yaml)):
 100 steps from SFT v2, learning rate 1e-5, 8 generations per prompt, batch 1 × gradient accumulation
 16, max completion 384 tokens, temperature 1.0, KL beta 0.04. AgentTune's other settings are its
@@ -308,9 +439,10 @@ defaults; each run's full config is in `configs/train/`.
 
 **AuditKIT:** default settings for the oracle and the three agent metrics.
 
-**Seeds:** every adapter was trained once, with seed 0. The intervals in this README come from
-resampling tasks (10,000 bootstrap resamples, seed 0) over 2 rollouts per task, so they don't
-include variation between training seeds.
+**Seeds:** every adapter was trained once, with seed 0; a second training seed for S2E4 was planned
+(STAGE2.md, Stage 2d) and not completed. The intervals in this README come from resampling tasks
+(10,000 bootstrap resamples, seed 0) over 2 rollouts per task in Stage 1 and 8 in Stage 2, so they
+don't include variation between training seeds.
 
 ## Experiments
 
@@ -325,6 +457,13 @@ Every version was judged by a rule written down before its result. Each has a co
 | Heal cycle, trajectory-level | The same loop, fixing with whole verified conversations | Dev 6 → 22 of 36, findings −87%: **promoted, swapped in live** | [plan and result](docs/experiments/HEAL_FROM_V2.md) |
 | GRPO G, H, H2 | Can reinforcement learning heal beyond SFT? | G collapsed (0.5/30); H halved loops, rejected; H2 14.5/30 against v2's 17.0 | [GRPO heal](docs/experiments/GRPO_HEAL.md) |
 | Runtime monitor | Can a monitor catch loops live? | Fired on all 7 telecom conversations that looped to the step limit, none of the 7 that passed | [monitor](docs/experiments/MONITOR_NO_PROGRESS.md) |
+| Meta-healing (Stage 2) | Can the loop write its own checker rules? | Every proposed rule failed on held-out conversations: none accepted | [STAGE2](docs/experiments/STAGE2.md) |
+| Detectors against the answer key | Can the loop find decision errors, and where? | Rules 56% / 14% / 0 of 52 at the turn; checker 27% / 8%; hybrid judge 42% / 9%, bar not met | [STAGE2](docs/experiments/STAGE2.md) |
+| Guard (Decision 1) | Does blocking flagged changes help? | Validation 15.0 against 17.0: no-go | [STAGE2](docs/experiments/STAGE2.md) |
+| Full-conversation fixes | Heal at the checker's flagged turns | 43 flagged, 39 fixed, 21 held up: too few to retrain | [STAGE2](docs/experiments/STAGE2.md) |
+| **S2E4** | Was v2 under-trained? | **Test 50.1% → 60.0%** (+9.9, 95% +3.9 to +16.0) | [STAGE2](docs/experiments/STAGE2.md) |
+| S2P1, S2P1E4 | Does the model's own practice add anything? | −1.1 against S2E4 on test (95% −6.6 to +4.4) | [STAGE2](docs/experiments/STAGE2.md) |
+| S2E4Q | FP8 weights and a 64K context | Validation 18.50 against 18.50; retention no drop | [STAGE2](docs/experiments/STAGE2.md) |
 
 > [!NOTE]
 > **Changed from the proposal:** student and teacher swapped on 3 Nov (unaided Aya Expanse 32B
@@ -408,9 +547,12 @@ serving with vLLM, scoring. The automated heal cycle is `scripts/heal/cycle.py` 
 |---|---|---|
 | **Model collection** | [Reflexive Agents: models](https://huggingface.co/collections/reagent-lexsi/reflexive-agents-models): every adapter, the healed model first | |
 | **Data collection** | [Reflexive Agents: data and traces](https://huggingface.co/collections/reagent-lexsi/reflexive-agents-data-and-traces): the verified teacher conversations and the heal run's traces | |
+| **Final model (S2E4)** | [reagent-lexsi/sft-aya32b-v2-e4](https://huggingface.co/reagent-lexsi/sft-aya32b-v2-e4): v2's data trained 4 epochs; serve it in FP8 with `QUANTIZATION=fp8` | CC BY-NC 4.0 (from Aya) |
 | **Healed model (Arm B)** | [reagent-lexsi/sft-aya32b-r16-v2](https://huggingface.co/reagent-lexsi/sft-aya32b-r16-v2), a LoRA adapter for Aya Expanse 32B | CC BY-NC 4.0 (from Aya) |
 | **Healed by the automated loop** | [reagent-lexsi/heal-trajectory-cycle-c1](https://huggingface.co/reagent-lexsi/heal-trajectory-cycle-c1): the adapter the loop trained and the gate promoted, with no one in the loop | CC BY-NC 4.0 |
-| **Every version we trained** | [reagent-lexsi](https://huggingface.co/reagent-lexsi): 11 adapters, adopted or not, each with its result and `lexsi_provenance.json` | CC BY-NC 4.0 |
+| **Every version we trained** | [reagent-lexsi](https://huggingface.co/reagent-lexsi): 14 adapters, adopted or not, each with its result and `lexsi_provenance.json`, including the two practice models ([sft-aya32b-p1](https://huggingface.co/reagent-lexsi/sft-aya32b-p1), [sft-aya32b-p1-e4](https://huggingface.co/reagent-lexsi/sft-aya32b-p1-e4)) | CC BY-NC 4.0 |
+| **Every conversation** | [reagent-lexsi/reagent-tau2-conversations](https://huggingface.co/datasets/reagent-lexsi/reagent-tau2-conversations): every arm on every split, each file checked against the frozen splits, with counts and SHA-256 | CC BY-NC 4.0 |
+| **Stage 2 data and analysis** | [reagent-lexsi/reagent-stage2-artifacts](https://huggingface.co/datasets/reagent-lexsi/reagent-stage2-artifacts): the practice training data, the paired comparisons, the hybrid judge's labels, the full-conversation fixes and the training-data audit | CC BY-NC 4.0 |
 | **Verified teacher conversations** | [reagent-lexsi/tau2-golden-trajectories](https://huggingface.co/datasets/reagent-lexsi/tau2-golden-trajectories): 127 train + 31 dev conversations, plus the hard subset | CC BY-NC 4.0 (customer turns are GPT-4.1 outputs) |
 
 The code in this repo is [MIT](LICENSE). Third-party code (τ²-bench, AgentTune) isn't committed:
@@ -476,12 +618,37 @@ results/*.metrics.json   committed evidence for the demo
 
 The paper's related work, with full references: [`paper/draft/main.tex`](paper/draft/main.tex).
 
+## Threat model
+
+The asset at risk is the customer's records; the main threat is the agent's own wrong action, and
+a healing loop that makes it worse while seeming to help. Full table: [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md).
+
+| Harm | What stops it | Evidence |
+|---|---|---|
+| A made-up action | Healing on verified conversations; the gate's hallucination check | Made-up tool or argument: 95% → 10% of test conversations |
+| A change the customer never agreed to | The frozen "no yes" rule on every test conversation; optionally the guard | 0.152 → 0.010 per conversation |
+| A wrong teacher | A fix is kept only if τ²-bench's evaluator passes it | 21 of 39 full-conversation fixes kept |
+| Reward hacking | SFT on verified data; the guard is a filter, never a reward | GRPO's hallucination reward was gamed; none adopted |
+| Overfitting the gate | Rules dated in advance, at most 3 dev decisions, claims only on test at 8 samples | The gate rejected a cycle that cut hallucinations 71% |
+| A tampered adapter | `lexsi_provenance.json` and a pinned Hub revision | Every published adapter |
+
+**Not covered:** prompt injection through tool outputs, hostile customers, decisions the benchmark
+can't verify, and deployment controls such as human review of high-value changes.
+
 ## Limitations
 
 - **One benchmark.** Every result is on τ²-bench, with 100 test tasks in three customer-service
   domains, in English. We haven't shown that the healing transfers to other tools or domains.
-- **Airline improves least.** Arm B solves 30% of airline tasks: the failures left there are policy
-  decisions, which our classifier doesn't measure.
+- **Airline improves least.** The final model solves 38% of airline tasks: the failures left there
+  are policy decisions, which our detectors find but can't locate.
+- **One training run behind the +9.9.** A second seed was planned and not completed, so the
+  interval covers task and conversation noise, not training noise.
+- **Two disclosed departures for the final model:** it went to test without meeting our validation
+  rule, and its test was extended from 2 to 8 samples after a borderline first result.
+- **GPT-4.1 is a reference, not a paired comparison:** 2 samples per task through OpenRouter, against
+  our 8.
+- **Decision errors are still the main failure.** The final model fails 40% of test tasks, and none
+  of our detectors finds most of those failures at the turn where they go wrong.
 - **It depends on a stronger teacher.** The loop can't teach the student what GLM-5.3-Flash can't do,
   and it needs the teacher's conversations to be verified.
 - **The automated loop wasn't run on test.** Its promoted adapter reproduces Arm B's training on dev;
@@ -506,6 +673,13 @@ The paper's related work, with full references: [`paper/draft/main.tex`](paper/d
 - **Rewards that measure only the absence of hallucination get gamed.** Our GRPO runs learned to act
   confidently rather than correctly, cancelling reservations nobody asked to cancel. Any reward for
   agents with write access has to judge whether an action should happen, not only how it's formed.
+- **A self-healing loop can only heal what it can locate.** Made-up calls are easy to find; wrong
+  decisions passed every check we built, and better detectors didn't change that.
+- **Check whether the model has learned what you already gave it.** The healed model failed half
+  the tasks it had trained on. Training longer did more than any new detector, and more than its own
+  practice.
+- **Measure with enough samples.** One or two runs per task hid a swing of 7 tasks in 30; every
+  Stage 2 claim uses 8, paired task by task.
 - **A self-hosted 32B model is viable for this kind of work.** Healed, it makes valid tool calls 98%
   of the time at 2.4 seconds a request on one GPU. What holds it back now isn't hallucination: it's
   decisions.
@@ -544,6 +718,11 @@ behind it and would be tested under a rule written down first, as in Stage 1.
 | General ability before and after | Standard benchmarks (instruction following, knowledge, maths) | not measured | within 2 points of base Aya | QLoRA trains 0.3% of the weights, on 146 conversations, with the loss on agent turns only |
 | Fresh held-out tasks | Task success | 51.5% on the used test split | within B's 95% interval (43.5–59.5%) | Same domains and policies; the split was frozen and never used for selection |
 
+**How three rows turned out in Stage 2** (forecasts written on 16 Nov): the guard didn't move the
+score (validation 15.0 against 17.0); the 55–60% range was reached instead by training longer
+(60.0%); and general ability didn't drop (IFEval, GSM8K and Global-MMLU-Lite all within their
+rules, multilingual knowledge up 2.5 points).
+
 The week-by-week plan (which would commence only after the hack has finished), and the questions to answer first, are in [`docs/FUTURE_WORK.md`](docs/FUTURE_WORK.md).
 
 ## Declaration of work done outside the hackathon
@@ -573,6 +752,7 @@ Alignment Hackathon and for AgentTune and AuditKIT, and to the authors of τ²-b
 
 | Version | Submitted | Changes |
 |---|---|---|
+| 4 | Fri 27 Nov | Stage 2: the final model (60.0% on test), the detectors scored against an answer key, the guard, self-practice, FP8, consent and retention results, the threat model, every conversation on Hugging Face; abstract and results told as one story |
 | 3 | Mon 16 Nov | README covers every required item in the write-up guidance: abstract, title and claim, tracks and problem statements, kits used and how they connect, data, splits and leak check, all metrics with per-request latency, training setup, limitations, discussion, forecast, collections, declaration, appendix |
 | 2 | Sun 15 Nov, about 13:00 | Hallucination-first headline (95% → 10%) in the abstract, README and social preview; article upgraded (before/after example, limitations, citation, captions) with the Spot the hallucination demo; future-work plan |
 | 1 | Sat 14 Nov, 16:40 | First submission: code, healed model, dataset and article; headline on task success (14.5% → 51.5%) |
@@ -623,7 +803,7 @@ Be careful not to hallucinate:
 
 ## Resources
 
-- **[Blog post on Hugging Face](https://huggingface.co/blog/cg3849/reflexive-agents):** the project, told end to end ([source](docs/blog/reflexive-agents.md)).
+- **[Blog post on Hugging Face](https://huggingface.co/blog/cg3849/reflexive-agents-full-story):** the whole project, told end to end ([source](docs/blog/reflexive-agents-v2.md)). The [first post](https://huggingface.co/blog/cg3849/reflexive-agents) covers Stage 1 ([source](docs/blog/reflexive-agents.md)).
 - **[Spot the hallucination](https://huggingface.co/spaces/reagent-lexsi/spot-the-hallucination):** a three-round game with real agent moments from our test runs. Is the agent bluffing?
 - **[Experiments, in order](docs/experiments/README.md)** and **[every run](docs/EXPERIMENTS.md)**.
 - **[τ²-bench](https://github.com/sierra-research/tau2-bench)** and the Lexsi Labs kits we used:
