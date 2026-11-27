@@ -281,8 +281,9 @@ $0.11 per solved task, the simulated customer included. It also gets there in fe
 task against the healed model's 24.8.
 
 **And it fits on less hardware.** Served in FP8, its weights take 32.2 GiB of GPU memory instead
-of 60.4 GiB. The memory freed doubles the context, from 32K to 64K tokens, and its validation
-score doesn't move (18.5 against 18.5). Serving the model ourselves rather than through Cohere's
+of 60.4 GiB, and the memory freed doubles the context, from 32K to 64K tokens. On test, FP8
+success held (57.8% against 60.0%, −2.2, 95% range −6.6 to +2.1), though with more loops and
+twice the redundant calls. Serving the model ourselves rather than through Cohere's
 API made no difference within noise (11.5% against 14.5% for the base model, range −8.0 to +1.5).
 
 **And it lost nothing elsewhere.** On instruction following (IFEval), maths (GSM8K) and multilingual
