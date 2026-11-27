@@ -1,0 +1,65 @@
+{
+  "split": "test",
+  "gpu_hourly_usd": 4.39,
+  "concurrency": 8,
+  "api_prices_usd_per_token": {},
+  "notes": "cost = agent + customer; self-hosted agent = GPU $/h \u00d7 model time \u00f7 concurrency (estimate); seconds per request = model time \u00f7 calls per conversation (median, mean) and pooled",
+  "rows": {
+    "S2E4Q/retail": {
+      "conversations": 320,
+      "passed": 183,
+      "success": 0.571875,
+      "judges_skipped_in": 0,
+      "judged": 299,
+      "seconds_per_request_median": 1.9787053571428572,
+      "seconds_per_request_mean": 2.0043608679420304,
+      "seconds_per_request_pooled": 1.9920180427534808,
+      "agent_cost_usd": 1.5482828819444443,
+      "customer_cost_usd": 5.23851,
+      "cost_per_conversation_usd": 0.021208727756076386,
+      "cost_per_solved_task_usd": 0.03708629990133576
+    },
+    "S2E4Q/airline": {
+      "conversations": 160,
+      "passed": 56,
+      "success": 0.35,
+      "judges_skipped_in": 0,
+      "judged": 145,
+      "seconds_per_request_median": 2.2370208333333332,
+      "seconds_per_request_mean": 2.2941561119475895,
+      "seconds_per_request_pooled": 2.4012551900351324,
+      "agent_cost_usd": 1.14602321875,
+      "customer_cost_usd": 3.8791939999999996,
+      "cost_per_conversation_usd": 0.03140760761718749,
+      "cost_per_solved_task_usd": 0.08973602176339283
+    },
+    "S2E4Q/telecom": {
+      "conversations": 320,
+      "passed": 223,
+      "success": 0.696875,
+      "judges_skipped_in": 0,
+      "judged": 0,
+      "seconds_per_request_median": 1.205133779264214,
+      "seconds_per_request_mean": 1.2270532340455955,
+      "seconds_per_request_pooled": 1.216460489775309,
+      "agent_cost_usd": 1.4689427777777777,
+      "customer_cost_usd": 40.428562,
+      "cost_per_conversation_usd": 0.13092970243055554,
+      "cost_per_solved_task_usd": 0.18788118734429496
+    },
+    "S2E4Q/all": {
+      "conversations": 800,
+      "passed": 462,
+      "success": 0.5775,
+      "judges_skipped_in": 0,
+      "judged": 444,
+      "seconds_per_request_median": 1.708375,
+      "seconds_per_request_mean": 1.7513968631845682,
+      "seconds_per_request_pooled": 1.690962729073799,
+      "agent_cost_usd": 4.163248878472222,
+      "customer_cost_usd": 49.546265999999996,
+      "cost_per_conversation_usd": 0.06713689359809027,
+      "cost_per_solved_task_usd": 0.11625436120881433
+    }
+  }
+}

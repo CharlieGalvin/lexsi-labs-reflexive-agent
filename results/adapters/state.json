@@ -1,6 +1,10 @@
 {
  "current": "sft-v2",
- "revisions": {},
+ "revisions": {
+  "sft-v2-e4": "132172c8cf3ffc697f31106ece9ae3459ec11d8b",
+  "sft-p1": "a58610aa4e4528acbd859b8c8b76820c498021a9",
+  "sft-p1-e4": "8e21e5488c429a69e5169ed81c6963a2b37a2d86"
+ },
  "history": [
   {
    "at": "2026-11-10T09:50:00+00:00",
