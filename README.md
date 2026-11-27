@@ -229,7 +229,9 @@ per task**, paired task by task. Re-measured this way, the healed model scores 5
   ([table](#stage-2-latency-cost-and-retention)).
 - **Cheaper to serve.** With FP8 weights, the model needs 32.2 GiB of GPU memory instead of 60.4
   GiB, the context doubles from 32K to 64K tokens, and validation doesn't move (18.50 against 18.50,
-  95% −2.25 to +2.25); retention shows no drop against 16-bit. On one H100 (16-bit, $4.39/h shared
+  95% −2.25 to +2.25); retention shows no drop against 16-bit. On test, FP8 success held (57.8%
+  against 60.0%, −2.2, 95% −6.6 to +2.1), though with more loops and twice the redundant calls
+  (Stage 2e in STAGE2.md: a declared check, its rule recorded after the run). On one H100 (16-bit, $4.39/h shared
   by 8 conversations), S2E4 costs **$0.068 per conversation and $0.11 per solved task**, customer
   included, and about $0.41 per 1,000 replies for the model alone (2.7 seconds each). GPT-4.1 costs
   $0.235 per conversation and $0.38 per solved task; base Aya through Cohere's API, $0.068 and $0.47
