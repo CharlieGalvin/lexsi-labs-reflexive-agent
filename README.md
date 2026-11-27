@@ -46,7 +46,7 @@ Alignment Hackathon (Track 3: Agentic Fine-tuning) on the Lexsi Labs stack.
 > - **Result** (τ²-bench test, 100 tasks): made-up tools or arguments in **95% → 10%** of
 >   conversations; tasks solved **14.5% → 51.5%** after healing, and **60.0%** after training the
 >   healed model longer (+9.9 points over it, 95% +3.9 to +16.0, 8 samples per task). GPT-4.1 scores
->   61.5%, at about 4.5× the healed model's cost per conversation.
+>   61.5%, at about 3.5× the final model's cost per conversation ($0.235 against $0.068).
 > - **What we learned:** the loop heals what it can see. Detectors for wrong *decisions* (rules, a
 >   consent checker, a hybrid LLM judge), scored against an answer key, found failures but rarely
 >   the turn where they went wrong. The real bottleneck was under-training.
@@ -219,7 +219,8 @@ per task**, paired task by task. Re-measured this way, the healed model scores 5
   test conversations of v2 and S2E4 and reached exactly τ²-bench's totals (401 and 480 of 800). Its
   agent metrics, v2 → S2E4: tool-call validity 98.3% → 99.9%, redundant tool calls 16.2% → 7.2%,
   loop-free conversations 37% → 57% (AuditKIT's detector, which also counts repeated replies),
-  seconds per conversation 64.1 → 56.4 ([outputs](https://huggingface.co/datasets/reagent-lexsi/reagent-stage2-artifacts/tree/main/analysis/auditkit)).
+  seconds per conversation 64.1 → 56.4, and steps per task 24.8 → 19.2 (−5.6, 95% −7.4 to −3.9;
+  `results/arm-S2-test-vs-arm-S2E4-test.compare.metrics.json`) ([outputs](https://huggingface.co/datasets/reagent-lexsi/reagent-stage2-artifacts/tree/main/analysis/auditkit)).
 - **The model's own practice adds nothing:** S2P1E4 against S2E4 is −1.1 points (95% −6.6 to +4.4).
 - **Safer:** changes made without the customer's explicit yes fell from 0.152 to 0.010 per
   conversation (−0.142, 95% −0.310 to −0.035): 6 of S2E4's 800 test conversations had one.

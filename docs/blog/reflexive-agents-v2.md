@@ -274,10 +274,11 @@ not whose conversations it trained on.**
 fell from 0.152 to 0.010 per conversation (95% range of the change −0.310 to −0.035): 6 of its 800
 test conversations had one.
 
-**It's close to GPT-4.1 for a fraction of the cost.** On the same 100 test tasks, GPT-4.1 as the
-agent solved 61.5% (2 runs per task), at $0.235 per conversation. The healed Aya, on one H100 of our
-own, costs $0.052 per conversation; the final model is served the same way.
-<!-- TODO (Katie, today): the final model's own cost per conversation and per 1,000 replies. -->
+**It's close to GPT-4.1 for under a third of the cost.** On the same 100 test tasks, GPT-4.1 as the
+agent solved 61.5% (2 runs per task), at $0.235 per conversation and $0.38 per solved task. The
+final model, on one H100 of our own shared by 8 conversations, costs $0.068 per conversation and
+$0.11 per solved task, the simulated customer included. It also gets there in fewer steps: 19.2 per
+task against the healed model's 24.8.
 
 **And it fits on less hardware.** Served in FP8, its weights take 32.2 GiB of GPU memory instead
 of 60.4 GiB. The memory freed doubles the context, from 32K to 64K tokens, and its validation
