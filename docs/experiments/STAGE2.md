@@ -807,7 +807,7 @@ training run, as the README, blog and paper say.
 
 ### Stage 2e: S2E4 served in FP8, on test (SEL-122)
 
-**Recorded Fri 27 Nov, 08:50 UK, after the run; not pre-registered in this file.** The rule below
+**Recorded Fri 27 Nov, 08:46 UK, after the run; not pre-registered in this file.** The rule below
 was written in Linear (SEL-122, created Thu 26 Nov 16:38 UK) and agreed by the team, but it was
 never committed here, and this file cannot show that it preceded the run. We record it now, with
 the result, and treat the result as a declared check rather than a pre-registered one.
